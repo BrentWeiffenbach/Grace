@@ -4,6 +4,7 @@
     <arg name="teleop" default="false"/>
     <arg name="explore" default="true"/>
     <arg name="amcl" default="false"/>
+    <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
 
     <group if="$(arg sim)">
         <!-- Launch the TurtleBot world -->
@@ -22,7 +23,7 @@
     <!-- Launch AMCL -->
     <group if="$(arg amcl)">
         <include file="$(find grace)/launch/amcl.launch">
-            <arg name="map_file" value="$(find grace)/maps/tutorial.yaml"/>
+            <arg name="map_file" value="$(arg map_file)"/>
             <arg name="sim" value="$(arg sim)"/>
         </include>
     </group>
