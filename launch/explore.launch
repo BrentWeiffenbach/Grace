@@ -1,0 +1,3 @@
+<launch>
+    <node name="movement_test" pkg="grace" type="movement_test.py"/>
+</launch>
