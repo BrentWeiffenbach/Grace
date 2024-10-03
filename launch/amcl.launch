@@ -7,17 +7,6 @@
     
     <!-- IF NOT IN SIM DO NONSIM AMCL -->
     <group unless="$(arg sim)">
-        <!-- 3D sensor -->
-        <include file="$(find turtlebot_bringup)/launch/3dsensor.launch">
-            <arg name="rgb_processing" value="false" />
-            <arg name="depth_registration" value="false" />
-            <arg name="depth_processing" value="false" />
-            <!-- We must specify an absolute topic name because if not it will be prefixed by "$(arg camera)".
-                     Probably is a bug in the nodelet manager: https://github.com/ros/nodelet_core/issues/7 --> 
-            <arg name="scan_topic" value="/scan" />
-        </include>
-
-
         <!-- AMCL -->
         <arg name="custom_amcl_launch_file" default="$(find turtlebot_navigation)/launch/includes/amcl/$(arg 3d_sensor)_amcl.launch.xml"/>
         <arg name="initial_pose_x" default="0.0"/> <!-- Use 17.0 for willow's map in simulation -->
@@ -27,6 +16,9 @@
             <arg name="initial_pose_x" value="$(arg initial_pose_x)"/>
             <arg name="initial_pose_y" value="$(arg initial_pose_y)"/>
             <arg name="initial_pose_a" value="$(arg initial_pose_a)"/>
+            <param name="initial_pose_covariance" value="[0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.1]"/>
+            <param name="min_particles" value="500"/>
+            <param name="max_particles" value="2000"/>
         </include>
 
         <!-- Move base -->
@@ -38,6 +30,15 @@
 
     <!-- IF IN SIM DO SIM AMCL -->
     <group if="$(arg sim)">
+        <!-- 3D sensor -->
+        <include file="$(find turtlebot_bringup)/launch/3dsensor.launch">
+            <arg name="rgb_processing" value="false" />
+            <arg name="depth_registration" value="false" />
+            <arg name="depth_processing" value="false" />
+            <!-- We must specify an absolute topic name because if not it will be prefixed by "$(arg camera)".
+                     Probably is a bug in the nodelet manager: https://github.com/ros/nodelet_core/issues/7 --> 
+            <arg name="scan_topic" value="/scan" />
+        </include>
 
         <!-- Localization -->
         <arg name="initial_pose_x" default="0.0"/>
@@ -49,6 +50,9 @@
             <arg name="initial_pose_x" value="$(arg initial_pose_x)"/>
             <arg name="initial_pose_y" value="$(arg initial_pose_y)"/>
             <arg name="initial_pose_a" value="$(arg initial_pose_a)"/>
+            <param name="initial_pose_covariance" value="[0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.1]"/>
+            <param name="min_particles" value="500"/>
+            <param name="max_particles" value="2000"/>
         </include>
 
         <!-- Move base -->
