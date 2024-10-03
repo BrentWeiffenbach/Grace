@@ -31,13 +31,6 @@
 
     <!-- IF IN SIM DO SIM GMAPPING -->
     <group if="$(arg sim)">
-        <!-- 3D sensor -->
-        <include file="$(find turtlebot_bringup)/launch/3dsensor.launch">
-            <arg name="rgb_processing" value="false" />
-            <arg name="depth_registration" value="false" />
-            <arg name="depth_processing" value="false" />
-            <arg name="scan_topic" value="/scan" />
-        </include>
 
         <!-- Gmapping -->
         <arg name="custom_gmapping_launch_file" default="$(find turtlebot_navigation)/launch/includes/gmapping/$(arg 3d_sensor)_gmapping.launch.xml"/>
