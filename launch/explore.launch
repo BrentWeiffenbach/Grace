@@ -1,3 +1,6 @@
 <launch>
-    <node name="movement_test" pkg="grace" type="movement_test.py"/>
+    <arg name="debug" default="true"/>
+    <node name="frontier_exploration" pkg="grace" type="frontier_exploration.py" output="screen">
+        <param name="debug" type="string" value="$(arg debug)"/>
+    </node>
 </launch>

@@ -18,6 +18,9 @@
         <include file="$(find grace)/launch/gmapping.launch">
             <arg name="sim" value="$(arg sim)"/>
         </include>
+            <!-- Explore frontiers in gmapping mode TODO-->
+        <include file="$(find grace)/launch/explore.launch">
+        </include>
     </group>
 
     <!-- Launch AMCL -->
