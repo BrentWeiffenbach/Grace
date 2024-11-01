@@ -7,7 +7,7 @@
     <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
 
     <group if="$(arg sim)">
-        <!-- Launch the TurtleBot world -->
+        <!-- Launch the TurtleBot world if simulation-->
         <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
             <arg name="world_file" value="$(find grace)../aws-robomaker-small-house-world/worlds/small_house.world"/>
         </include>
@@ -19,8 +19,7 @@
             <arg name="sim" value="$(arg sim)"/>
         </include>
             <!-- Explore frontiers in gmapping mode TODO-->
-        <include file="$(find grace)/launch/explore.launch">
-        </include>
+        <!-- <include file="$(find grace)/launch/explore.launch"> </include>-->
     </group>
 
     <!-- Launch AMCL -->
@@ -31,7 +30,7 @@
         </include>
     </group>
 
-    <!-- Launch RViz for navigation --> 
+    <!-- Launch RViz for navigation visualizations--> 
     <include file="$(find turtlebot_rviz_launchers)/launch/view_navigation.launch"/>
 
     <group if="$(arg teleop)">
