@@ -2,7 +2,7 @@
     <arg name="sim" default="true"/>
     <arg name="gmapping" default="false"/>
     <arg name="teleop" default="false"/>
-    <arg name="explore" default="true"/>
+    <arg name="explore" default="false"/>
     <arg name="amcl" default="false"/>
     <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
 
