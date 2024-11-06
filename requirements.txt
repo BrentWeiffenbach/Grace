@@ -1,0 +1,7 @@
+scikit-build
+numpy
+versioneer
+pybind11
+torch
+ultralytics
+# sudo apt-get install ros-melodic-ros-numpy

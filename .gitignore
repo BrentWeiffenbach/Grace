@@ -1,0 +1,4 @@
+# ignore virtual enviornment for yolo 
+yolovenv/
+# ignore .pt files
+*.pt
