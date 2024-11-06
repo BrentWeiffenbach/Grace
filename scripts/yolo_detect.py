@@ -30,8 +30,6 @@ class YoloDetect:
         # load yolo model
         self.model: YOLO = YOLO("yolo11s.pt")
 
-        self.detections = []
-
     def detect_objects(self, msg: Image):
         """Callback function to detect objects on RGB image"""
         array = ros_numpy.numpify(msg)
