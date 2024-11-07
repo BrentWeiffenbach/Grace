@@ -16,31 +16,33 @@ class YoloDetect:
             "/yolo_detect/detections/image", Image, queue_size=5 
         )
 
-        self.detection_distance_pub = rospy.Publisher(
-            "/yolo_detect/detections/distance", String, queue_size=5
-        )
-
         # Subscribers
-        # subscribe to raw image data
-        rospy.Subscriber("/camera/rgb/image_raw", Image, callback=self.detect_objects)
-        
         # subscribe to depth image data
-        rospy.Subscriber("/camera/depth/image_raw", Image, callback=self.calculate_depth)
+        rospy.Subscriber("/camera/depth/image_raw", Image, callback=self.depth_callback)
 
         # load yolo model
         self.model: YOLO = YOLO("yolo11s.pt")
 
-    def detect_objects(self, msg: Image):
-        """Callback function to detect objects on RGB image"""
-        array = ros_numpy.numpify(msg)
-        if self.detection_image_pub.get_num_connections():
-            result = self.model(array) # get the results
-            det_annotated = result[0].plot(show=False) # plot the annotations
-            self.detection_image_pub.publish(ros_numpy.msgify(Image, det_annotated, encoding="rgb8")) # publish the annotated image
+        # Timer to call the detection function at a fixed interval (4 times a second)
+        self.timer = rospy.Timer(rospy.Duration(0.25), self.detect_objects)
 
-    def calculate_depth(self, msg: Image):
-        """Callback function to find depth of detections"""
-        return None
+        # Store the latest depth image
+        self.latest_depth_image = None
+
+    def depth_callback(self, msg: Image):
+        """Callback function to store the latest depth image"""
+        self.latest_depth_image = msg
+
+    def detect_objects(self, event):
+        """Callback function to detect objects on RGB image"""
+        if self.latest_depth_image is not None:
+            image = rospy.wait_for_message("/camera/rgb/image_raw", Image)
+            array = ros_numpy.numpify(image)
+            depth_array = ros_numpy.numpify(self.latest_depth_image)
+            if self.detection_image_pub.get_num_connections():
+                result = self.model(array, conf=0.5) # get the results
+                det_annotated = result[0].plot(show=False) # plot the annotations
+                self.detection_image_pub.publish(ros_numpy.msgify(Image, det_annotated, encoding="rgb8")) # publish the annotated image
 
     def run(self):
         while not rospy.is_shutdown():
