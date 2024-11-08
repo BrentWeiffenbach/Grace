@@ -6,6 +6,9 @@ Key Launch Files:
 
 Everything so far has been built from learn.turtlebot.com and [turtlebot_navigation](http://wiki.ros.org/turtlebot_navigation/Tutorials/Setup%20the%20Navigation%20Stack%20for%20TurtleBot)
 
+To get the sim world used in testing clone: https://github.com/aws-robotics/aws-robomaker-small-house-world
+
+
 TODO:
 Make a requirements.txt
 Proper frontier navigation

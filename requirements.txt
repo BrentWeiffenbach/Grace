@@ -4,4 +4,5 @@ versioneer
 pybind11
 torch
 ultralytics
+rospkg
 # sudo apt-get install ros-melodic-ros-numpy
