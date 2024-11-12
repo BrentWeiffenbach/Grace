@@ -7,6 +7,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from geometry_msgs.msg import PointStamped
 from ultralytics import YOLO
+import requests
 from ultralytics.engine.results import Results
 import cv2
 
@@ -29,8 +30,23 @@ class YoloDetect:
         self.rgb_image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.rgb_image_callback)
         self.depth_image_sub = rospy.Subscriber("/camera/depth/image_raw", Image, self.depth_image_callback)
 
+        model_name = 'yolo11n.pt'
+        # Download the YOLO model
+        if not os.path.isfile(model_name):
+            print(f'{model_name} does not exist. Downloading...')
+            download_url = 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt'
+
+            response = requests.get(download_url)
+
+            if response.status_code == 200:
+                with open(model_name, 'wb') as file:
+                    file.write(response.content)
+                print(f'Downloaded {model_name}')
+            else:
+                print(f'Failed to download {model_name}')
+
         # Load YOLO model
-        self.model: YOLO = YOLO("yolo11s.pt")
+        self.model: YOLO = YOLO(model_name)
 
         # Store the latest images
         self.latest_rgb_image = None

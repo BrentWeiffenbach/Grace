@@ -202,14 +202,6 @@ include_directories(
 #   # myfile2
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
-# DOWNLOAD YOLO11 .pt file
-set(PATH "${CMAKE_CURRENT_SOURCE_DIR}")
-set(FILE "${PATH}/yolo11s.pt")
-message(STATUS "Checking and downloading yolo11s.pt if needed...")
-if (NOT EXISTS "${FILE}")
-  message(STATUS "File does not exist downloading now")
-  execute_process(COMMAND wget -q https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt -P ${PATH})
-endif()
 
 #############
 ## Testing ##
