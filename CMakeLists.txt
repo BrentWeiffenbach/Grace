@@ -14,12 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
 )
 
-add_message_files(
-  FILES
-  Frontier.msg
-  FrontierList.msg
-)
-
 generate_messages(
   DEPENDENCIES
   std_msgs
