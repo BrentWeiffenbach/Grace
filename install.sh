@@ -1,7 +1,7 @@
 # These are some commands I had to run to install the first time. Uncomment them if there are issues with the script to see if it fixes things.
 # sudo apt-get update
 # sudo apt install rosbash
-# sudo apt-get install ros-melodic-gazebo-ros gazebo9 ros-melodic-robot-state-publisher ros-melodic-xacro
+# sudo apt-get install ros-melodic-gazebo* ros-melodic-robot-state-publisher ros-melodic-xacro
 # sudo apt install python3.8.0
 
 # Check if venv exists
@@ -30,28 +30,47 @@ echo "Changing shebangs..."
 # Declare files that use relative shebangs here:
 python_files=("yolo_detect.py")
 
-for python_file in "scripts/${python_files[@]}"; do
-    if [[ -f "$python_file" ]]; then
+for python_file in "${python_files[@]}"; do
+    full_path="scripts/$python_file"
+    if [[ -f "$full_path" ]]; then
         
         # Check first line of the file
-        first_line=$(head -n 1 "$python_file")
+        first_line=$(head -n 1 "$full_path")
 
         # Ensure the first line starts with a shebang
         if [[ "$first_line" =~ ^#! ]]; then
-            echo "Changing shebang in $python_file..."
+            echo "Changing shebang in $full_path..."
 
             # Change the first line to be the path
             # 1s is find the first line
             # ^#!.*$ is a regex for the entire line if it starts with #!
             # #!$python_path is the shebang to replace it with
-            sed -i "1s|^#!.*$|#!$python_path|" "$python_file"
-            echo "Changed shebang in $python_file."
+            sed -i "1s|^#!.*$|#!$python_path|" "$full_path"
+            echo "Changed shebang in $full_path."
         else
-            echo "$python_file does not start with a shebang. Skipping..."
+            echo "$full_path does not start with a shebang. Skipping..."
         fi
     else
-        echo "$python_file does not exist. Skipping..."
+        echo "$full_path does not exist. Skipping..."
     fi
 done
 
 echo "Done changing shebangs."
+
+##############################
+# Change other hardcoded paths
+##############################
+
+# Images in yaml
+yaml_paths=("my_map" "tutorial") # Must end in yaml
+
+echo "Changing yaml file hardcoded paths..."
+for yaml_file in "${yaml_paths[@]}"; do
+    full_path="maps/$yaml_file.yaml"
+    
+    if [[ -f $full_path ]]; then
+        sed -i "s|image: .*|image: $install_dir/maps/$yaml_file.pgm|" $full_path
+    else
+        echo "$full_path not found. Skipping..."
+    fi
+done

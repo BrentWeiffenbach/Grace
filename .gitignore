@@ -2,3 +2,6 @@
 yolovenv/
 # ignore .pt files
 *.pt
+
+!.gitignore
+.vscode
