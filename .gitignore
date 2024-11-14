@@ -5,3 +5,4 @@ yolovenv/
 
 !.gitignore
 .vscode
+typings/ultralytics
