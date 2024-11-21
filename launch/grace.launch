@@ -10,7 +10,7 @@
     <group if="$(arg sim)">
         <!-- Launch the TurtleBot world if simulation-->
         <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
-            <arg name="world_file" value="$(find grace)../aws-robomaker-small-house-world/worlds/small_house.world"/>
+            <arg name="world_file" value="$(find grace)../aws-robomaker-small-house-world/worlds/small_house.world" />
         </include>
     </group>
 
@@ -33,7 +33,8 @@
 
     <!-- Launch YOLO -->
     <group if="$(arg yolo)">
-        <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen"/>
+        <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen" />
+        <node name="transform_node" pkg="grace" type="transform.py" output="screen" />
     </group>
 
     <!-- Launch RViz for navigation visualizations--> 
