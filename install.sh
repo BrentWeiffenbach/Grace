@@ -4,6 +4,9 @@
 # sudo apt-get install ros-melodic-gazebo* ros-melodic-robot-state-publisher ros-melodic-xacro
 # sudo apt install python3.8.0
 
+# A flag to toggle verbose logging to the terminal
+verbose=false # true or fase
+
 # Check if venv exists
 if  [[ ! -d yolovenv ]]; then
     echo "yolovenv not found. Installing..."
@@ -25,7 +28,7 @@ if [[ ! -f "$python_path" ]]; then
     exit 1
 fi
 
-echo "Changing shebangs..."
+$verbose && echo "Changing shebangs..."
 
 # Declare files that use relative shebangs here:
 python_files=("yolo_detect.py")
@@ -39,23 +42,23 @@ for python_file in "${python_files[@]}"; do
 
         # Ensure the first line starts with a shebang
         if [[ "$first_line" =~ ^#! ]]; then
-            echo "Changing shebang in $full_path..."
+            $verbose && echo "Changing shebang in $full_path..."
 
             # Change the first line to be the path
             # 1s is find the first line
             # ^#!.*$ is a regex for the entire line if it starts with #!
             # #!$python_path is the shebang to replace it with
             sed -i "1s|^#!.*$|#!$python_path|" "$full_path"
-            echo "Changed shebang in $full_path."
+            $verbose && echo "Changed shebang in $full_path."
         else
-            echo "$full_path does not start with a shebang. Skipping..."
+            $verbose && echo "$full_path does not start with a shebang. Skipping..."
         fi
     else
-        echo "$full_path does not exist. Skipping..."
+        $verbose && echo "$full_path does not exist. Skipping..."
     fi
 done
 
-echo "Done changing shebangs."
+$verbose && echo "Done changing shebangs."
 
 ##############################
 # Change other hardcoded paths
@@ -64,13 +67,74 @@ echo "Done changing shebangs."
 # Images in yaml
 yaml_paths=("my_map" "tutorial") # Must end in yaml
 
-echo "Changing yaml file hardcoded paths..."
+$verbose && echo "Changing yaml file hardcoded paths..."
 for yaml_file in "${yaml_paths[@]}"; do
     full_path="maps/$yaml_file.yaml"
     
     if [[ -f $full_path ]]; then
         sed -i "s|image: .*|image: $install_dir/maps/$yaml_file.pgm|" $full_path
     else
-        echo "$full_path not found. Skipping..."
+        $verbose && echo "$full_path not found. Skipping..."
     fi
 done
+
+#################################
+# Disable verbose logging in YOLO
+#################################
+# Change the below line to toggle between verbose YOLO logging
+do_verbose_yolo_logging=false
+
+predictor_py_path="$install_dir/yolovenv/lib/python3.8/site-packages/ultralytics/engine/predictor.py"
+if [[ -f "$predictor_py_path" && -r "$predictor_py_path" && -w "$predictor_py_path" ]]; then
+    disabled_verbose_code="            self.args.verbose = False"
+    grep_options=""
+    if [ "$verbose" == "false" ]; then
+        grep_options="-q "
+    fi
+    sed_options="-i "
+
+    if [ "$do_verbose_yolo_logging" == "true" ]; then # Disable YOLO logging (remove supressing line)
+        $verbose && echo "Attempting to enable verbose YOLO logging..."
+        # Check if it was disabled before
+        if grep $grep_options "$disabled_verbose_code" "$predictor_py_path"; then
+            $verbose && echo "Disable verbose line found in predictor.py. Attempting to remove line..."
+
+            # Remove the line
+            sed $sed_options "/$disabled_verbose_code/d" "$predictor_py_path"
+            # Check if line was successfully removed
+            if ! grep $grep_options "$disabled_verbose_code" "$predictor_py_path"; then
+                # Line was removed
+                $verbose && echo "Line removed!"
+            else
+                # Line was still found
+                # Non-verbose error
+                echo "Failed to remove the verbose logging suppressor line in predictor.py!"
+            fi
+        else
+            $verbose && echo "Disable verbose line not found. Nothing to change. Continuing..."
+        fi
+    else # Disable YOLO logging (add supressing line)
+        $verbose && echo "Attempting to disable verbose YOLO logging..."
+        if ! grep $grep_options "$disabled_verbose_code" "$predictor_py_path"; then
+            $verbose && echo "Disable verbose line not found. Attempting to add line..."
+            # Add the line
+            sed $sed_options "/LOGGER.info(\"\")/a\\$disabled_verbose_code" "$predictor_py_path"
+            # Check if line was successfully added
+            if grep $grep_options "$disabled_verbose_code" "$predictor_py_path"; then
+                # Line was successfully added
+                $verbose && echo "Line added!"
+            else
+                # Line was not found
+                # Non-verbose error
+                echo "Failed to add disable verbose logging line to predictor.py!"
+            fi
+        else
+            $verbose && echo "Disable verbose line already exists. Nothing to change. Continuing..."
+        fi
+    fi
+else
+    echo "Could not find predictor.py. Please pip install before running the install script."
+    echo "Skipping this section..."
+fi
+
+exit 0 # Successfully exit
