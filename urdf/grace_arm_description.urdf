@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot name="grace_arm_description">
+    <link name="arm_link">
+        
+<inertial>
+            <origin xyz="-0.0230713386000361 9.15799543976803E-08 0.0415100455137467" rpy="0 0 0" />
+            <mass value="0.521201362359327" />
+            <inertia ixx="0.000308448801249096" ixy="-2.24010570170033E-10" ixz="-4.20908209420788E-06" iyy="0.000629271153965848" iyz="3.68418762308172E-10" izz="0.000820585760917926" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/base_link.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/base_link.STL" />
+            </geometry>
+        </collision>
+        <gazebo>
+            <static>true</static>
+        </gazebo>
+    </link>
+
+    <link name="link_1">
+        
+<inertial>
+            <origin xyz="-0.00367212792136895 -0.000953971744108238 0.0314259611133999" rpy="0 0 0" />
+            <mass value="0.44628825628102" />
+            <inertia ixx="0.000211622135350193" ixy="-1.60898695184289E-05" ixz="-2.12044163670866E-05" iyy="0.000426842605557489" iyz="8.45937792738111E-06" izz="0.000364093985789392" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_1.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_1.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_1" type="revolute">
+        <origin xyz="0 0 0.0996786823922755" rpy="0 0 0" />
+        <parent link="arm_link" />
+        <child link="link_1" />
+        <axis xyz="0 0 -1" />
+        <limit lower="-6.28" upper="6.28" effort="2.8" velocity="3" />
+    </joint>
+    <link name="link_2">
+        
+<inertial>
+            <origin xyz="-4.49098406521686E-05 -0.0265864041730696 0.0740533879090693" rpy="0 0 0" />
+            <mass value="0.259039695912046" />
+            <inertia ixx="0.000716987912967795" ixy="-2.69254469666682E-08" ixz="1.11063727567744E-06" iyy="0.000772334119559269" iyz="9.86292495639906E-06" izz="7.60097420899484E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_2.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_2.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_2" type="revolute">
+        <origin xyz="0.0374999999999999 -0.0205999999999994 0.0356213176077246" rpy="0 0 0" />
+        <parent link="link_1" />
+        <child link="link_2" />
+        <axis xyz="0 -1 0" />
+        <limit lower="-6.28" upper="6.28" effort="2.8" velocity="3" />
+    </joint>
+    <link name="link_3">
+        
+<inertial>
+            <origin xyz="-0.00667556981939788 0.013244622821894 0.00210092260676947" rpy="0 0 0" />
+            <mass value="0.196523155872548" />
+            <inertia ixx="8.09651824587146E-05" ixy="2.81975169120418E-06" ixz="-3.66085369615221E-06" iyy="0.000112059523768602" iyz="-6.25153874978293E-06" izz="9.44916270684125E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_3.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_3.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_3" type="revolute">
+        <origin xyz="0 0 0.16" rpy="0 0 0" />
+        <parent link="link_2" />
+        <child link="link_3" />
+        <axis xyz="0 1 0" />
+        <limit lower="-6.28" upper="6.28" effort="2.8" velocity="3" />
+    </joint>
+    <link name="link_4">
+        
+<inertial>
+            <origin xyz="0.0417446458132815 -0.00121844062855813 -2.82984578249823E-05" rpy="0 0 0" />
+            <mass value="0.13904213264245" />
+            <inertia ixx="3.3956174612803E-05" ixy="-9.08014614619385E-07" ixz="-3.24476833174034E-08" iyy="9.52192497334699E-05" iyz="-1.06868181454595E-08" izz="0.000102425361067127" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_4.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_4.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_4" type="revolute">
+        <origin xyz="0 0.0205999999999994 0.0149999999999999" rpy="0 0 0" />
+        <parent link="link_3" />
+        <child link="link_4" />
+        <axis xyz="1 0 0" />
+        <limit lower="-6.28" upper="6.28" effort="0.26" velocity="3" />
+    </joint>
+    <link name="link_5">
+        
+<inertial>
+            <origin xyz="0.0238545234249183 0.001000000000004 -4.30211422042248E-15" rpy="0 0 0" />
+            <mass value="0.0226291261478766" />
+            <inertia ixx="2.63033208556289E-06" ixy="5.83691209581624E-20" ixz="4.79954959215583E-22" iyy="4.6077178783839E-06" iyz="-3.26721704603512E-21" izz="5.5778477420272E-06" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_5.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_5.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_5" type="revolute">
+        <origin xyz="0.138399999999998 0 0" rpy="0 0 0" />
+        <parent link="link_4" />
+        <child link="link_5" />
+        <axis xyz="0 1 0" />
+        <limit lower="-6.28" upper="6.28" effort="100" velocity="3" />
+    </joint>
+    <link name="link_6">
+        
+<inertial>
+            <origin xyz="0.0375700933313833 7.79931674799172E-15 1.74860126378462E-15" rpy="0 0 0" />
+            <mass value="0.0344745442037744" />
+            <inertia ixx="8.25707747004663E-06" ixy="1.24099057490131E-20" ixz="-8.96220887935423E-22" iyy="5.60919944945653E-06" iyz="6.64403133578784E-22" izz="1.04084249994565E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_6.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_6.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_6" type="revolute">
+        <origin xyz="0.0368264234301688 0.00100000000000361 0" rpy="0 0 0" />
+        <parent link="link_5" />
+        <child link="link_6" />
+        <axis xyz="1 0 0" />
+        <limit lower="-6.28" upper="6.28" effort="100" velocity="3" />
+    </joint>
+    <link name="link_7">
+        
+<inertial>
+            <origin xyz="0.0813383689142501 -0.00569799510345087 -0.0109507082226625" rpy="0 0 0" />
+            <mass value="0.0107833196956505" />
+            <inertia ixx="1.71418722053534E-06" ixy="-2.56039273423129E-07" ixz="1.0347632917084E-12" iyy="3.38137633095013E-06" iyz="2.49449182084092E-12" izz="2.04176420366087E-06" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_7.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_7.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_7" type="prismatic">
+        <origin xyz="-0.0085199938135937 -0.0199999999998909 0.0109507154822943" rpy="0 0 0" />
+        <parent link="link_6" />
+        <child link="link_7" />
+        <axis xyz="0 1 0" />
+        <limit lower="0" upper="0.02" effort="100" velocity="3" />
+    </joint>
+    <link name="link_8">
+        
+<inertial>
+            <origin xyz="0.0813383689142507 0.00569799510352407 0.0109507082226624" rpy="0 0 0" />
+            <mass value="0.0107833196956505" />
+            <inertia ixx="1.71418722053532E-06" ixy="2.56039273423034E-07" ixz="-1.03476328954469E-12" iyy="3.38137633095016E-06" iyz="2.49449182102149E-12" izz="2.04176420366087E-06" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_8.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://grace_arm_description/meshes/link_8.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint_8" type="prismatic">
+        <origin xyz="-0.00851999381359586 0.01999999999987 -0.01095071548229" rpy="0 0 0" />
+        <parent link="link_6" />
+        <child link="link_8" />
+        <axis xyz="0 -1 0" />
+        <limit lower="0" upper="0.02" effort="100" velocity="3" />
+        <mimic joint="joint_7" multiplier="1" offset="0" />
+    </joint>
+    
+<transmission name="trans_joint_1">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_1">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_1_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_2">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_2">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_2_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_3">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_3">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_3_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_4">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_4">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_4_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_5">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_5">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_5_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_6">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_6">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_6_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_7">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_7">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_7_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint_8">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint_8">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint_8_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <gazebo>
+        <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+            <robotNamespace>/grace_arm</robotNamespace>
+        </plugin>
+    </gazebo>
+</robot>
