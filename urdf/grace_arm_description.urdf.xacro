@@ -2,8 +2,8 @@
 <!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
-<robot name="grace_arm">
-    <link name="world"/>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="grace_arm">
+    <xacro:macro name="grace_arm" params="parent">
 
     <link name="arm_link">
         
@@ -34,7 +34,7 @@
     </link>
 
         <joint name="arm_joint" type="fixed">
-        <parent link="world" />
+        <parent link="${parent}" />
         <child link="arm_link" />
         <origin xyz="0 0 0" rpy="0 0 0" />
     </joint>
@@ -374,4 +374,5 @@
             <robotNamespace>/grace_arm</robotNamespace>
         </plugin>
     </gazebo>
+</xacro:macro>
 </robot>
