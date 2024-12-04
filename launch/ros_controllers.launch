@@ -10,5 +10,6 @@
     args="--namespace=/grace_arm
     arm_controller
     gripper_controller
+    joint_state_controller
     --timeout 60"/>
 </launch>

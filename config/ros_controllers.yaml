@@ -22,8 +22,6 @@ hardware_interface:
     - joint_8
   sim_control_mode: 1  # 0: position, 1: velocity
 
-# Publish all joint states
-# Creates the /joint_states topic necessary in ROS
 grace_arm:  
   arm_controller:
     type: position_controllers/JointTrajectoryController
@@ -41,20 +39,34 @@ grace_arm:
       joint_4: { p: 100, d: 1, i: 1, i_clamp: 1}
       joint_5: { p: 100, d: 1, i: 1, i_clamp: 1}
       joint_6: { p: 100, d: 1, i: 1, i_clamp: 1}
+    constraints:
+      goal_time: 0.6
+      stopped_velocity_tolerance: 0
+      goal_tolerance:
+        joint_1: 0.01
+        joint_2: 0.01
+        joint_3: 0.01
+        joint_4: 0.01
+        joint_5: 0.01
+        joint_6: 0.01
   
   gripper_controller:
-    type: "position_controllers/GripperActionController"
-    joint: "joint_7"
-    command_topic: "gripper_controller/command"
-    allow_failure: false
-    stall_velocity_threshold: 0.001
-    stall_timeout: 1.0
+    type: position_controllers/JointTrajectoryController
+    joints:
+      - joint_7
     gains:
-      p: 100.0
-      i: 0.0
-      d: 0.0
-      i_clamp: 0.0
+      joint_7: { p: 100.0, i: 0.0, d: 0.0, i_clamp: 0.0 }
+    constraints:
+      goal_time: 0.6
+      stopped_velocity_tolerance: 0
+      goal_tolerance:
+        joint_7: 0.01
 
+  # Publish all joint states
+  # Creates the /joint_states topic necessary in ROS
+  joint_state_controller:
+    type: joint_state_controller/JointStateController
+    publish_rate: 50
 controller_list:
   - name: grace_arm/arm_controller
     action_ns: follow_joint_trajectory
@@ -68,6 +80,7 @@ controller_list:
       - joint_5
       - joint_6
   - name: grace_arm/gripper_controller
-    action_ns: gripper_action
-    type: position_controllers/GripperActionController
-    joint: joint_7
+    action_ns: follow_joint_trajectory
+    type: FollowJointTrajectory
+    joints:
+      - joint_7
