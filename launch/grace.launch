@@ -35,6 +35,8 @@
     <group if="$(arg yolo)">
         <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen" />
         <node name="transform_node" pkg="grace" type="transform.py" output="screen" />
+        <node name="semantic_slam" pkg="grace" type="semantic_slam.py" output="screen" />
+        <!-- <node name="add_marker" pkg="grace" type="add_marker.py" output="screen" /> -->
     </group>
 
     <!-- Launch RViz for navigation visualizations--> 
