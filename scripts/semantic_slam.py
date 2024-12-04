@@ -31,6 +31,7 @@ class MapObject:
 class SemanticSLAM():
     def __init__(self):
         self.target_frame = "camera_rgb_optical_frame"
+        # self.target_frame = "camera_link"
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
 
@@ -62,7 +63,7 @@ class SemanticSLAM():
                          "microwave","oven","toaster","sink","refrigerator","book","clock",
                          "vase","scissors","teddy bear","hair drier","toothbrush"]
         
-        self.nC = len(self.classes)
+        self.numberOfClasses = len(self.classes)
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
         self.range_sub = rospy.Subscriber("/range_bearing", RangeBearings, self.range_callback)
         self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10)
@@ -155,8 +156,8 @@ class SemanticSLAM():
                 object_pos_var = np.diag([x_var, y_var])
 
                 class_probs = []
-                for i in range(self.nC):
-                    alpha = np.ones(self.nC)
+                for i in range(self.numberOfClasses):
+                    alpha = np.ones(self.numberOfClasses)
                     alpha[i] = self.alpha_constant
                     class_probs.append(dirichlet.pdf(probability, alpha))
 
@@ -235,8 +236,8 @@ class SemanticSLAM():
                 # print('updated pose is ', updated_pos)
                 # print('updated pose covariance is', updated_pos_var)
 
-                for i in range(self.nC):
-                    alpha = np.ones(self.nC)
+                for i in range(self.numberOfClasses):
+                    alpha = np.ones(self.numberOfClasses)
                     alpha[i] = self.alpha_constant
                     class_probs[i] = dirichlet.pdf(probability, alpha) * \
                                      class_probs[i]

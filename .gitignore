@@ -6,3 +6,4 @@ yolovenv/
 !.gitignore
 .vscode
 typings/ultralytics
+__pycache__
