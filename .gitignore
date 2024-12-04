@@ -7,3 +7,5 @@ yolovenv/
 .vscode
 typings/ultralytics
 __pycache__
+
+out

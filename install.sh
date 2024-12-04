@@ -137,4 +137,7 @@ else
     echo "Skipping this section..."
 fi
 
+# TODO: Add verbosity to this
+[[ -d out/SLAM ]] || mkdir out/SLAM
+
 exit 0 # Successfully exit

@@ -1,18 +1,19 @@
 #!/usr/bin/env python2.7
 import os
-import numpy as np
-from numpy.linalg import inv, norm, eig
-import rospy
-import tf2_ros
-from sensor_msgs.msg import Image, CameraInfo
-from object_ros_msgs.msg import RangeBearing, RangeBearings,  Object2D, Object2DArray
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose2D
-from tf2_ros import TransformException, ConnectivityException, ExtrapolationException
-import tf
-from scipy.stats import dirichlet
-from scipy.stats import entropy
 import pickle
+
+import numpy as np
+import rospy
+import tf
+import tf2_ros
+from geometry_msgs.msg import PointStamped, Pose2D
+from nav_msgs.msg import Odometry
+from numpy.linalg import eig, inv, norm
+from object_ros_msgs.msg import Object2D, Object2DArray, RangeBearing, RangeBearings
+from scipy.stats import dirichlet, entropy
+from sensor_msgs.msg import CameraInfo, Image
+from tf2_ros import ConnectivityException, ExtrapolationException, TransformException
+
 
 class MapObject:
     def __init__(self, object_id, pos, pos_var, class_probs, obj_class):
@@ -67,6 +68,7 @@ class SemanticSLAM():
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
         self.range_sub = rospy.Subscriber("/range_bearing", RangeBearings, self.range_callback)
         self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10)
+        self.point_pub = rospy.Publisher("/semantic_map/point", PointStamped, queue_size=10)
         self.t = 0
         self.t_series = []
         self.entropy_series = []
@@ -120,8 +122,8 @@ class SemanticSLAM():
             obj_range = range_bearing.range
             bearing = range_bearing.bearing
             obj_id = range_bearing.id
-            probability = range_bearing.probability
-            probability = np.asarray(probability) / np.sum(probability)
+            # probability = range_bearing.probability
+            # probability = np.asarray(probability) / np.sum(probability)
             obj_class = range_bearing.obj_class
 
             ux = self.pos[0]
@@ -155,17 +157,19 @@ class SemanticSLAM():
                 object_pos = np.asarray([mx, my])
                 object_pos_var = np.diag([x_var, y_var])
 
-                class_probs = []
-                for i in range(self.numberOfClasses):
-                    alpha = np.ones(self.numberOfClasses)
-                    alpha[i] = self.alpha_constant
-                    class_probs.append(dirichlet.pdf(probability, alpha))
+                # class_probs = []
+                # for i in range(self.numberOfClasses):
+                #     alpha = np.ones(self.numberOfClasses)
+                #     alpha[i] = self.alpha_constant
+                #     class_probs.append(dirichlet.pdf(probability, alpha))
 
-                class_probs = np.asarray(class_probs)
-                class_probs = np.asarray(class_probs) / np.sum(class_probs)
+                # class_probs = np.asarray(class_probs)
+                # class_probs = np.asarray(class_probs) / np.sum(class_probs)
 
+                # self.objects[self.max_obj_id] = MapObject(obj_id, object_pos,
+                #                                          object_pos_var, class_probs, obj_class)
                 self.objects[self.max_obj_id] = MapObject(obj_id, object_pos,
-                                                         object_pos_var, class_probs, obj_class)
+                                                         object_pos_var, 1, obj_class)
                 
                 if (not np.isfinite(object_pos_var).all()):
                     print('encounter inf/NAN in initialization')
@@ -179,7 +183,7 @@ class SemanticSLAM():
 
             else:
                 obj_pos = matched_obj.pos
-                class_probs = matched_obj.class_probs
+                # class_probs = matched_obj.class_probs
                 obj_x = obj_pos[0]
                 obj_y = obj_pos[1]
 
@@ -239,13 +243,13 @@ class SemanticSLAM():
                 for i in range(self.numberOfClasses):
                     alpha = np.ones(self.numberOfClasses)
                     alpha[i] = self.alpha_constant
-                    class_probs[i] = dirichlet.pdf(probability, alpha) * \
-                                     class_probs[i]
+                #     class_probs[i] = dirichlet.pdf(probability, alpha) * \
+                #                      class_probs[i]
 
-                class_probs = np.asarray(class_probs)
-                class_probs = np.asarray(class_probs) / np.sum(class_probs)
+                # class_probs = np.asarray(class_probs)
+                # class_probs = np.asarray(class_probs) / np.sum(class_probs)
                 #class_probs = (class_probs + 0.004)/(class_probs + 0.004*len(self.classes))
-                matched_obj.update(updated_pos, updated_pos_var, class_probs, self.classes[np.argmax(class_probs)])
+                # matched_obj.update(updated_pos, updated_pos_var, class_probs, self.classes[np.argmax(class_probs)])
 
         semantic_map_msg = Object2DArray()
         semantic_map_msg.header = msg.header
@@ -261,7 +265,9 @@ class SemanticSLAM():
 
             obj_msg.covariance = obj.pos_var.flatten()
             obj_msg.id = obj_id
-            obj_msg.probability = obj.class_probs.tolist()
+            # obj_msg.probability = obj.class_probs.tolist()
+            obj_msg.probability = [1]
+
             # print(obj.obj_class, " ", obj_id, " ", obj.pos)
             objects.append(obj_msg)
 
@@ -271,11 +277,13 @@ class SemanticSLAM():
         D_opt = 0
         E_opt = 0
 
-        file1 = open(os.path.join(os.path.dirname(__file__), "../../../out/SLAM/")  + str(msg.seq) +  ".txt", "w")
+        file1 = open(os.path.join(os.path.dirname(__file__), "../out/SLAM/")  + str(msg.seq) +  ".txt", "w")
         file1.write(str(self.t) + '\n')
         for obj_id in self.objects:
             obj = self.objects[obj_id]
-            average_entropy += entropy(obj.class_probs, base=2)
+            # average_entropy += entropy(obj.class_probs, base=2)
+            average_entropy += entropy([1.0], base=2)
+
             w, v = eig(obj.pos_var)
 
             A_opt += w.sum()
@@ -286,7 +294,8 @@ class SemanticSLAM():
             for conv in obj.pos_var.flatten():
                 line = line + ' ' + str(conv)
 
-            for prob in obj.class_probs:
+            # for prob in obj.class_probs:
+            for prob in [1.0]:
                 line = line + ' ' + str(prob)
 
             file1.write(line+' ' + obj.obj_class + '\n')
@@ -304,15 +313,23 @@ class SemanticSLAM():
 
         self.t_series.append(self.t)
 
+        for obj_id in self.objects:
+            obj = self.objects[obj_id]
+            _point = PointStamped()
+            _point.header.frame_id = to_frame_rel
+            _point.header.stamp = rospy.Time.now()
+            _point.point.x = obj.pos[0]
+            _point.point.y = obj.pos[1]
+            self.point_pub.publish(_point)
         self.entropy_series.append(average_entropy)
         semantic_map_msg.objects = objects
         self.map_pub.publish(semantic_map_msg)
 
     def save_data(self):
-        with open(os.path.join(os.path.dirname(__file__), "../../../new_log5.pkl"), "wb") as fp:  # Pickling
+        with open(os.path.join(os.path.dirname(__file__), "../SLAM/new_log5.pkl"), "wb") as fp:  # Pickling
             pickle.dump([self.t_series, self.entropy_series], fp)
 
-        with open(os.path.join(os.path.dirname(__file__), '../../../new_log5.npy'), 'wb') as f:
+        with open(os.path.join(os.path.dirname(__file__), '../SLAM/new_log5.npy'), 'wb') as f:
             np.save(f, self.t_series)
             np.save(f, self.entropy_series)
             np.save(f, self.A_opt)

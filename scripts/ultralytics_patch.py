@@ -30,7 +30,6 @@ def patch() -> None:
             boxes = boxes[None, :]
         n = boxes.shape[-1]
         super(ultralytics.engine.results.Boxes, self).__init__(boxes, orig_shape)
-        print(boxes)
         self.orig_shape = orig_shape
         self.is_track = False
         self.num_classes = 0
@@ -40,7 +39,7 @@ def patch() -> None:
         elif n == 7:
             self.format = 'xyxy_conf_cls_track'
             self.is_track = True
-            self.track_id = boxes[:, -3]
+            # self.track_id = boxes[:, -3]
         else:
             self.format = 'xyxy_conf_cls_classconf'
             self.num_classes = n - 6

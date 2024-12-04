@@ -1,4 +1,4 @@
-image: /home/brent/catkin_ws/src/turtlebot_custom_maps/tutorial.pgm
+image: /home/alex/catkin_ws/src/Grace/maps/tutorial.pgm
 resolution: 0.050000
 origin: [-15.400000, -12.200000, 0.000000]
 negate: 0
