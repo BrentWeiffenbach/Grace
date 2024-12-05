@@ -4,14 +4,13 @@ import pickle
 
 import numpy as np
 import rospy
-import tf
 import tf2_ros
-from geometry_msgs.msg import PointStamped, Pose2D
+from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from numpy.linalg import eig, inv, norm
-from object_ros_msgs.msg import Object2D, Object2DArray, RangeBearing, RangeBearings
+from object_ros_msgs.msg import Object2D, Object2DArray, RangeBearings
 from scipy.stats import dirichlet, entropy
-from sensor_msgs.msg import CameraInfo, Image
+from tf import transformations
 from tf2_ros import ConnectivityException, ExtrapolationException, TransformException
 
 
@@ -98,6 +97,7 @@ class SemanticSLAM():
         from_frame_rel = self.target_frame
         to_frame_rel = 'map'
 
+        # region TF
         try:
             trans = self.tfBuffer.lookup_transform(
                 to_frame_rel,
@@ -107,16 +107,17 @@ class SemanticSLAM():
             self.pos = np.asarray([trans.transform.translation.x,
                                     trans.transform.translation.y])
 
-            self.ang = tf.transformations.euler_from_quaternion([trans.transform.rotation.x,
+            self.ang = transformations.euler_from_quaternion([trans.transform.rotation.x,
                                                                  trans.transform.rotation.y,
                                                                  trans.transform.rotation.z,
                                                                  trans.transform.rotation.w])[-1]
-            self.ang += np.pi / 2 
+            self.ang += np.pi / 2
             
         except (TransformException,ConnectivityException, ExtrapolationException) as ex:
             rospy.loginfo('Could not transform %s to %s: ', to_frame_rel,
                           from_frame_rel)
             return
+        # endregion
 
         for range_bearing in msg.range_bearings:
             obj_range = range_bearing.range
@@ -134,6 +135,7 @@ class SemanticSLAM():
 
             dist = np.inf
             matched_obj = None
+            # Search for a closer object
             for obj in self.objects.values():
                 if obj_class == obj.obj_class:
                     dist_temp = np.sqrt((mx - obj.pos[0])**2 + (my - obj.pos[1])**2)
@@ -313,6 +315,7 @@ class SemanticSLAM():
 
         self.t_series.append(self.t)
 
+        # Publish the found points???
         for obj_id in self.objects:
             obj = self.objects[obj_id]
             _point = PointStamped()
@@ -321,6 +324,7 @@ class SemanticSLAM():
             _point.point.x = obj.pos[0]
             _point.point.y = obj.pos[1]
             self.point_pub.publish(_point)
+
         self.entropy_series.append(average_entropy)
         semantic_map_msg.objects = objects
         self.map_pub.publish(semantic_map_msg)

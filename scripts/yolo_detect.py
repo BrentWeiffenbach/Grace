@@ -11,7 +11,7 @@ import rospy
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
 from object_ros_msgs.msg import RangeBearing, RangeBearings
-from py3_cv_bridge import imgmsg_to_cv2
+from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
 from ultralytics import YOLO
@@ -58,11 +58,6 @@ class YoloDetect:
             data_class=Image,
             callback=self.depth_image_callback,
         )
-        self.transformed_point_sub = rospy.Subscriber(
-            name="/transform_node/base_link_frame_point",
-            data_class=PointStamped,
-            callback=self.transformed_point_callback,
-        )
 
         MODEL_NAME: Final = "yolo11s.pt"
         # Download the YOLO model to the grace folder
@@ -92,7 +87,10 @@ class YoloDetect:
         )  # type: ignore
 
         # Timer to call the detection function at a fixed interval (4 times a second)
-        self.timer = rospy.Timer(period=rospy.Duration(secs=DETECTION_INTERVAL), callback=self.detect_objects)  # type: ignore
+        self.timer = rospy.Timer(
+            period=rospy.Duration(secs=DETECTION_INTERVAL),  # type: ignore
+            callback=self.detect_objects,
+        )
         # Could do what Zhentian did and use an ApproximateTimeSynchronizer as the callback instead of using the timer to call detect_objects
 
     def depth_image_callback(self, img: Image) -> None:
@@ -103,11 +101,9 @@ class YoloDetect:
 
     def rgb_image_callback(self, img: Image) -> None:
         # self.latest_rgb_image = ros_numpy.numpify(msg=img)
-        self.latest_rgb_image = img
-        self.isUpdated = True
-
-    def transformed_point_callback(self, point: PointStamped) -> None:
-        self.transformed_point = point
+        if not self.latch:
+            self.latest_rgb_image = img
+            self.isUpdated = True
 
     def __call__(self) -> None:
         """Make it so that you can do `YoloDetect()` and it starts the class."""
@@ -115,72 +111,6 @@ class YoloDetect:
 
     def convert_Image_to_cv2(self, img: Image) -> cv2.typing.MatLike:
         return imgmsg_to_cv2(img)
-
-    def _detect_objects(self, event: rospy.timer.TimerEvent) -> None:
-        """Callback function to detect objects on RGB image"""
-        # if self.latest_rgb_image is not None and self.latest_depth_image is not None:
-        if (
-            self.latest_rgb_image is None or self.latest_depth_image is None
-        ):  # Extracted to reduce the level of indentation
-            return
-        if not self.detection_image_pub.get_num_connections():
-            return
-        if not self.isUpdated:
-            return
-
-        # self.isUpdated is True, so change it to indicate that the change has been recieved
-        self.isUpdated = False
-        self.latch = True  # Prevent callbacks from modifying any data
-        image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
-        depth_array = self.latest_depth_image
-
-        CONFIDENCE_SCORE: Final[float] = 0.5
-        SHOW_DETECTION_BOXES: Final[bool] = False
-        result: List[Results] = self.model(
-            image_array, conf=CONFIDENCE_SCORE
-        )  # get the results
-        det_annotated: cv2.typing.MatLike = result[0].plot(
-            show=SHOW_DETECTION_BOXES
-        )  # plot the annotations # Is a NDArray[NDArray[NDArray[uint8]]] here
-
-        # Find the depths of each detection and display them
-        for detection in result[0].boxes:
-            detection: Boxes  # Add typing for detection
-            x1, y1, x2, y2 = map(int, detection.xyxy[0])
-            det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
-            det_annotated = cv2.circle(det_annotated, (x2, y2), 5, (0, 255, 0), -1)
-            depth = np.nanmean(depth_array[y1:y2, x1:x2])
-
-            if not np.isnan(depth):
-                label: str = f"{int(detection.cls.item())} {depth:.2f}m"
-                det_annotated = cv2.putText(
-                    det_annotated,
-                    label,
-                    (x1, y1 - 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 0, 0),
-                    2,
-                )
-                # * https://towardsdatascience.com/camera-intrinsic-matrix-with-example-in-python-d79bf2478c12
-                # https://learnopencv.com/monocular-slam-in-python/
-                top_left_corner: tuple[int, int] = (x1, y1)
-                bottom_right_corner: tuple[int, int] = (x2, y2)
-
-                point: PointStamped = self.image_coordinates_to_camera_frame(
-                    top_left_corner=top_left_corner,
-                    bottom_right_corner=bottom_right_corner,
-                    depth=depth,
-                )
-                point = self.camera_to_world_coordinates(point)
-
-                self.semantic_objects_pub.publish(
-                    point
-                )  # Publish the camera frame point
-        self.detection_image_pub.publish(
-            ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
-        )
-        self.latch = False
 
     def detect_objects(self, event: rospy.timer.TimerEvent) -> None:
         """Callback function to detect objects on RGB image"""
@@ -210,15 +140,16 @@ class YoloDetect:
         )  # plot the annotations
 
         range_msg = RangeBearings()
-        range_bearings = []
+        range_bearings: list = []
         classes: dict[int, str] = result[0].names
         # Find the depths of each detection and display them
-        # print(result[0])
         for detection in result[0].boxes:
             detection: Boxes  # Add typing for detection
             x1, y1, x2, y2 = map(int, detection.xyxy[0])
             det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
             det_annotated = cv2.circle(det_annotated, (x2, y2), 5, (0, 255, 0), -1)
+            obj_range: float
+            bearing: Tensor
             obj_range, bearing = self.calculate_bearing_and_obj_range(
                 depth_array, x1, y1, x2, y2
             )
@@ -241,7 +172,20 @@ class YoloDetect:
         self.latch = False
 
     @staticmethod
-    def create_range_bearing(classes: Dict[int, str], detection: Boxes, obj_range: float, bearing: Tensor) -> RangeBearing:
+    def create_range_bearing(
+        classes: Dict[int, str], detection: Boxes, obj_range: float, bearing: Tensor
+    ) -> RangeBearing:
+        """Creates a RangeBearing based on the classes, detections, ranges, and bearings.
+
+        Args:
+            classes (Dict[int, str]): A dict of the classes to use.
+            detection (Boxes): The detections.
+            obj_range (float): The distance from the object.
+            bearing (Tensor): The direction that the object is in.
+
+        Returns:
+            RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
+        """
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
         range_bearing.bearing = float(bearing.item())  # float
@@ -256,102 +200,39 @@ class YoloDetect:
         return range_bearing
 
     def calculate_bearing_and_obj_range(
-        self, depth_array, x1, y1, x2, y2
+        self, depth_array, x1: int, y1: int, x2: int, y2: int
     ) -> Tuple[float, Tensor]:
         depth_mask = depth_array[y1:y2, x1:x2]
-        obj_coords = np.nonzero(depth_mask)
 
-        # Divide by 20 as a scale. It is wayyy off in the distance otherwise
-        # BUG: This probably means that it is wrong somewhere in the calculations...
-        z: np.floating = np.nanmean(obj_coords) / 20.0
+        z: np.floating = np.nanmean(depth_mask)
+        obj_coords = np.nonzero(depth_mask)
         obj_coords = np.asarray(obj_coords).T
 
         obj_coords = obj_coords + np.asarray([y1, x1])
 
-        ux = obj_coords[:, 1]
-        uy = obj_coords[:, 0]
+        ux: NDArray[np.int64] = obj_coords[:, 1]
+        uy: NDArray[np.int64] = obj_coords[:, 0]
 
         fx: float = self.camera_info.K[0]  # Kinect's focal length
         fy: float = self.camera_info.K[4]  # Kinect's focal length
         cx: float = self.camera_info.K[2]  # Principal point x-coordinate
         cy: float = self.camera_info.K[5]  # Principal point y-coordinate
 
-        x = (ux - cx) * z / fx
-        y = (uy - cy) * z / fy
+        x: NDArray[np.float64] = (ux - cx) * z / fx
+        y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        x_mean: np.floating = np.nanmean(x)
-        y_mean: np.floating = np.nanmean(y)
-        z_mean: np.floating = np.nanmean(z)
+        # BUG: RuntimeWarning: Mean of empty slice
+        x_mean: np.floating = np.nanmean(x) # float64
+        y_mean: np.floating = np.nanmean(y) # float64
+        z_mean: np.floating = np.nanmean(z) # float32
 
         Oc: list[np.floating] = [x_mean, y_mean, z_mean]
 
+        # Hypotenuse of x_mean and z_mean
         obj_range: float = np.sqrt(Oc[0] * Oc[0] + Oc[2] * Oc[2])
 
         bearing: Tensor = np.arctan2(-Oc[0], Oc[2])
         return obj_range, bearing
-
-    @np.deprecate_with_doc(msg="Unused")
-    def image_coordinates_to_camera_frame(
-        self,
-        top_left_corner: Tuple[int, int],
-        bottom_right_corner: Tuple[int, int],
-        depth,
-    ) -> PointStamped:
-        point: PointStamped = PointStamped()
-        point.header.stamp = rospy.Time.now()
-        # point.header.frame_id = "camera_link"
-        point.header.frame_id = "camera_rgb_optical_frame"
-        # Obtain the parameters of the camera by doing the following:
-        # Run the camera, then run rostopic echo /camera/rgb/camera_info
-        # K is the intrinsics matrix. Per the header file definition of CameriaInfo,
-
-        ## Intrinsic camera matrix for the raw (distorted) images.
-        #     [fx  0 cx]
-        # K = [ 0 fy cy]
-        #     [ 0  0  1]
-        # Projects 3D points in the camera coordinate frame to 2D pixel
-        # coordinates using the focal lengths (fx, fy) and principal point
-        # (cx, cy).
-        fx: float = self.camera_info.K[0]  # Kinect's focal length
-        fy: float = self.camera_info.K[4]  # Kinect's focal length
-        cx: float = self.camera_info.K[2]  # Principal point x-coordinate
-        cy: float = self.camera_info.K[5]  # Principal point y-coordinate
-
-        x_coordinate: float = (top_left_corner[0] + bottom_right_corner[0]) / 2
-        y_coordinate: float = (top_left_corner[1] + bottom_right_corner[1]) / 2
-
-        # Unproject x and y to camera coordinates
-        x_camera: float = depth / 1000.0 * (x_coordinate - cx) / fx
-        y_camera: float = depth / 1000.0 * (y_coordinate - cy) / fy
-        z_camera: float = depth / 1000.0
-
-        point.point.x = x_camera
-        point.point.y = y_camera
-        point.point.z = z_camera
-        return point
-
-    @np.deprecate_with_doc(msg="Unused")
-    def camera_to_world_coordinates(
-        self, camera_coordinates: PointStamped
-    ) -> PointStamped:
-        point: PointStamped = PointStamped()
-        point.header.stamp = rospy.Time.now()
-        point.header.frame_id = "map"  # This COULD be base_link if world doesn't work
-
-        rotation_matrix: NDArray[np.float64] = np.reshape(self.camera_info.R, (3, 3))
-        world_point = np.dot(
-            rotation_matrix,
-            [
-                camera_coordinates.point.x,
-                camera_coordinates.point.y,
-                camera_coordinates.point.z,
-            ],
-        )
-
-        point.point.x = world_point[0]
-        point.point.y = world_point[1]
-        point.point.z = world_point[2]
-        return point
 
     def run(self) -> None:
         rospy.spin()
