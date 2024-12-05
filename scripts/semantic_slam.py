@@ -122,8 +122,8 @@ class SemanticSLAM():
             obj_range = range_bearing.range
             bearing = range_bearing.bearing
             obj_id = range_bearing.id
-            # probability = range_bearing.probability
-            # probability = np.asarray(probability) / np.sum(probability)
+            probability = range_bearing.probability
+            probability = np.asarray(probability) / np.sum(probability)
             obj_class = range_bearing.obj_class
 
             ux = self.pos[0]
@@ -157,19 +157,19 @@ class SemanticSLAM():
                 object_pos = np.asarray([mx, my])
                 object_pos_var = np.diag([x_var, y_var])
 
-                # class_probs = []
-                # for i in range(self.numberOfClasses):
-                #     alpha = np.ones(self.numberOfClasses)
-                #     alpha[i] = self.alpha_constant
-                #     class_probs.append(dirichlet.pdf(probability, alpha))
+                class_probs = []
+                for i in range(self.numberOfClasses):
+                    alpha = np.ones(self.numberOfClasses)
+                    alpha[i] = self.alpha_constant
+                    class_probs.append(dirichlet.pdf(probability, alpha))
 
-                # class_probs = np.asarray(class_probs)
-                # class_probs = np.asarray(class_probs) / np.sum(class_probs)
+                class_probs = np.asarray(class_probs)
+                class_probs = np.asarray(class_probs) / np.sum(class_probs)
 
-                # self.objects[self.max_obj_id] = MapObject(obj_id, object_pos,
-                #                                          object_pos_var, class_probs, obj_class)
                 self.objects[self.max_obj_id] = MapObject(obj_id, object_pos,
-                                                         object_pos_var, 1, obj_class)
+                                                         object_pos_var, class_probs, obj_class)
+                # self.objects[self.max_obj_id] = MapObject(obj_id, object_pos,
+                #                                          object_pos_var, 1, obj_class)
                 
                 if (not np.isfinite(object_pos_var).all()):
                     print('encounter inf/NAN in initialization')
@@ -183,7 +183,7 @@ class SemanticSLAM():
 
             else:
                 obj_pos = matched_obj.pos
-                # class_probs = matched_obj.class_probs
+                class_probs = matched_obj.class_probs
                 obj_x = obj_pos[0]
                 obj_y = obj_pos[1]
 
@@ -243,13 +243,13 @@ class SemanticSLAM():
                 for i in range(self.numberOfClasses):
                     alpha = np.ones(self.numberOfClasses)
                     alpha[i] = self.alpha_constant
-                #     class_probs[i] = dirichlet.pdf(probability, alpha) * \
-                #                      class_probs[i]
+                    class_probs[i] = dirichlet.pdf(probability, alpha) * \
+                                     class_probs[i]
 
-                # class_probs = np.asarray(class_probs)
-                # class_probs = np.asarray(class_probs) / np.sum(class_probs)
-                #class_probs = (class_probs + 0.004)/(class_probs + 0.004*len(self.classes))
-                # matched_obj.update(updated_pos, updated_pos_var, class_probs, self.classes[np.argmax(class_probs)])
+                class_probs = np.asarray(class_probs)
+                class_probs = np.asarray(class_probs) / np.sum(class_probs)
+                class_probs = (class_probs + 0.004)/(class_probs + 0.004*len(self.classes))
+                matched_obj.update(updated_pos, updated_pos_var, class_probs, self.classes[np.argmax(class_probs)])
 
         semantic_map_msg = Object2DArray()
         semantic_map_msg.header = msg.header
@@ -265,8 +265,8 @@ class SemanticSLAM():
 
             obj_msg.covariance = obj.pos_var.flatten()
             obj_msg.id = obj_id
-            # obj_msg.probability = obj.class_probs.tolist()
-            obj_msg.probability = [1]
+            obj_msg.probability = obj.class_probs.tolist()
+            # obj_msg.probability = [1]
 
             # print(obj.obj_class, " ", obj_id, " ", obj.pos)
             objects.append(obj_msg)
@@ -281,8 +281,8 @@ class SemanticSLAM():
         file1.write(str(self.t) + '\n')
         for obj_id in self.objects:
             obj = self.objects[obj_id]
-            # average_entropy += entropy(obj.class_probs, base=2)
-            average_entropy += entropy([1.0], base=2)
+            average_entropy += entropy(obj.class_probs, base=2)
+            # average_entropy += entropy([1.0], base=2)
 
             w, v = eig(obj.pos_var)
 
@@ -294,8 +294,8 @@ class SemanticSLAM():
             for conv in obj.pos_var.flatten():
                 line = line + ' ' + str(conv)
 
-            # for prob in obj.class_probs:
-            for prob in [1.0]:
+            for prob in obj.class_probs:
+            # for prob in [1.0]:
                 line = line + ' ' + str(prob)
 
             file1.write(line+' ' + obj.obj_class + '\n')

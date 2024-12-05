@@ -2,7 +2,6 @@
 import copy
 import os
 from typing import Dict, Final, List, Tuple, Union
-from warnings import deprecated  # type: ignore
 
 import cv2
 import numpy as np
@@ -249,6 +248,11 @@ class YoloDetect:
         range_bearing.id = int(detection.id.item())  # int
         range_bearing.obj_class = classes[int(detection.cls.item())]
         # range_bearing.probability = detection.Class_distribution
+        # Create an array of all one's, except for the known probability
+        # Hacky way to interface with Zhentian's code without actually getting Class_distributions
+        _alpha: NDArray[np.float64] = np.ones(len(classes.keys()))
+        _alpha[range_bearing.id] = detection.conf
+        range_bearing.probability = _alpha
         return range_bearing
 
     def calculate_bearing_and_obj_range(
@@ -257,7 +261,9 @@ class YoloDetect:
         depth_mask = depth_array[y1:y2, x1:x2]
         obj_coords = np.nonzero(depth_mask)
 
-        z: np.floating = np.nanmean(obj_coords)
+        # Divide by 20 as a scale. It is wayyy off in the distance otherwise
+        # BUG: This probably means that it is wrong somewhere in the calculations...
+        z: np.floating = np.nanmean(obj_coords) / 20.0
         obj_coords = np.asarray(obj_coords).T
 
         obj_coords = obj_coords + np.asarray([y1, x1])
@@ -271,11 +277,11 @@ class YoloDetect:
         cy: float = self.camera_info.K[5]  # Principal point y-coordinate
 
         x = (ux - cx) * z / fx
-        y = (uy - cy) * z / fx
+        y = (uy - cy) * z / fy
 
-        x_mean: np.floating = np.mean(x)
-        y_mean: np.floating = np.mean(y)
-        z_mean: np.floating = np.mean(z)
+        x_mean: np.floating = np.nanmean(x)
+        y_mean: np.floating = np.nanmean(y)
+        z_mean: np.floating = np.nanmean(z)
 
         Oc: list[np.floating] = [x_mean, y_mean, z_mean]
 
@@ -284,7 +290,7 @@ class YoloDetect:
         bearing: Tensor = np.arctan2(-Oc[0], Oc[2])
         return obj_range, bearing
 
-    @deprecated
+    @np.deprecate_with_doc(msg="Unused")
     def image_coordinates_to_camera_frame(
         self,
         top_left_corner: Tuple[int, int],
@@ -324,7 +330,7 @@ class YoloDetect:
         point.point.z = z_camera
         return point
 
-    @deprecated
+    @np.deprecate_with_doc(msg="Unused")
     def camera_to_world_coordinates(
         self, camera_coordinates: PointStamped
     ) -> PointStamped:
