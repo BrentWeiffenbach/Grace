@@ -28,7 +28,7 @@ class YoloDetect:
     def __init__(self) -> None:
         rospy.init_node(name="yolo_detect")
 
-        self.isUpdated: bool = True
+        self.isUpdated: bool = False
         """A flag representing if the detection has been updated."""
         self.latch: bool = False
         """A flag that prohibits new callback information from being recieved while True"""
@@ -148,6 +148,9 @@ class YoloDetect:
             x1, y1, x2, y2 = map(int, detection.xyxy[0])
             det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
             det_annotated = cv2.circle(det_annotated, (x2, y2), 5, (0, 255, 0), -1)
+            # Prevent taking the mean of an empty slice
+            if np.all(np.isnan(depth_array[y1:y2, x1:x2])):
+                continue
             obj_range: float
             bearing: Tensor
             obj_range, bearing = self.calculate_bearing_and_obj_range(
@@ -221,7 +224,6 @@ class YoloDetect:
         x: NDArray[np.float64] = (ux - cx) * z / fx
         y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        # BUG: RuntimeWarning: Mean of empty slice
         x_mean: np.floating = np.nanmean(x) # float64
         y_mean: np.floating = np.nanmean(y) # float64
         z_mean: np.floating = np.nanmean(z) # float32
