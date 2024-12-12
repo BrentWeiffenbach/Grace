@@ -52,7 +52,7 @@
 
   <!-- remap /joint_states -->
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher"/>
-  <remap from="/joint_states" to="/grace_arm/joint_states" />
+  <remap from="/joint_states" to="/grace/joint_states" />
 
   
   <!-- Run the main MoveIt! executable without trajectory execution (we do not have controllers configured by default) -->
