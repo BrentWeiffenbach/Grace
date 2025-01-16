@@ -63,7 +63,11 @@ grace:
       goal_tolerance:
         joint_7: 0.01
         joint_8: 0.01
-
+  base_controller:
+    type: position_controllers/JointTrajectoryController
+    joints:
+      - wheel_left_joint
+  
   # Publish all joint states
   # Creates the /joint_states topic necessary in ROS
   joint_state_controller:

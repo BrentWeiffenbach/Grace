@@ -175,3 +175,29 @@ gripper_group:
     - SPARStwo
   projection_evaluator: joints(joint_7,joint_8)
   longest_valid_segment_fraction: 0.005
+base_group:
+  default_planner_config: RRT
+  planner_configs:
+    - SBL
+    - EST
+    - LBKPIECE
+    - BKPIECE
+    - KPIECE
+    - RRT
+    - RRTConnect
+    - RRTstar
+    - TRRT
+    - PRM
+    - PRMstar
+    - FMT
+    - BFMT
+    - PDST
+    - STRIDE
+    - BiTRRT
+    - LBTRRT
+    - BiEST
+    - ProjEST
+    - LazyPRM
+    - LazyPRMstar
+    - SPARS
+    - SPARStwo
