@@ -1,0 +1,12 @@
+1. Reed-shepp curve car "Planning Algorithims" LaValle Chapter 15
+Build moveit from source
+modify moveit_core/robot_model/include/moveit/robot_model/planar_joint_model.h
+look at moveit2 version of planar joint robot_model
+
+2. pure pursuit lookahead actuation
+
+3. make a controller to convert between nav 2 and ompls trajectory path
+
+could do both
+
+do controller first turn drive turn

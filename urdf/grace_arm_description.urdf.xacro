@@ -2,7 +2,7 @@
 <!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="grace_arm">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="grace">
     <xacro:macro name="grace_arm" params="parent">
 
     <link name="arm_link">
@@ -371,7 +371,7 @@
     </transmission>
     <gazebo>
         <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
-            <robotNamespace>/grace_arm</robotNamespace>
+            <robotNamespace>/grace</robotNamespace>
         </plugin>
     </gazebo>
 </xacro:macro>

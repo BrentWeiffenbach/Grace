@@ -74,6 +74,7 @@
     <child link="wheel_left_link"/>
     <origin rpy="-1.57079632679 0 0" xyz="0.00 0.115 0.0250"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="0.1"/>
   </joint>
   <link name="wheel_left_link">
     <visual>
@@ -99,6 +100,7 @@
     <child link="wheel_right_link"/>
     <origin rpy="-1.57079632679 0 0" xyz="0.00 -0.115 0.0250"/>
     <axis xyz="0 0 1"/>
+    <dynamics damping="0.1"/>
   </joint>
   <link name="wheel_right_link">
     <visual>
@@ -123,10 +125,10 @@
     <transmission name="trans_wheel_left_joint">
     <type>transmission_interface/SimpleTransmission</type>
     <joint name="wheel_left_joint">
-      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
     </joint>
     <actuator name="wheel_left_motor">
-      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
       <mechanicalReduction>1</mechanicalReduction>
     </actuator>
   </transmission>
@@ -134,10 +136,10 @@
   <transmission name="trans_wheel_right_joint">
     <type>transmission_interface/SimpleTransmission</type>
     <joint name="wheel_right_joint">
-      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
     </joint>
     <actuator name="wheel_right_motor">
-      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
       <mechanicalReduction>1</mechanicalReduction>
     </actuator>
   </transmission>
@@ -1116,7 +1118,7 @@
     <parent link="link_3"/>
     <child link="link_4"/>
     <axis xyz="1 0 0"/>
-    <limit effort="0.26" lower="-6.28" upper="6.28" velocity="3"/>
+    <limit effort="0.26" lower="-3.14" upper="3.14" velocity="3"/>
   </joint>
   <link name="link_5">
     <inertial>
