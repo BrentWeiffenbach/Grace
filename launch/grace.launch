@@ -1,10 +1,10 @@
 <launch>
-    <arg name="sim" default="true"/>
-    <arg name="gmapping" default="false"/>
-    <arg name="teleop" default="false"/>
+    <arg name="sim" default="true" doc="set flags to indicate this turtle is run in simulation mode." />
+    <arg name="gmapping" default="false" />
+    <arg name="teleop" default="false" doc="set flags to indicate if the turtle should be run in teleoperation mode." />
     <arg name="explore" default="false"/>
     <arg name="amcl" default="false"/>
-    <arg name="yolo" default="false"/>
+    <arg name="yolo" default="false" doc="set flags to indicate that YOLO should run." />
     <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
 
     <group if="$(arg sim)">
@@ -34,7 +34,7 @@
     <!-- Launch YOLO -->
     <group if="$(arg yolo)">
         <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen" />
-        <node name="semantic_slam" pkg="grace" type="semantic_slam.py" output="screen" />
+        <node name="semantic_slam" pkg="grace" type="semantic_slam_marker.py" output="screen" />
         <!-- <node name="add_marker" pkg="grace" type="add_marker.py" output="screen" /> -->
     </group>
 

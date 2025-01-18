@@ -12,6 +12,7 @@ from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
 from object_ros_msgs.msg import RangeBearing, RangeBearings
 from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
+import ultralytics_patch
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
 from ultralytics import YOLO
@@ -27,6 +28,7 @@ DETECTION_INTERVAL: Final[Union[int, float]] = 0.25
 class YoloDetect:
     def __init__(self) -> None:
         rospy.init_node(name="yolo_detect")
+        # ultralytics_patch.patch()
 
         self.isUpdated: bool = False
         """A flag representing if the detection has been updated."""
@@ -132,8 +134,35 @@ class YoloDetect:
 
         CONFIDENCE_SCORE: Final[float] = 0.5
         SHOW_DETECTION_BOXES: Final[bool] = False
+        TRACKED_CLASSES: Final[list[int]] = [
+            32,
+            41,
+            56,
+            57,
+            58,
+            60,
+            61,
+            62,
+            63,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+        ]
         result: List[Results] = self.model.track(
-            image_array, conf=CONFIDENCE_SCORE
+            image_array, conf=CONFIDENCE_SCORE,
         )  # get the results
         det_annotated: cv2.typing.MatLike = result[0].plot(
             show=SHOW_DETECTION_BOXES
@@ -143,6 +172,8 @@ class YoloDetect:
         range_bearings: list = []
         classes: dict[int, str] = result[0].names
         # Find the depths of each detection and display them
+        # print(result[0].summary())
+        # print(result[0].boxes)
         for detection in result[0].boxes:
             detection: Boxes  # Add typing for detection
             x1, y1, x2, y2 = map(int, detection.xyxy[0])
@@ -189,10 +220,12 @@ class YoloDetect:
         Returns:
             RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
         """
+        print(detection)
+        # TODO: Currently, range_bearing.id is actually the obj_class. I don't think it is actually getting the tracked id's...
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
         range_bearing.bearing = float(bearing.item())  # float
-        range_bearing.id = int(detection.id.item())  # int
+        range_bearing.id = int(detection.track_id.item())  # int
         range_bearing.obj_class = classes[int(detection.cls.item())]
         # range_bearing.probability = detection.Class_distribution
         # Create an array of all one's, except for the known probability
@@ -224,9 +257,9 @@ class YoloDetect:
         x: NDArray[np.float64] = (ux - cx) * z / fx
         y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        x_mean: np.floating = np.nanmean(x) # float64
-        y_mean: np.floating = np.nanmean(y) # float64
-        z_mean: np.floating = np.nanmean(z) # float32
+        x_mean: np.floating = np.nanmean(x)  # float64
+        y_mean: np.floating = np.nanmean(y)  # float64
+        z_mean: np.floating = np.nanmean(z)  # float32
 
         Oc: list[np.floating] = [x_mean, y_mean, z_mean]
 

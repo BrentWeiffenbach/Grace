@@ -9,7 +9,6 @@ def patch() -> None:
     ```from .patches import patch
     patch()```
     """
-    from ultralytics.utils import ops
     import ultralytics.engine.results
     import ultralytics.utils.ops
     def init(self, boxes, orig_shape) -> None:
@@ -24,29 +23,38 @@ def patch() -> None:
 
         Returns:
             (None)
+
+        Attributes:
+            data (torch.Tensor): The raw tensor containing detection boxes and their associated data.
+            orig_shape (Tuple[int, int]): The original image size, used for normalization.
+            is_track (bool): Indicates whether tracking IDs are included in the box data.
+
         """
 
         if boxes.ndim == 1:
             boxes = boxes[None, :]
         n = boxes.shape[-1]
-        super(ultralytics.engine.results.Boxes, self).__init__(boxes, orig_shape)
+        # super(ultralytics.engine.results.Boxes, self).__init__(boxes, orig_shape)
+        ultralytics.engine.results.BaseTensor.__init__(self, boxes, orig_shape)
         self.orig_shape = orig_shape
         self.is_track = False
         self.num_classes = 0
-
+        # print(boxes)
         if n == 6:
             self.format = 'xyxy_conf_cls'
         elif n == 7:
             self.format = 'xyxy_conf_cls_track'
             self.is_track = True
-            # self.track_id = boxes[:, -3]
+            self.num_classes = n - 7
+            self.track_id = boxes[:, 4]
         else:
             self.format = 'xyxy_conf_cls_classconf'
             self.num_classes = n - 6
 
     ultralytics.engine.results.Boxes.__init__ = init
 
-    from .ops import xywh2xyxy, nms_rotated
+    # from .ops import xywh2xyxy, nms_rotated
+    from ultralytics.utils.ops import xywh2xyxy, nms_rotated
     from ultralytics.utils import LOGGER
     import torch
     import time
@@ -72,7 +80,27 @@ def patch() -> None:
         This version returns confidences for all classes.
 
         Args:
-            (... same as before ...)
+            prediction (torch.Tensor): A tensor of shape (batch_size, num_classes + 4 + num_masks, num_boxes)
+                containing the predicted boxes, classes, and masks. The tensor should be in the format
+                output by a model, such as YOLO.
+            conf_thres (float): The confidence threshold below which boxes will be filtered out.
+                Valid values are between 0.0 and 1.0.
+            iou_thres (float): The IoU threshold below which boxes will be filtered out during NMS.
+                Valid values are between 0.0 and 1.0.
+            classes (List[int]): A list of class indices to consider. If None, all classes will be considered.
+            agnostic (bool): If True, the model is agnostic to the number of classes, and all
+                classes will be considered as one.
+            multi_label (bool): If True, each box may have multiple labels.
+            labels (List[List[Union[int, float, torch.Tensor]]]): A list of lists, where each inner
+                list contains the apriori labels for a given image. The list should be in the format
+                output by a dataloader, with each label being a tuple of (class_index, x1, y1, x2, y2).
+            max_det (int): The maximum number of boxes to keep after NMS.
+            nc (int, optional): The number of classes output by the model. Any indices after this will be considered masks.
+            max_time_img (float): The maximum time (seconds) for processing one image.
+            max_nms (int): The maximum number of boxes into torchvision.ops.nms().
+            max_wh (int): The maximum box width and height in pixels.
+            in_place (bool): If True, the input prediction tensor will be modified in place.
+            rotated (bool): If Oriented Bounding Boxes (OBB) are being passed for NMS.
 
         Returns:
             (List[torch.Tensor]): A list of length batch_size, where each element is a tensor of
@@ -159,4 +187,42 @@ def patch() -> None:
 
         return output
 
-    ops.non_max_suppression = non_max_suppression
+    ultralytics.utils.ops.non_max_suppression = non_max_suppression
+
+    @property
+    def cls(self):
+        """
+        Returns the class ID tensor representing category predictions for each bounding box.
+
+        Returns:
+            (torch.Tensor | numpy.ndarray): A tensor or numpy array containing the class IDs for each detection box.
+                The shape is (N,), where N is the number of boxes.
+
+        Examples:
+            >>> results = model("image.jpg")
+            >>> boxes = results[0].boxes
+            >>> class_ids = boxes.cls
+            >>> print(class_ids)  # tensor([0., 2., 1.])
+        """
+        return self.data[:, 6 if self.is_track else 5]
+    
+    setattr(ultralytics.engine.results.Boxes, 'cls', cls)
+    
+    @property
+    def conf(self):
+        """
+        Returns the confidence scores for each detection box.
+
+        Returns:
+            (torch.Tensor | numpy.ndarray): A 1D tensor or array containing confidence scores for each detection,
+                with shape (N,) where N is the number of detections.
+
+        Examples:
+            >>> boxes = Boxes(torch.tensor([[10, 20, 30, 40, 0.9, 0]]), orig_shape=(100, 100))
+            >>> conf_scores = boxes.conf
+            >>> print(conf_scores)
+            tensor([0.9000])
+        """
+        return self.data[:, 5 if self.is_track else 4]
+    
+    setattr(ultralytics.engine.results.Boxes, 'conf', conf)
