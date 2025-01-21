@@ -7,9 +7,5 @@
 
   <!-- Load the controllers -->
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
-    args="--namespace=/grace
-    arm_controller
-    gripper_controller
-    joint_state_controller
-    --timeout 60"/>
+    args="--namespace=/grace arm_controller gripper_controller joint_state_controller --timeout 60"/>
 </launch>
