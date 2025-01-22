@@ -31,7 +31,7 @@ fi
 $verbose && echo "Changing shebangs..."
 
 # Declare files that use relative shebangs here:
-python_files=("yolo_detect.py" "add_marker.py" "ultralytics_patch.py")
+python_files=("yolo_detect.py" "add_marker.py" "ultralytics_patch.py" "grace_node.py")
 
 for python_file in "${python_files[@]}"; do
     full_path="scripts/$python_file"

@@ -162,7 +162,7 @@ class YoloDetect:
             79,
         ]
         result: List[Results] = self.model.track(
-            image_array, conf=CONFIDENCE_SCORE,
+            image_array, conf=CONFIDENCE_SCORE, persist=True
         )  # get the results
         det_annotated: cv2.typing.MatLike = result[0].plot(
             show=SHOW_DETECTION_BOXES
@@ -188,7 +188,7 @@ class YoloDetect:
                 depth_array, x1, y1, x2, y2
             )
 
-            if np.isfinite(obj_range) and np.isfinite(bearing):
+            if np.isfinite(obj_range) and np.isfinite(bearing) and detection.id is not None:
                 range_bearing: RangeBearing = self.create_range_bearing(
                     classes, detection, obj_range, bearing
                 )
@@ -225,7 +225,7 @@ class YoloDetect:
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
         range_bearing.bearing = float(bearing.item())  # float
-        range_bearing.id = int(detection.track_id.item())  # int
+        range_bearing.id = int(detection.id.item())  # int
         range_bearing.obj_class = classes[int(detection.cls.item())]
         # range_bearing.probability = detection.Class_distribution
         # Create an array of all one's, except for the known probability

@@ -50,9 +50,9 @@ class GraceNode:
         self.state_subscriber = rospy.Subscriber(
             "/state", data_class=RobotState, callback=self.state_callback
         )
-        self.goal_subscriber = rospy.Subscriber(
-            "/goal", data_class=RobotGoal, callback=self.goal_callback
-        )
+        # self.goal_subscriber = rospy.Subscriber(
+        #     "/goal", data_class=RobotGoal, callback=self.goal_callback
+        # )
 
         self.state = self._state  # Run the guard function in the setter
         self.state_publisher.publish(self.state)
