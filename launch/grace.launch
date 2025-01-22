@@ -37,4 +37,6 @@
         <!-- Launch keyboard teleoperation -->
         <include file="$(find turtlebot_teleop)/launch/keyboard_teleop.launch"/>
     </group>
+
+    <node name="GraceNode" pkg="grace" type="grace_node.py" output="screen"></node>
 </launch>

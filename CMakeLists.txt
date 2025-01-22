@@ -14,21 +14,21 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
 )
 
-add_message_files(
-  FILES
-  Frontier.msg
-  FrontierList.msg
-)
+# add_message_files(
+#  FILES
+#  Frontier.msg
+#  FrontierList.msg
+#)
 
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  geometry_msgs
-)
+#generate_messages(
+#  DEPENDENCIES
+#  std_msgs
+#  geometry_msgs
+#)
 
-catkin_package(
-  CATKIN_DEPENDS message_runtime std_msgs
-)
+#catkin_package(
+#  CATKIN_DEPENDS message_runtime std_msgs
+#)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -64,11 +64,11 @@ catkin_package(
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
+  add_message_files(
+    FILES
+    RobotState.msg
 #   Message2.msg
-# )
+  )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -85,10 +85,11 @@ catkin_package(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -119,11 +120,14 @@ catkin_package(
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
+#catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES grace
 #  CATKIN_DEPENDS rospy std_msgs
 #  DEPENDS system_lib
+#)
+catkin_package(
+  CATKIN_DEPENDS message_runtime std_msgs
 )
 
 ###########

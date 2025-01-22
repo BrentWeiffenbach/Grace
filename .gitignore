@@ -1,4 +1,11 @@
-
+# ignore virtual enviornment for yolo 
 yolovenv/
-
+# ignore .pt files
 *.pt
+
+!.gitignore
+.vscode
+typings/ultralytics
+__pycache__
+
+out
