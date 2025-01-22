@@ -23,7 +23,6 @@
     
     http://www.ros.org/reps/rep-0119.html
    -->
-  <link name="base_footprint"/>
   <!--
        Base link is set at the bottom of the base mould.
        This is done to be compatible with the way base link
@@ -35,11 +34,6 @@
        axis, set the z-distance from the base_footprint
        to 0.352.
       -->
-  <joint name="base_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0 0 0.0102"/>
-    <parent link="base_footprint"/>
-    <child link="base_link"/>
-  </joint>
   <link name="base_link">
     <visual>
       <geometry>
