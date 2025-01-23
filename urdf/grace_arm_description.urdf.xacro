@@ -286,7 +286,6 @@
         <child link="link_8" />
         <axis xyz="0 -1 0" />
         <limit lower="0" upper="0.02" effort="100" velocity="3" />
-        <mimic joint="joint_7" multiplier="1" offset="0" />
     </joint>
     
 <transmission name="trans_joint_1">
