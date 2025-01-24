@@ -67,7 +67,7 @@ find_package(catkin REQUIRED COMPONENTS
   add_message_files(
     FILES
     RobotState.msg
-#   Message2.msg
+    RobotGoalMsg.msg
   )
 
 ## Generate services in the 'srv' folder

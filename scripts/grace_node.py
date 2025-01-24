@@ -4,7 +4,7 @@
 from typing import List, Union
 
 import rospy
-from grace.msg import RobotState
+from grace.msg import RobotGoalMsg, RobotState
 
 
 # TODO: Change parent_object and child_object to work with YOLO objects only
@@ -103,7 +103,7 @@ This is achieved by getting all the non-callable ints and float constants from t
 
 
 class GraceNode:
-    """The main node for controlling the turtlebot. Is the link between a (as of January 23, 2025) theoretical frontend and the turtlebot. Send a goal to /goal to kickstart the application.
+    """The main node for controlling the turtlebot. Is the link between a (as of January 23, 2025) theoretical frontend and the turtlebot. Send a goal to /grace/goal to kickstart the application.
 
     Attributes:
         state (int): The state of the turtlebot. Must be a valid constant in `RobotState.msg`.
@@ -111,13 +111,15 @@ class GraceNode:
         verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
 
     Publishers:
-        state_publisher (RobotState): Publishes to `/state`. Details the current state of GRACE.
-        goal_publisher (RobotGoal): Publishes to `/goal`. Contains GRACE's parent and child object.
+        state_publisher (RobotState): Publishes to `/grace/state`. Details the current state of GRACE.
+        goal_publisher (RobotGoal): Publishes to `/grace/goal`. Contains GRACE's parent and child object.
 
     Subscribers:
-        state_subscriber (RobotState): Subscribes to `/state`. Used to keep `state` updated.
-        goal_subscriber (RobotGoal): Subscribes to `/goal`. Used to keep `goal` updated.
+        state_subscriber (RobotState): Subscribes to `/grace/state`. Used to keep `state` updated.
+        goal_subscriber (RobotGoal): Subscribes to `/grace/goal`. Used to keep `goal` updated.
     """
+
+    verbose = False
 
     def __init__(self, verbose: bool = False) -> None:
         """Initializes the GraceNode.
@@ -127,31 +129,31 @@ class GraceNode:
         """
         self._state: int
         self._goal: Union[RobotGoal, None]  # TODO: Implement a RobotGoal msg
-        self.verbose: bool = verbose
+        GraceNode.verbose: bool = verbose
 
         # TODO: Add a user-friendly input to change the state and goal.
         self._state = RobotState.WAITING
         self._goal = None
 
         self.state_publisher = rospy.Publisher(
-            name="/state", data_class=RobotState, queue_size=5
+            name="/grace/state", data_class=RobotState, queue_size=5
         )
 
         # BUG: Goal cannot be a class, it has to be a msg.
-        # self.goal_publisher = rospy.Publisher(name="/goal", data_class=RobotGoal)
-        self.state_subscriber = rospy.Subscriber(
-            "/state", data_class=RobotState, callback=self.state_callback
+        self.goal_publisher = rospy.Publisher(
+            name="/grace/goal", data_class=RobotGoalMsg, queue_size=5
         )
-        # self.goal_subscriber = rospy.Subscriber(
-        #     "/goal", data_class=RobotGoal, callback=self.goal_callback
-        # )
+        self.state_subscriber = rospy.Subscriber(
+            "/grace/state", data_class=RobotState, callback=self.state_callback
+        )
+        self.goal_subscriber = rospy.Subscriber(
+            "/grace/goal", data_class=RobotGoalMsg, callback=self.goal_callback
+        )
 
         self.state = self._state  # Run the guard function in the setter
         self.state_publisher.publish(self.state)
 
-        # self.goal = self._goal
-        # self.goal_publisher.publish(self.goal)
-        if self.verbose:
+        if GraceNode.verbose:
             if self.goal:
                 rospy.loginfo(f"GRACE is in state {self.state}. {self.goal}.")
             else:
@@ -169,14 +171,30 @@ class GraceNode:
     def state_callback(self, msg: RobotState) -> None:
         _temp_state: int = self.state  # Used for verbose logging
         self.state = msg.state
-        if self.verbose:
+        if GraceNode.verbose:
             rospy.loginfo(f"Changed state from {_temp_state} to {msg.state}")
 
-    def goal_callback(self, msg: RobotGoal) -> None:
+    def goal_callback(self, msg: RobotGoalMsg) -> None:
         _temp_goal: Union[RobotGoal, None] = self.goal
-        self.goal = msg
-        if self.verbose:
+        _new_goal = RobotGoal(
+            parent_object=msg.parent_object, child_object=msg.child_object
+        )
+        self.goal = _new_goal
+        if GraceNode.verbose:
             rospy.loginfo(f"Changed state from {_temp_goal} to {msg}")
+
+    def publish_goal(self) -> None:
+        """Publishes GraceNode's goal using `goal_publisher`"""
+        if self.goal is None:
+            rospy.logerr("Attempted to publish an empty goal in GraceNode. Ignoring...")
+            return
+
+        self.goal_publisher.publish(
+            self.goal.parent_object,
+            self.goal.child_object,
+        )
+        if GraceNode.verbose:
+            rospy.loginfo(f"Successfully published goal! {self.goal}")
 
     @property
     def state(self) -> int:
@@ -213,7 +231,8 @@ if __name__ == "__main__":
     try:
         rospy.init_node(name="GraceNode")  # type: ignore
         grace = GraceNode(verbose=True)
-        grace.run()
         grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
+        grace.publish_goal()
+        grace.run()
     except rospy.ROSInterruptException:
         rospy.loginfo("GraceNode terminated.")  # type: ignore

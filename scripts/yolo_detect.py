@@ -302,5 +302,5 @@ class YoloDetect:
 
 if __name__ == "__main__":
     rospy.init_node(name="yolo_detect")
-    yolo_detect = YoloDetect(verbose=True)
+    yolo_detect = YoloDetect()
     yolo_detect.run()
