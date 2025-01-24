@@ -23,7 +23,11 @@ class MapObject:
     def __init__(self, object_id, pos, pos_var, class_probs, obj_class):
         # type: (int, np.ndarray, np.ndarray, np.ndarray, str) -> None
         self.id = object_id  # type: int
+        """The MapObject's id.
+        """
         self.pos = pos
+        """A 2D Position with [x, y]
+        """
         self.pos_var = pos_var
         self.class_probs = class_probs
         self.obj_class = obj_class  # type: str
@@ -316,8 +320,8 @@ class SemanticSLAM:
                 # BUG: self.classes[np.argmax(class_probs)] is not actually returning the correct value,
                 # and defaulting to 0 (person)
                 # if self.classes[np.argmax(class_probs)] == "person":
-                    # continue
-                    # print(class_probs)
+                # continue
+                # print(class_probs)
                 matched_obj.update(
                     updated_pos,
                     updated_pos_var,
@@ -457,20 +461,19 @@ class SemanticSLAM:
             #     continue
 
             # Check if the object already exists
-            existing_marker = None # type: Marker | None
+            existing_marker = None  # type: Marker | None
             for _marker in self.marker_array.markers:
                 if _marker.id == obj.id and _marker.ns == obj.obj_class:
                     existing_marker = _marker
                     break
-            
+
             if existing_marker:
                 self.edit_marker(existing_marker, obj)
             else:
-                marker = self.create_new_marker(to_frame_rel, obj) # type: Marker
+                marker = self.create_new_marker(to_frame_rel, obj)  # type: Marker
                 self.marker_array.markers.append(marker)
 
         self.marker_pub.publish(self.marker_array)
-
 
     def edit_marker(self, marker, obj):
         # type: (Marker, MapObject) -> Marker
@@ -479,18 +482,18 @@ class SemanticSLAM:
         Args:
             marker (Marker): The marker to edit
             obj (MapObject): The details to transform Marker into
-        
+
         Returns:
             Marker: The changed Marker object
         """
         marker.header.stamp = rospy.Time.now()
         marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text =  "{} [{}]".format(obj.obj_class, obj.id)
+        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
 
         return marker
-    
+
     def create_new_marker(self, to_frame_rel, obj):
-        # type: (str, MapObject) -> Marker 
+        # type: (str, MapObject) -> Marker
         """Creates a marker in `to_frame_rel` frame with `obj`'s attributes.
 
         Args:
@@ -509,7 +512,7 @@ class SemanticSLAM:
         marker.type = Marker.TEXT_VIEW_FACING
         marker.action = Marker.ADD
         marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text =  "{} [{}]".format(obj.obj_class, obj.id)
+        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
 
         marker.scale.x = 0.2
         marker.scale.y = 0.2

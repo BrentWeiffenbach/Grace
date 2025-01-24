@@ -107,7 +107,7 @@ class GraceNode:
 
     Attributes:
         state (int): The state of the turtlebot. Must be a valid constant in `RobotState.msg`.
-        goal (RobotGoal): The goal of the robot.
+        goal (RobotGoal | None): The goal of the robot. Can be None.
         verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
 
     Publishers:
@@ -126,12 +126,12 @@ class GraceNode:
             verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
         """
         self._state: int
-        self._goal: RobotGoal  # TODO: Implement a RobotGoal msg
+        self._goal: Union[RobotGoal, None]  # TODO: Implement a RobotGoal msg
         self.verbose: bool = verbose
 
         # TODO: Add a user-friendly input to change the state and goal.
         self._state = RobotState.WAITING
-        self._goal = RobotGoal(parent_object="dining table", child_object="cup")
+        self._goal = None
 
         self.state_publisher = rospy.Publisher(
             name="/state", data_class=RobotState, queue_size=5
@@ -149,10 +149,13 @@ class GraceNode:
         self.state = self._state  # Run the guard function in the setter
         self.state_publisher.publish(self.state)
 
-        self.goal = self._goal
+        # self.goal = self._goal
         # self.goal_publisher.publish(self.goal)
         if self.verbose:
-            rospy.loginfo(f"GRACE is in state {self.state}. {self.goal}.")
+            if self.goal:
+                rospy.loginfo(f"GRACE is in state {self.state}. {self.goal}.")
+            else:
+                rospy.loginfo(f"GRACE is in state {self.state} with no current goal.")
 
     def __call__(self) -> None:
         self.run()
@@ -170,7 +173,7 @@ class GraceNode:
             rospy.loginfo(f"Changed state from {_temp_state} to {msg.state}")
 
     def goal_callback(self, msg: RobotGoal) -> None:
-        _temp_goal: RobotGoal = self.goal
+        _temp_goal: Union[RobotGoal, None] = self.goal
         self.goal = msg
         if self.verbose:
             rospy.loginfo(f"Changed state from {_temp_goal} to {msg}")
@@ -193,7 +196,7 @@ class GraceNode:
         self._state = new_state
 
     @property
-    def goal(self) -> RobotGoal:
+    def goal(self) -> Union[RobotGoal, None]:
         """The goal of the turtlebot. Contains a parent_object and a child_object. See `RobotGoal`'s documentation for details.
 
         Returns:
@@ -211,5 +214,6 @@ if __name__ == "__main__":
         rospy.init_node(name="GraceNode")  # type: ignore
         grace = GraceNode(verbose=True)
         grace.run()
+        grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
     except rospy.ROSInterruptException:
         rospy.loginfo("GraceNode terminated.")  # type: ignore
