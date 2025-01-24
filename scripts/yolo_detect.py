@@ -8,11 +8,11 @@ import numpy as np
 import requests
 import ros_numpy
 import rospy
+import ultralytics_patch
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
 from object_ros_msgs.msg import RangeBearing, RangeBearings
 from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
-import ultralytics_patch
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
 from ultralytics import YOLO
@@ -25,10 +25,42 @@ DETECTION_INTERVAL: Final[Union[int, float]] = 0.25
 """
 
 
+def download_model(model_name: str) -> str:
+    """Checks if the model provided is downloaded, and returns its path. Downloads the YOLO model with the model name if it does not exist.
+
+    Args:
+        model_name (str): The name of the YOLO model to download. (e.g. `yolo11s.pt`)
+
+    Returns:
+        str: The path of the existing or downloaded model.
+    """
+    MODEL_PATH: Final[str] = os.path.join(os.path.dirname(__file__), model_name)
+    if not os.path.isfile(path=MODEL_PATH):
+        print(f"{MODEL_PATH} does not exist. Downloading...")
+        download_url: str = f"https://github.com/ultralytics/assets/releases/download/v8.3.0/{model_name}"
+
+        response: requests.Response = requests.get(url=download_url)
+
+        if response.status_code == 200:
+            with open(file=MODEL_PATH, mode="wb") as file:
+                file.write(response.content)
+            print(f"Downloaded {MODEL_PATH}")
+        else:
+            print(f"Failed to download {MODEL_PATH}")
+    return MODEL_PATH
+
+
 class YoloDetect:
-    def __init__(self) -> None:
-        rospy.init_node(name="yolo_detect")
+    verbose = False
+
+    def __init__(self, verbose: bool = False) -> None:
+        """Initialzier for YoloDetect.
+
+        Args:
+            verbose (bool, optional): Whether verbose output should be enabled. Defaults to false.
+        """
         # ultralytics_patch.patch()
+        YoloDetect.verbose: bool = verbose
 
         self.isUpdated: bool = False
         """A flag representing if the detection has been updated."""
@@ -61,21 +93,9 @@ class YoloDetect:
             callback=self.depth_image_callback,
         )
 
-        MODEL_NAME: Final = "yolo11s.pt"
         # Download the YOLO model to the grace folder
-        MODEL_PATH: Final[str] = os.path.join(os.path.dirname(__file__), MODEL_NAME)
-        if not os.path.isfile(path=MODEL_PATH):
-            print(f"{MODEL_PATH} does not exist. Downloading...")
-            download_url = f"https://github.com/ultralytics/assets/releases/download/v8.3.0/{MODEL_NAME}"
-
-            response: requests.Response = requests.get(url=download_url)
-
-            if response.status_code == 200:
-                with open(file=MODEL_PATH, mode="wb") as file:
-                    file.write(response.content)
-                print(f"Downloaded {MODEL_PATH}")
-            else:
-                print(f"Failed to download {MODEL_PATH}")
+        MODEL_NAME: Final = "yolo11s.pt"
+        MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model
         self.model: YOLO = YOLO(model=MODEL_PATH)
@@ -93,7 +113,9 @@ class YoloDetect:
             period=rospy.Duration(secs=DETECTION_INTERVAL),  # type: ignore
             callback=self.detect_objects,
         )
-        # Could do what Zhentian did and use an ApproximateTimeSynchronizer as the callback instead of using the timer to call detect_objects
+
+        if YoloDetect.verbose:
+            rospy.loginfo("YoloDetect successfully initialized.")
 
     def depth_image_callback(self, img: Image) -> None:
         if not self.latch:
@@ -188,7 +210,11 @@ class YoloDetect:
                 depth_array, x1, y1, x2, y2
             )
 
-            if np.isfinite(obj_range) and np.isfinite(bearing) and detection.id is not None:
+            if (
+                np.isfinite(obj_range)
+                and np.isfinite(bearing)
+                and detection.id is not None
+            ):
                 range_bearing: RangeBearing = self.create_range_bearing(
                     classes, detection, obj_range, bearing
                 )
@@ -220,7 +246,8 @@ class YoloDetect:
         Returns:
             RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
         """
-        print(detection)
+        if YoloDetect.verbose:
+            print(detection)
         # TODO: Currently, range_bearing.id is actually the obj_class. I don't think it is actually getting the tracked id's...
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
@@ -274,5 +301,6 @@ class YoloDetect:
 
 
 if __name__ == "__main__":
-    yolo_detect = YoloDetect()
+    rospy.init_node(name="yolo_detect")
+    yolo_detect = YoloDetect(verbose=True)
     yolo_detect.run()

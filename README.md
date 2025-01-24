@@ -1,4 +1,7 @@
+# Grace
+
 Key Launch Files:
+
 * amcl.launch launches an amcl demonstration using a map_file arg, default is a presaved room map from sim
 * explore.launch UNDERCONSTRUCTION WILL BE FOR FRONTIER NAVIGATION
 * gmapping.launch a recreation of the gmapping launch file from the move_base navigation stack with sim args
@@ -6,8 +9,7 @@ Key Launch Files:
 
 Everything so far has been built from learn.turtlebot.com and [turtlebot_navigation](http://wiki.ros.org/turtlebot_navigation/Tutorials/Setup%20the%20Navigation%20Stack%20for%20TurtleBot)
 
-To get the sim world used in testing clone: https://github.com/aws-robotics/aws-robomaker-small-house-world
-
+To get the sim world used in testing clone: <https://github.com/aws-robotics/aws-robomaker-small-house-world>
 
 TODO:
 Make a requirements.txt
@@ -32,7 +34,7 @@ implementation onto navigation stack (move_base and amcl)
 9. `python3.8 -m pip install -r requirements.txt` to install the requirements.
     * If installing the requirements fails, try running `pip install --upgrade pip` and trying again.
 10. Change the shebang in [yolo_detect.py](scripts/yolo_detect.py) to be the path to **your** [yolovenv/bin/python](yolovenv/bin/python)
-    * This is within the (gitignore)[.gitignore], so clicking the link above within GitHub will not work.
+    * This is within the [gitignore](.gitignore), so clicking the link above within GitHub will not work.
 
 ## Usage
 
