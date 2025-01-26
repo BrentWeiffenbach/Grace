@@ -1,7 +1,7 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
-from typing import Dict, List, Union
+from typing import Dict, Final, List, Union
 
 import rospy
 from grace.msg import RobotGoalMsg, RobotState
@@ -124,17 +124,21 @@ class GraceNode:
         state (int): The state of the turtlebot. Must be a valid constant in `RobotState.msg`.
         goal (RobotGoal | None): The goal of the robot. Can be None.
         verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
+        STATE_TOPIC (str, Final): The topic to publish the states to.
+        GOAL_TOPIC (str, Final): The topic to publish the goals to.
 
     Publishers:
-        state_publisher (RobotState): Publishes to `/grace/state`. Details the current state of GRACE.
-        goal_publisher (RobotGoal): Publishes to `/grace/goal`. Contains GRACE's parent and child object.
+        state_publisher (RobotState): Publishes to STATE_TOPIC. Details the current state of GRACE.
+        goal_publisher (RobotGoal): Publishes to GOAL_TOPIC. Contains GRACE's parent and child object.
 
     Subscribers:
-        state_subscriber (RobotState): Subscribes to `/grace/state`. Used to keep `state` updated.
-        goal_subscriber (RobotGoal): Subscribes to `/grace/goal`. Used to keep `goal` updated.
+        state_subscriber (RobotState): Subscribes to STATE_TOPIC. Used to keep `state` updated.
+        goal_subscriber (RobotGoal): Subscribes to GOAL_TOPIC. Used to keep `goal` updated.
     """
 
     verbose = False
+    STATE_TOPIC: Final[str] = "/grace/state"
+    GOAL_TOPIC: Final[str] = "/grace/goal"
 
     def __init__(self, verbose: bool = False) -> None:
         """Initializes the GraceNode.
@@ -143,7 +147,7 @@ class GraceNode:
             verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
         """
         self._state: int
-        self._goal: Union[RobotGoal, None]  # TODO: Implement a RobotGoal msg
+        self._goal: Union[RobotGoal, None]
         GraceNode.verbose: bool = verbose
 
         # TODO: Add a user-friendly input to change the state and goal.
@@ -151,17 +155,17 @@ class GraceNode:
         self._goal = None
 
         self.state_publisher = rospy.Publisher(
-            name="/grace/state", data_class=RobotState, queue_size=5
+            name=GraceNode.STATE_TOPIC, data_class=RobotState, queue_size=5
         )
 
         self.goal_publisher = rospy.Publisher(
-            name="/grace/goal", data_class=RobotGoalMsg, queue_size=5
+            name=GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, queue_size=5
         )
         self.state_subscriber = rospy.Subscriber(
-            "/grace/state", data_class=RobotState, callback=self.state_callback
+            GraceNode.STATE_TOPIC, data_class=RobotState, callback=self.state_callback
         )
         self.goal_subscriber = rospy.Subscriber(
-            "/grace/goal", data_class=RobotGoalMsg, callback=self.goal_callback
+            GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, callback=self.goal_callback
         )
 
         self.state = self._state  # Run the guard function in the setter
@@ -183,23 +187,34 @@ class GraceNode:
 
     def state_callback(self, msg: RobotState) -> None:
         _temp_state: int = self.state  # Used for verbose logging
-        self.state = msg.state
-        if GraceNode.verbose:
-            rospy.loginfo(
-                f"Changed state from {state_to_str(_temp_state)} to {state_to_str(msg.state)}."
-            )
+        try:
+            self.state = msg.state
+            if GraceNode.verbose:
+                rospy.loginfo(
+                    f"Changed state from {state_to_str(_temp_state)} to {state_to_str(msg.state)}."
+                )
+        except ValueError as ve:
+            rospy.logerr(f"Error while changing state: {ve}")
 
     def goal_callback(self, msg: RobotGoalMsg) -> None:
         _temp_goal: Union[RobotGoal, None] = self.goal
-        _new_goal = RobotGoal(
-            parent_object=msg.parent_object, child_object=msg.child_object
-        )
-        self.goal = _new_goal
-        if GraceNode.verbose:
-            rospy.loginfo(f"Changed goal from {_temp_goal} to {msg}.")
+        try:
+            _new_goal = RobotGoal(
+                parent_object=msg.parent_object, child_object=msg.child_object
+            )
+            self.goal = _new_goal
+            if GraceNode.verbose:
+                rospy.loginfo(f"Changed goal from {_temp_goal} to {msg}.")
+        except ValueError as ve:
+            rospy.logerr(f"Error while changing goal: {ve}")
 
     def publish_goal(self) -> None:
-        """Publishes GraceNode's current goal using `goal_publisher`"""
+        """Publishes GraceNode's current goal using `goal_publisher`. If `goal` is None, it will log an error and do nothing.
+
+        Usage:
+            >>> grace.goal = RobotGoal(parent_object="dining table", child_object="cup") # Set the goal
+            >>> grace.publish_goal() # Publish the goal
+        """
         if self.goal is None:
             rospy.logerr("Attempted to publish an empty goal in GraceNode. Ignoring...")
             return
