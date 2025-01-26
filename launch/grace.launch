@@ -6,11 +6,13 @@
     <arg name="amcl" default="false"/>
     <arg name="yolo" default="false" doc="set flags to indicate that YOLO should run." />
     <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
+    <arg name="show_gazebo" default="true" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
 
     <group if="$(arg sim)">
         <!-- Launch the TurtleBot world if simulation-->
         <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
             <arg name="world_file" value="$(find grace)../aws-robomaker-small-house-world/worlds/small_house.world" />
+            <arg name="gui" value="$(arg show_gazebo)" />
         </include>
     </group>
 
