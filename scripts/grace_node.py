@@ -6,6 +6,8 @@ from typing import Dict, Final, List, Union
 import rospy
 from grace.msg import RobotGoalMsg, RobotState
 
+# Note: from slam_controller import SlamController is locally imported below
+
 
 class RobotGoal:
     """A RobotGoal consists of a `parent_object` and a `child_object`. The `parent_object` is the destination to place the `child_object`.
@@ -133,7 +135,6 @@ class GraceNode:
 
     Subscribers:
         state_subscriber (RobotState): Subscribes to STATE_TOPIC. Used to keep `state` updated.
-        goal_subscriber (RobotGoal): Subscribes to GOAL_TOPIC. Used to keep `goal` updated.
     """
 
     verbose = False
@@ -150,7 +151,7 @@ class GraceNode:
         self._goal: Union[RobotGoal, None]
         GraceNode.verbose: bool = verbose
 
-        # TODO: Add a user-friendly input to change the state and goal.
+        # TODO: Add a user-friendly input to change the goal and display the state.
         self._state = RobotState.WAITING
         self._goal = None
 
@@ -164,9 +165,9 @@ class GraceNode:
         self.state_subscriber = rospy.Subscriber(
             GraceNode.STATE_TOPIC, data_class=RobotState, callback=self.state_callback
         )
-        self.goal_subscriber = rospy.Subscriber(
-            GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, callback=self.goal_callback
-        )
+        # self.goal_subscriber = rospy.Subscriber(
+        #     GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, callback=self.goal_callback
+        # )
 
         self.state = self._state  # Run the guard function in the setter
         self.state_publisher.publish(self.state)
@@ -175,6 +176,11 @@ class GraceNode:
             rospy.loginfo(
                 f"GRACE is currently {state_to_str(self.state)}{f'. {self.goal}.' if self.goal else ' with no current goal.'}"
             )
+
+        # Local import to resolve circular importing
+        from slam_controller import SlamController
+
+        self.slam_controller = SlamController(verbose=GraceNode.verbose)
 
     def __call__(self) -> None:
         self.run()
@@ -195,18 +201,6 @@ class GraceNode:
                 )
         except ValueError as ve:
             rospy.logerr(f"Error while changing state: {ve}")
-
-    def goal_callback(self, msg: RobotGoalMsg) -> None:
-        _temp_goal: Union[RobotGoal, None] = self.goal
-        try:
-            _new_goal = RobotGoal(
-                parent_object=msg.parent_object, child_object=msg.child_object
-            )
-            self.goal = _new_goal
-            if GraceNode.verbose:
-                rospy.loginfo(f"Changed goal from {_temp_goal} to {msg}.")
-        except ValueError as ve:
-            rospy.logerr(f"Error while changing goal: {ve}")
 
     def publish_goal(self) -> None:
         """Publishes GraceNode's current goal using `goal_publisher`. If `goal` is None, it will log an error and do nothing.
@@ -258,7 +252,16 @@ class GraceNode:
 
     @goal.setter
     def goal(self, new_goal: RobotGoal) -> None:
+        _temp_goal: Union[RobotGoal, None] = self.goal
         self._goal = new_goal  # new_goal will be validated within RobotGoal's setters
+        if GraceNode.verbose:
+            rospy.loginfo(f"Changed goal from {_temp_goal} to {self._goal}.")
+        self.goal_callback(self._goal)
+
+    def goal_callback(self, goal: RobotGoal) -> None:
+        result: bool = self.slam_controller.explore(goal)
+        if result:
+            rospy.loginfo("Reached goal!")
 
     def shutdown(self) -> None:
         """The callback for when the GraceNode needs to be shutdown through a ROSInterruptExecption."""
@@ -270,6 +273,7 @@ class GraceNode:
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     grace = GraceNode(verbose=True)
+    rospy.on_shutdown(grace.shutdown)
     grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
     grace.publish_goal()
     try:

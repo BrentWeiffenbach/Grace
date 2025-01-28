@@ -184,8 +184,9 @@ class YoloDetect:
             79,
         ]
         result: List[Results] = self.model.track(
-            image_array, conf=CONFIDENCE_SCORE, persist=True
+            source=image_array, conf=CONFIDENCE_SCORE, persist=True
         )  # get the results
+        # Use classes=TRACKED_CLASSES to add a filter onto the results
         det_annotated: cv2.typing.MatLike = result[0].plot(
             show=SHOW_DETECTION_BOXES
         )  # plot the annotations
