@@ -68,6 +68,10 @@ find_package(catkin REQUIRED COMPONENTS
     FILES
     RobotState.msg
     RobotGoalMsg.msg
+    Object2D.msg
+    Object2DArray.msg
+    RangeBearing.msg
+    RangeBearings.msg
   )
 
 ## Generate services in the 'srv' folder

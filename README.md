@@ -39,3 +39,7 @@ implementation onto navigation stack (move_base and amcl)
 ## Usage
 
 To launch the turtlebot navigation in sim, run `roslaunch grace grace.launch gmapping:=true`. Find the other arguments in the [grace](launch/grace.launch) launch file
+
+## Bugs
+
+A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.
