@@ -248,7 +248,7 @@ class YoloDetect:
             RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
         """
         if YoloDetect.verbose:
-            print(detection)
+            rospy.loginfo(detection)
         # TODO: Currently, range_bearing.id is actually the obj_class. I don't think it is actually getting the tracked id's...
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float

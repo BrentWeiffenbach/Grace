@@ -8,7 +8,7 @@ import tf2_ros
 from geometry_msgs.msg import Point, PointStamped, Quaternion
 from nav_msgs.msg import Odometry
 from numpy.linalg import eig, inv, norm
-from object_ros_msgs.msg import Object2D, Object2DArray, RangeBearings
+from grace.msg import Object2D, Object2DArray, RangeBearings
 from scipy.stats import dirichlet, entropy
 from tf import transformations
 from tf2_ros import (
@@ -382,16 +382,28 @@ class SemanticSLAM:
         objects = []  # type: list[Object2D]
         # print('current robot position ', self.pos)
         # print('current angle is ', self.ang)
+        used_ids = set()
         for obj_id in self.objects:
             obj_msg = Object2D()
             obj = self.objects[obj_id]
+
+            # This doesn't really change anything but whatever
+            old_len = len(used_ids)
+            used_ids.add(obj.id)
+            if old_len == len(used_ids):
+                continue
+
+            dist, matched_obj = self.get_closest_object(obj.obj_class, obj.pos[0], obj.pos[1])
+            if dist < 0.5 and matched_obj:
+                self.remove_marker(matched_obj.id)
 
             obj_msg.x = obj.pos[0]
             obj_msg.y = obj.pos[1]
 
             obj_msg.covariance = obj.pos_var.flatten()
-            obj_msg.id = obj_id
+            obj_msg.id = obj.id
             obj_msg.probability = obj.class_probs.tolist()
+            obj_msg.cls = obj.obj_class
 
             # print(obj.obj_class, " ", obj_id, " ", obj.pos)
             objects.append(obj_msg)
@@ -526,6 +538,14 @@ class SemanticSLAM:
         marker.pose.orientation = Quaternion(0, 0, 0, 1)
 
         return marker
+    
+    def remove_marker(self, marker_id):
+        assert self.marker_array.markers is not None
+        _markers = self.marker_array.markers # type: list[Marker]
+        for marker in _markers:
+            if marker.id == marker_id:
+                self.marker_array.markers.remove(marker)
+            
 
     def save_data(self):
         with open(

@@ -259,7 +259,8 @@ class GraceNode:
         self.goal_callback(self._goal)
 
     def goal_callback(self, goal: RobotGoal) -> None:
-        result: bool = self.slam_controller.explore(goal)
+        # BUG: This is blocking the publish_goal
+        result: bool = self.slam_controller.explore(goal, timeout=60 * 20)
         if result:
             rospy.loginfo("Reached goal!")
 

@@ -8,7 +8,7 @@ import tf2_ros
 from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from numpy.linalg import eig, inv, norm
-from object_ros_msgs.msg import Object2D, Object2DArray, RangeBearings
+from grace.msg import Object2D, Object2DArray, RangeBearings
 from scipy.stats import dirichlet, entropy
 from tf import transformations
 from tf2_ros import (
