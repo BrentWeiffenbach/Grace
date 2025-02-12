@@ -1,0 +1,3 @@
+local_costmap:
+  inflation_layer:
+    enabled: false

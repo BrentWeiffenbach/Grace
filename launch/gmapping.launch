@@ -52,6 +52,9 @@
         </include>
 
         <!-- Move base -->
-        <include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/>
+        <include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml">
+            <!-- find other params at: $(find turtlebot_navigation)/param/costmap_common_params.yaml -->
+            <arg name="custom_param_file" value="$(find grace)/launch/move_base_config.yaml" />
+        </include>
     </group>
 </launch>
