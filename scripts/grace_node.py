@@ -281,4 +281,4 @@ if __name__ == "__main__":
         grace.run()
     except rospy.ROSInterruptException:
         grace.shutdown()
-        rospy.loginfo("GraceNode terminated.")  # type: ignore
+        rospy.loginfo("GraceNode terminated GRACEfully.")  # type: ignore

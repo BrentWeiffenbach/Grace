@@ -87,7 +87,7 @@ class SemanticSLAM:
         self.range_sub = rospy.Subscriber(
             "/range_bearing", RangeBearings, self.range_callback
         )
-        self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10)
+        self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10, latch=True)
         self.point_pub = rospy.Publisher(
             "/semantic_map/point", PointStamped, queue_size=10
         )
@@ -320,7 +320,7 @@ class SemanticSLAM:
                 # BUG: self.classes[np.argmax(class_probs)] is not actually returning the correct value,
                 # and defaulting to 0 (person)
                 # if self.classes[np.argmax(class_probs)] == "person":
-                # continue
+                #     continue
                 # print(class_probs)
                 matched_obj.update(
                     updated_pos,

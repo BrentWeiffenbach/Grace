@@ -1,14 +1,18 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
-from typing import Union
+from math import atan2, radians
+from typing import Dict, Union
 
 import actionlib
+import numpy as np
 import rospy
-from geometry_msgs.msg import Point, Quaternion
-from grace.msg import RobotState, Object2DArray, Object2D
+from geometry_msgs.msg import Point, Pose, Quaternion
+from grace.msg import Object2D, Object2DArray
 from grace_node import RobotGoal
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from nav_msgs.msg import Odometry
+from scipy.spatial.transform import Rotation
 
 
 class SlamController:
@@ -41,12 +45,10 @@ class SlamController:
         self.move_base.wait_for_server()  # Wait until move_base server starts
         SlamController.verbose_log("move_base action server started!")
 
-        rospy.set_param('/move_base/base_global_planner', 'navfn/NavfnROS')  # Use a simpler global planner
-        rospy.set_param('/move_base/base_local_planner', 'dwa_local_planner/DWAPlannerROS')
-
     def semantic_map_callback(self, msg: Object2DArray) -> None:
-        if not self.lock:
-            self.semantic_map = msg
+        # if not self.lock:
+        #     self.semantic_map = msg
+        self.semantic_map = msg
 
     def explore(self, goal: Union[RobotGoal, None], timeout: Union[int, None]) -> bool:
         """Have GRACE start exploring. Tries to find the provided goal."""
@@ -71,11 +73,14 @@ class SlamController:
 
             goal_coords: Union[Point, None] = self.find_object_in_map(goal.child_object)
             if goal_coords is None:
-                # Explore frontier here
+                # TODO: Explore frontier here
                 continue
 
-            result: bool = self.goto(goal_coords)
+            goal_pose: Pose = self.calculate_offset(goal_coords)
+            result: bool = self.goto(goal_pose)
+            SlamController.verbose_log(f"The result of goto was: {result}")
             return result
+        self.move_base.cancel_all_goals()
         rospy.loginfo("Slam Controller ran out of time to find object!")
         return False
 
@@ -88,9 +93,14 @@ class SlamController:
         Returns:
             bool: True if it is initialized, False otherwise.
         """
-        result = rospy.wait_for_message(
-            "/semantic_map", Object2DArray, timeout=sleep_time_s
-        )
+        try:
+            self.semantic_map
+        except AttributeError:
+            result = False
+        else:
+            result = True
+        # timeout=sleep_time_s
+        result = result or rospy.wait_for_message("/semantic_map", Object2DArray)
         if not result:
             rospy.logerr(
                 f"Slam Controller could not receive a map after waiting for {sleep_time_s} seconds."
@@ -107,8 +117,48 @@ class SlamController:
                 return Point(map_obj.x, map_obj.y, 0)
         return None
 
+    def calculate_offset(self, point: Point) -> Pose:
+        # Pseudocode:
+        # Get current position
+        # Calculate angle between current position and object
+        # Set the returned Pose to be the angle pointing towards the object
+        # Set the Pose's position to be offset by the turtlebot's size - depth information
+        current_pose: Pose = self.get_current_pose()
+        obj_angle: float = self.calculate_object_direction(current_pose, point)
+        inverse_direction = np.array(
+            [np.cos(obj_angle + np.pi), np.sin(obj_angle + np.pi)]
+        )
+        offset_position = np.array([point.x, point.y]) + inverse_direction * 0.3
+        new_quaternion = Rotation.from_euler(
+            "xyz", [0, 0, radians(obj_angle)]
+        ).as_quat()
 
-    def goto(self, obj: Point) -> bool:
+        new_pose = Pose()
+        new_pose.position = Point(*offset_position, 0)
+        new_pose.orientation = Quaternion(*new_quaternion)
+        return new_pose
+
+    def get_current_pose(self) -> Pose:
+        """Returns the current pose of the turtlebot by subscribing to the `/odom`.
+
+        Returns:
+            Pose: The turtlebot's current Pose.
+        """
+
+        TIMEOUT_SECONDS: Union[int, rospy.Duration] = 2
+        odom_msg = rospy.wait_for_message(
+            topic="/odom", topic_type=Odometry, timeout=TIMEOUT_SECONDS
+        )
+        odom: Odometry = odom_msg or Odometry()  # Does nothing but make pylance happy
+        # The Odometry() call would never run since odom_msg has to be True (or an exception is raised)
+        pose: Pose = odom.pose.pose
+        return pose
+
+    def calculate_object_direction(self, pose: Pose, obj: Point) -> float:
+        angle: float = atan2(obj.y - pose.position.y, obj.x - pose.position.x)
+        return angle
+
+    def goto(self, obj: Pose) -> bool:
         if not self.lock:
             self.lock = True
         SlamController.verbose_log(f"Going to position {obj}")
@@ -117,19 +167,32 @@ class SlamController:
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
         dest.target_pose.header.stamp = rospy.Time.now()
-        # TODO: Add the target pose
-        dest.target_pose.pose.position = obj
-        dest.target_pose.pose.orientation = Quaternion(0, 0, 0, 1)
+        dest.target_pose.pose = obj
         self.move_base.send_goal(dest)
+        # TODO: Add callbacks to this to allow it to use more accurate maps
         wait = self.move_base.wait_for_result()
         if not wait:
             rospy.logerr("Action server not availible!")
             self.lock = False
             return False
         else:
-            self.move_base.get_result()
+            # Can be any of the actionlib.GoalStatus constants
+            state: int = self.move_base.get_state()
             self.lock = False
-            return self.move_base.get_state() == actionlib.GoalStatus.SUCCEEDED
+            if SlamController.verbose:
+                # Get all the constants
+                _states: Dict[int, str] = {
+                    value: key
+                    for key, value in actionlib.GoalStatus.__dict__.items()
+                    if not key.startswith("_")
+                    and not callable(value)
+                    and isinstance(value, int)
+                }
+                SlamController.verbose_log(
+                    f"The move_base state at the end of goto was {_states.get(state)}({state})."
+                )
+
+            return state == actionlib.GoalStatus.SUCCEEDED
 
     def run(self) -> None:
         rospy.spin()
