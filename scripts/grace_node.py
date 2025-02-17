@@ -1,6 +1,7 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
+import threading
 from typing import Dict, Final, List, Union
 
 import rospy
@@ -256,10 +257,10 @@ class GraceNode:
         self._goal = new_goal  # new_goal will be validated within RobotGoal's setters
         if GraceNode.verbose:
             rospy.loginfo(f"Changed goal from {_temp_goal} to {self._goal}.")
-        self.goal_callback(self._goal)
+        goal_thread = threading.Thread(target=self.goal_callback, args=(self._goal,))
+        goal_thread.start()
 
     def goal_callback(self, goal: RobotGoal) -> None:
-        # BUG: This is blocking the publish_goal
         result: bool = self.slam_controller.explore(goal, timeout=60 * 20)
         if result:
             rospy.loginfo("Reached goal!")

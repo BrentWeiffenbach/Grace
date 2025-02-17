@@ -2,6 +2,7 @@
 
 
 from math import atan2, radians
+import threading
 from typing import Dict, Union
 
 import actionlib
@@ -51,22 +52,22 @@ class SlamController:
         self.semantic_map = msg
 
     def explore(self, goal: Union[RobotGoal, None], timeout: Union[int, None]) -> bool:
-        """Have GRACE start exploring. Tries to find the provided goal."""
         if goal is None:
             rospy.logerr("SlamController cannot start exploring with no goal!")
             return False
+        
         SlamController.verbose_log(f"SlamController recieved new goal! {goal}")
 
         # Give semantic map time to sleep
         is_semantic_map_loaded: bool = self.wait_for_semantic_map(sleep_time_s=10)
         if not is_semantic_map_loaded:
             return False
-
+        
         start_time: rospy.Time = rospy.Time.now()
         end_time: rospy.Time = start_time + rospy.Duration(
             timeout or 0
         )  # or 0 since it will not be used if there is no timeout
-        # Check if object is in the semantic map
+
         while timeout is None or end_time.__gt__(rospy.Time.now()):
             if self.lock:
                 continue
@@ -77,11 +78,16 @@ class SlamController:
                 continue
 
             goal_pose: Pose = self.calculate_offset(goal_coords)
-            result: bool = self.goto(goal_pose)
-            SlamController.verbose_log(f"The result of goto was: {result}")
-            return result
-        self.move_base.cancel_all_goals()
-        rospy.loginfo("Slam Controller ran out of time to find object!")
+            goto_thread = self.goto(goal_pose)
+
+            while goto_thread.is_alive():
+                if rospy.Time.now() >= end_time:
+                    rospy.loginfo("Slam Controller ran out of time to find object!")
+                    self.move_base.cancel_goal()
+                    goto_thread.join()
+                    return False
+                rospy.sleep(0.1)
+            return True
         return False
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
@@ -158,41 +164,45 @@ class SlamController:
         angle: float = atan2(obj.y - pose.position.y, obj.x - pose.position.x)
         return angle
 
-    def goto(self, obj: Pose) -> bool:
-        if not self.lock:
-            self.lock = True
-        SlamController.verbose_log(f"Going to position {obj}")
-        # Go towards object
-        # https://github.com/HotBlackRobotics/hotblackrobotics.github.io/blob/master/en/blog/_posts/2018-01-29-action-client-py.md
-        dest = MoveBaseGoal()
-        dest.target_pose.header.frame_id = "map"
-        dest.target_pose.header.stamp = rospy.Time.now()
-        dest.target_pose.pose = obj
-        self.move_base.send_goal(dest)
-        # TODO: Add callbacks to this to allow it to use more accurate maps
-        wait = self.move_base.wait_for_result()
-        if not wait:
-            rospy.logerr("Action server not availible!")
-            self.lock = False
-            return False
-        else:
-            # Can be any of the actionlib.GoalStatus constants
-            state: int = self.move_base.get_state()
-            self.lock = False
-            if SlamController.verbose:
-                # Get all the constants
-                _states: Dict[int, str] = {
-                    value: key
-                    for key, value in actionlib.GoalStatus.__dict__.items()
-                    if not key.startswith("_")
-                    and not callable(value)
-                    and isinstance(value, int)
-                }
-                SlamController.verbose_log(
-                    f"The move_base state at the end of goto was {_states.get(state)}({state})."
-                )
+    def goto(self, obj: Pose) -> threading.Thread:
+        def execute_goto() -> bool:
+            SlamController.verbose_log(f"Going to position {obj}")
+            # Go towards object
+            # https://github.com/HotBlackRobotics/hotblackrobotics.github.io/blob/master/en/blog/_posts/2018-01-29-action-client-py.md
+            dest = MoveBaseGoal()
+            dest.target_pose.header.frame_id = "map"
+            dest.target_pose.header.stamp = rospy.Time.now()
+            dest.target_pose.pose = obj
+            self.move_base.send_goal(dest)
+
+            # TODO: Add callbacks to this to allow it to use more accurate maps
+            wait = self.move_base.wait_for_result()
+            if not wait:
+                rospy.logerr("Action server not availible!")
+                self.lock = False
+                return False
+            else:
+                # Can be any of the actionlib.GoalStatus constants
+                state: int = self.move_base.get_state()
+                self.lock = False
+                if SlamController.verbose:
+                    # Get all the constants
+                    _states: Dict[int, str] = {
+                        value: key
+                        for key, value in actionlib.GoalStatus.__dict__.items()
+                        if not key.startswith("_")
+                        and not callable(value)
+                        and isinstance(value, int)
+                    }
+                    SlamController.verbose_log(
+                        f"The move_base state at the end of goto was {_states.get(state)}({state})."
+                    )
 
             return state == actionlib.GoalStatus.SUCCEEDED
+
+        thread = threading.Thread(target=execute_goto)
+        thread.start()
+        return thread
 
     def run(self) -> None:
         rospy.spin()
