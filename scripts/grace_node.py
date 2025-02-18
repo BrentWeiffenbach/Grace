@@ -261,7 +261,7 @@ class GraceNode:
         goal_thread.start()
 
     def goal_callback(self, goal: RobotGoal) -> None:
-        result: bool = self.slam_controller.explore(goal, timeout=60 * 20)
+        result: bool = self.slam_controller.explore(goal, timeout=60 * 15)
         if result:
             rospy.loginfo("Reached goal!")
 
