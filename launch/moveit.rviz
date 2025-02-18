@@ -280,7 +280,7 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-        Loop Animation: false
+        Loop Animation: true
         Robot Alpha: 0.5
         Robot Color: 150; 50; 150
         Show Robot Collision: false
@@ -303,7 +303,7 @@ Visualization Manager:
         Goal State Color: 250; 128; 0
         Interactive Marker Size: 0
         Joint Violation Color: 255; 0; 255
-        Planning Group: arm_base_group
+        Planning Group: arm_group
         Query Goal State: true
         Query Start State: false
         Show Workspace: false
@@ -541,7 +541,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: base_footprint
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
@@ -553,25 +553,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 3.4942188262939453
+      Distance: 2.1184637546539307
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.11356700211763382
-        Y: 0.10592000186443329
-        Z: 2.2351800055275817e-7
+        X: 0.23684918880462646
+        Y: 0.10821598768234253
+        Z: -7.450522332419496e-8
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5097969770431519
+      Pitch: 0.41979700326919556
       Target Frame: world
       Value: XYOrbit (rviz)
-      Yaw: 5.659949779510498
+      Yaw: 5.5449419021606445
     Saved: ~
 Window Geometry:
   Displays:
