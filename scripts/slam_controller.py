@@ -11,9 +11,18 @@ import rospy
 from geometry_msgs.msg import Point, Pose, Quaternion
 from grace.msg import Object2D, Object2DArray
 from grace_node import RobotGoal
-from move_base_msgs.msg import MoveBaseAction, MoveBaseFeedback, MoveBaseGoal
+from move_base_msgs.msg import MoveBaseAction, MoveBaseFeedback, MoveBaseGoal, MoveBaseResult
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation
+
+goal_statuses: Dict[int, str] = {
+    value: key
+    for key, value in actionlib.GoalStatus.__dict__.items()
+    if not key.startswith("_") and not callable(value) and isinstance(value, int)
+}
+"""
+Gets all of the non-callable integer constants from actionlib.GoalStatus msg. 
+"""
 
 
 class SlamController:
@@ -103,30 +112,6 @@ class SlamController:
             return True
         return False
 
-    def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
-        """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
-
-        Args:
-            sleep_time_s (int | rospy.Duration): The time, in seconds, to wait before checking if semantic_map is initialized again.
-
-        Returns:
-            bool: True if it is initialized, False otherwise.
-        """
-        try:
-            self.semantic_map
-        except AttributeError:
-            result = False
-        else:
-            result = True
-        # timeout=sleep_time_s
-        result = result or rospy.wait_for_message("/semantic_map", Object2DArray)
-        if not result:
-            rospy.logerr(
-                f"Slam Controller could not receive a map after waiting for {sleep_time_s} seconds."
-            )
-            return False
-        return True
-
     def find_object_in_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         assert self.semantic_map.objects
@@ -152,22 +137,6 @@ class SlamController:
         new_pose.orientation = Quaternion(*new_quaternion)
         return new_pose
 
-    def get_current_pose(self) -> Pose:
-        """Returns the current pose of the turtlebot by subscribing to the `/odom`.
-
-        Returns:
-            Pose: The turtlebot's current Pose.
-        """
-
-        TIMEOUT_SECONDS: Union[int, rospy.Duration] = 2
-        odom_msg = rospy.wait_for_message(
-            topic="/odom", topic_type=Odometry, timeout=TIMEOUT_SECONDS
-        )
-        odom: Odometry = odom_msg or Odometry()  # Does nothing but make pylance happy
-        # The Odometry() call would never run since odom_msg has to be True (or an exception is raised)
-        pose: Pose = odom.pose.pose
-        return pose
-
     def calculate_object_direction(self, pose: Pose, obj: Point) -> float:
         angle: float = atan2(obj.y - pose.position.y, obj.x - pose.position.x)
         return angle
@@ -180,6 +149,15 @@ class SlamController:
         """
         pass
 
+    def done_cb(self, status: int, result: MoveBaseResult) -> None:
+        """The callback for when the robot has finished with it's goal
+
+        Args:
+            status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string. 
+            result (MoveBaseResult): The result of the move base.
+        """
+        ...
+
     def goto(self, obj: Pose, timeout: rospy.Duration) -> threading.Thread:
         def execute_goto() -> bool:
             SlamController.verbose_log(f"Going to position {obj}")
@@ -189,7 +167,9 @@ class SlamController:
             dest.target_pose.header.frame_id = "map"
             dest.target_pose.header.stamp = rospy.Time.now()
             dest.target_pose.pose = obj
-            self.move_base.send_goal(goal=dest, feedback_cb=self.feedback_cb)
+            self.move_base.send_goal(
+                goal=dest, feedback_cb=self.feedback_cb, done_cb=self.done_cb
+            )
 
             # TODO: Add callbacks to this to allow it to use more accurate maps
             wait = self.move_base.wait_for_result(timeout=timeout)
@@ -202,16 +182,8 @@ class SlamController:
             state: int = self.move_base.get_state()
             self.lock = False
             if SlamController.verbose:
-                # Get all the constants
-                _states: Dict[int, str] = {
-                    value: key
-                    for key, value in actionlib.GoalStatus.__dict__.items()
-                    if not key.startswith("_")
-                    and not callable(value)
-                    and isinstance(value, int)
-                }
                 SlamController.verbose_log(
-                    f"The move_base state at the end of goto was {_states.get(state)}({state})."
+                    f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."
                 )
 
             return state == actionlib.GoalStatus.SUCCEEDED
@@ -234,6 +206,46 @@ class SlamController:
         """
         # TODO: Update goal position here
         rospy.sleep(tick)
+
+    def get_current_pose(self) -> Pose:
+        """Returns the current pose of the turtlebot by subscribing to the `/odom`.
+
+        Returns:
+            Pose: The turtlebot's current Pose.
+        """
+
+        TIMEOUT_SECONDS: Union[int, rospy.Duration] = 2
+        odom_msg = rospy.wait_for_message(
+            topic="/odom", topic_type=Odometry, timeout=TIMEOUT_SECONDS
+        )
+        odom: Odometry = odom_msg or Odometry()  # Does nothing but make pylance happy
+        # The Odometry() call would never run since odom_msg has to be True (or an exception is raised)
+        pose: Pose = odom.pose.pose
+        return pose
+
+    def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
+        """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
+
+        Args:
+            sleep_time_s (int | rospy.Duration): The time, in seconds, to wait before checking if semantic_map is initialized again.
+
+        Returns:
+            bool: True if it is initialized, False otherwise.
+        """
+        try:
+            self.semantic_map
+        except AttributeError:
+            result = False
+        else:
+            result = True
+        # timeout=sleep_time_s
+        result = result or rospy.wait_for_message("/semantic_map", Object2DArray)
+        if not result:
+            rospy.logerr(
+                f"Slam Controller could not receive a map after waiting for {sleep_time_s} seconds."
+            )
+            return False
+        return True
 
     def run(self) -> None:
         rospy.spin()
