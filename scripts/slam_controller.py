@@ -3,23 +3,19 @@
 
 import threading
 from math import atan2, radians
-from typing import Dict, Union
+from typing import Dict, Union, Callable
 
 import actionlib
 import numpy as np
 import rospy
 from geometry_msgs.msg import Point, Pose, Quaternion
 from grace.msg import Object2D, Object2DArray
-from grace_node import RobotGoal
+from grace_node import RobotGoal, get_constants_from_msg
 from move_base_msgs.msg import MoveBaseAction, MoveBaseFeedback, MoveBaseGoal, MoveBaseResult
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation
 
-goal_statuses: Dict[int, str] = {
-    value: key
-    for key, value in actionlib.GoalStatus.__dict__.items()
-    if not key.startswith("_") and not callable(value) and isinstance(value, int)
-}
+goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """
 Gets all of the non-callable integer constants from actionlib.GoalStatus msg. 
 """
@@ -39,17 +35,20 @@ class SlamController:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, done_cb: Union[Callable, None] = None, verbose: bool = False) -> None:
         SlamController.verbose = verbose
         self.goal: RobotGoal
         self.semantic_map: Object2DArray
         self.lock: bool = False
+
+        self.yield_to_master: Callable = done_cb or (lambda: SlamController.verbose_log("done_cb not provided to SlamController!"))
 
         self.semantic_map_sub = rospy.Subscriber(
             name="/semantic_map",
             data_class=Object2DArray,
             callback=self.semantic_map_callback,
         )
+
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         SlamController.verbose_log("Starting move_base action server...")
         self.move_base.wait_for_server()  # Wait until move_base server starts
@@ -98,7 +97,7 @@ class SlamController:
                 if rospy.Time.now() >= end_time:
                     # Run out of time
                     rospy.loginfo("Slam Controller ran out of time to find object!")
-                    self.move_base.cancel_goal()
+                    self.move_base.cancel_all_goals()
                     goto_thread.join()
                     return False
 
@@ -127,6 +126,7 @@ class SlamController:
         inverse_direction = np.array(
             [np.cos(obj_angle + np.pi), np.sin(obj_angle + np.pi)]
         )
+        # Magic number that works sorta in rviz but isn't reliable
         offset_position = np.array([point.x, point.y]) + inverse_direction * 0.5
         new_quaternion = Rotation.from_euler(
             "xyz", [0, 0, radians(obj_angle)]
@@ -156,9 +156,28 @@ class SlamController:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string. 
             result (MoveBaseResult): The result of the move base.
         """
-        ...
+        self.yield_to_master(status, result, goal_statuses)
 
     def goto(self, obj: Pose, timeout: rospy.Duration) -> threading.Thread:
+        """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
+
+        Args:
+            obj (Pose): The pose move_base should attempt to go to.
+            timeout (rospy.Duration): The timeout for the move_base wait.
+
+        Returns:
+            threading.Thread: A thread containing the goto call. 
+
+        Example:
+        ```
+            goto_thread: threading.Thread = self.goto(goal_pose, timeout=rospy.Duration(timeout or 0))
+            while goto_thread.is_alive():
+                # Do stuff
+                if you_want_to_cancel:
+                    self.move_base.cancel_all_goals()
+                    goto_thread.join()
+        ```
+        """
         def execute_goto() -> bool:
             SlamController.verbose_log(f"Going to position {obj}")
             # Go towards object
