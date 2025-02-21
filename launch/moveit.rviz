@@ -61,9 +61,9 @@ Visualization Manager:
           Y: 0
           Z: 0
         Size:
-          X: 2
-          Y: 2
-          Z: 2
+          X: 10
+          Y: 10
+          Z: 10
       Name: MotionPlanning
       Planned Path:
         Color Enabled: false
@@ -303,7 +303,7 @@ Visualization Manager:
         Goal State Color: 250; 128; 0
         Interactive Marker Size: 0
         Joint Violation Color: 255; 0; 255
-        Planning Group: arm_group
+        Planning Group: base_group
         Query Goal State: true
         Query Start State: false
         Show Workspace: false
@@ -541,7 +541,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: odom
+    Fixed Frame: base_footprint
     Frame Rate: 30
   Name: root
   Tools:
@@ -560,18 +560,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.23684918880462646
-        Y: 0.10821598768234253
+        X: -0.1363760232925415
+        Y: -0.6610607504844666
         Z: -7.450522332419496e-8
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.41979700326919556
+      Pitch: 0.3147970139980316
       Target Frame: world
       Value: XYOrbit (rviz)
-      Yaw: 5.5449419021606445
+      Yaw: 4.749941349029541
     Saved: ~
 Window Geometry:
   Displays:
