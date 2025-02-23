@@ -3,7 +3,7 @@
 
 import threading
 from math import atan2, radians
-from typing import Dict, Union, Callable
+from typing import Callable, Dict, Tuple, Union
 
 import actionlib
 import numpy as np
@@ -11,7 +11,12 @@ import rospy
 from geometry_msgs.msg import Point, Pose, Quaternion
 from grace.msg import Object2D, Object2DArray
 from grace_node import RobotGoal, get_constants_from_msg
-from move_base_msgs.msg import MoveBaseAction, MoveBaseFeedback, MoveBaseGoal, MoveBaseResult
+from move_base_msgs.msg import (
+    MoveBaseAction,
+    MoveBaseFeedback,
+    MoveBaseGoal,
+    MoveBaseResult,
+)
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation
 
@@ -35,13 +40,19 @@ class SlamController:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
-    def __init__(self, done_cb: Union[Callable, None] = None, verbose: bool = False) -> None:
+    def __init__(
+        self, done_cb: Union[Callable, None] = None, verbose: bool = False
+    ) -> None:
         SlamController.verbose = verbose
         self.goal: RobotGoal
         self.semantic_map: Object2DArray
         self.lock: bool = False
 
-        self.yield_to_master: Callable = done_cb or (lambda: SlamController.verbose_log("done_cb not provided to SlamController!"))
+        self.yield_to_master: Callable = done_cb or (
+            lambda: SlamController.verbose_log(
+                "done_cb not provided to SlamController!"
+            )
+        )
 
         self.semantic_map_sub = rospy.Subscriber(
             name="/semantic_map",
@@ -59,7 +70,9 @@ class SlamController:
         #     self.semantic_map = msg
         self.semantic_map = msg
 
-    def explore(self, goal: Union[RobotGoal, None], timeout: Union[int, None]) -> bool:
+    def find_goal(
+        self, goal: Union[RobotGoal, None], timeout: Union[int, None]
+    ) -> bool:
         if goal is None:
             rospy.logerr("SlamController cannot start exploring with no goal!")
             return False
@@ -81,14 +94,13 @@ class SlamController:
             if self.lock:
                 continue
 
-            goal_coords: Union[Point, None] = self.find_object_in_map(goal.child_object)
-            if goal_coords is None:
-                # TODO: Explore frontier here
-                SlamController.verbose_log("Object not initially found. Exploring...")
-                SlamController.verbose_log("Explore not implemented yet!")
+            # Get the goal pose
+            continue_flag: bool
+            goal_pose: Pose
+            continue_flag, goal_pose = self.calculate_goal_pose(goal)
+            if continue_flag:
                 continue
 
-            goal_pose: Pose = self.calculate_offset(goal_coords)
             goto_thread: threading.Thread = self.goto(
                 goal_pose, timeout=rospy.Duration(timeout or 0)
             )
@@ -111,6 +123,35 @@ class SlamController:
             return True
         return False
 
+    def calculate_goal_pose(self, goal: RobotGoal) -> Tuple[bool, Pose]:
+        """Calculates the goal pose and explores if necessary.
+
+        Args:
+            goal (RobotGoal): The RobotGoal.
+
+        Returns:
+            Tuple (continue_flag: bool, goal_pose: Pose): continue_flag is a flag that represents if the parent loop should continue.
+
+        Example:
+            ```
+            continue_flag: bool
+            goal_pose: Pose
+            continue_flag, goal_pose = calculate_goal_pose(goal)
+            if continue_flag:
+                continue
+            # goal_pose is defined at this point. Keep going...
+            ```
+        """
+        goal_coords: Union[Point, None] = self.find_object_in_map(goal.child_object)
+        if goal_coords is None:
+            # TODO: Explore frontier here
+            SlamController.verbose_log("Object not initially found. Exploring...")
+            SlamController.verbose_log("Explore not implemented yet!")
+            return True, Pose()  # Empty Pose object to make it not be None
+
+        goal_pose: Pose = self.calculate_offset(goal_coords)
+        return False, goal_pose
+
     def find_object_in_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         assert self.semantic_map.objects
@@ -122,7 +163,10 @@ class SlamController:
 
     def calculate_offset(self, point: Point) -> Pose:
         current_pose: Pose = self.get_current_pose()
-        obj_angle: float = self.calculate_object_direction(current_pose, point)
+        obj_angle: float = atan2(
+            point.y - current_pose.position.y, point.x - current_pose.position.x
+        )
+
         inverse_direction = np.array(
             [np.cos(obj_angle + np.pi), np.sin(obj_angle + np.pi)]
         )
@@ -137,10 +181,6 @@ class SlamController:
         new_pose.orientation = Quaternion(*new_quaternion)
         return new_pose
 
-    def calculate_object_direction(self, pose: Pose, obj: Point) -> float:
-        angle: float = atan2(obj.y - pose.position.y, obj.x - pose.position.x)
-        return angle
-
     def feedback_cb(self, feedback: MoveBaseFeedback) -> None:
         """The callback when the robot moves.
 
@@ -153,7 +193,7 @@ class SlamController:
         """The callback for when the robot has finished with it's goal
 
         Args:
-            status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string. 
+            status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
             result (MoveBaseResult): The result of the move base.
         """
         self.yield_to_master(status, result, goal_statuses)
@@ -166,7 +206,7 @@ class SlamController:
             timeout (rospy.Duration): The timeout for the move_base wait.
 
         Returns:
-            threading.Thread: A thread containing the goto call. 
+            threading.Thread: A thread containing the goto call.
 
         Example:
         ```
@@ -178,6 +218,7 @@ class SlamController:
                     goto_thread.join()
         ```
         """
+
         def execute_goto() -> bool:
             SlamController.verbose_log(f"Going to position {obj}")
             # Go towards object
@@ -212,7 +253,9 @@ class SlamController:
         return thread
 
     def goto_cb(
-        self, tick: Union[rospy.Duration, int, float], goto_thread: threading.Thread
+        self,
+        tick: Union[rospy.Duration, int, float],
+        goto_thread: threading.Thread,
     ) -> Union[None, bool]:
         """Run every `tick` seconds.
 

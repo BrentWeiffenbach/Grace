@@ -158,7 +158,6 @@ class GraceNode:
         GraceNode.verbose: bool = verbose
 
         # TODO: Add a user-friendly input to change the goal and display the state.
-        # TODO: Update the state in slam_controller
         self._state = RobotState.WAITING
         self._goal = None
         self.has_object: bool = False
@@ -257,13 +256,15 @@ class GraceNode:
         elif self.state == RobotState.HOMING:
             new_state = RobotState.EXPLORING if self.has_object else RobotState.WAITING
         else:
-            rospy.logwarn("Unknown state; cannot go to next state. Defaulting to HOMING")
+            rospy.logwarn(
+                "Unknown state; cannot go to next state. Defaulting to WAITING"
+            )
             new_state = RobotState.WAITING
-        
+
         # Pass the new state through the callback function
         self.state_callback(new_state)
         return self.state
-    
+
     # endregion
     # region Goal
     @property
@@ -289,7 +290,7 @@ class GraceNode:
         goal_thread.start()
 
     def goal_callback(self, goal: RobotGoal) -> None:
-        result: bool = self.slam_controller.explore(goal, timeout=60 * 15)
+        result: bool = self.slam_controller.find_goal(goal, timeout=60 * 15)
         if result:
             rospy.loginfo("Reached goal!")
 
@@ -340,6 +341,7 @@ if __name__ == "__main__":
     grace = GraceNode(verbose=True)
     rospy.on_shutdown(grace.shutdown)
     grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
+    rospy.sleep(3) # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
         grace.run()
