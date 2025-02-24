@@ -1,14 +1,25 @@
+#!/bin/bash
 # These are some commands I had to run to install the first time. Uncomment them if there are issues with the script to see if it fixes things.
 # sudo apt-get update
 # sudo apt install rosbash
 # sudo apt-get install ros-melodic-gazebo* ros-melodic-robot-state-publisher ros-melodic-xacro
 # sudo apt install python3.8.0
+cd ..
 
-# A flag to toggle verbose logging to the terminal
-verbose=false # true or fase
+verbose=false
+
+while getopts v flag
+do
+    case "${flag}" in
+        v) verbose=true;;
+    esac
+done
+
+# USAGE:
+# ./install.sh -v to enable verbose logging
 
 # Check if venv exists
-if  [[ ! -d yolovenv ]]; then
+if  [[ ! -d yolovenv && ! -d "../yolovenv" ]]; then
     echo "yolovenv not found. Installing..."
 
     # Note: the line below is UNTESTED, so if it doesn't work, just run the command that is in the README...
@@ -20,8 +31,8 @@ fi
 # Change the shebangs
 #####################
 # Get the full python path for the shebang here
-install_dir="$(cd "$(dirname "$0")" && pwd)"
-python_path="$install_dir/yolovenv/bin/python"
+grace_dir="$(cd "$(dirname "$0")" && pwd)"
+python_path="$grace_dir/yolovenv/bin/python"
 
 if [[ ! -f "$python_path" ]]; then
     echo "Could not find python path."
@@ -72,7 +83,7 @@ for yaml_file in "${yaml_paths[@]}"; do
     full_path="maps/$yaml_file.yaml"
     
     if [[ -f $full_path ]]; then
-        sed -i "s|image: .*|image: $install_dir/maps/$yaml_file.pgm|" $full_path
+        sed -i "s|image: .*|image: $grace_dir/maps/$yaml_file.pgm|" $full_path
     else
         $verbose && echo "$full_path not found. Skipping..."
     fi
@@ -84,7 +95,7 @@ done
 # Change the below line to toggle between verbose YOLO logging
 do_verbose_yolo_logging=false
 
-predictor_py_path="$install_dir/yolovenv/lib/python3.8/site-packages/ultralytics/engine/predictor.py"
+predictor_py_path="$grace_dir/yolovenv/lib/python3.8/site-packages/ultralytics/engine/predictor.py"
 if [[ -f "$predictor_py_path" && -r "$predictor_py_path" && -w "$predictor_py_path" ]]; then
     disabled_verbose_code="            self.args.verbose = False"
     grep_options=""
@@ -139,5 +150,8 @@ fi
 
 # TODO: Add verbosity to this
 [[ -d out/SLAM ]] || mkdir out/SLAM
+
+$verbose && echo "Running install_frontier.sh..."
+$verbose && ./install/install_frontier.sh -v || ./install/install_frontier.sh
 
 exit 0 # Successfully exit

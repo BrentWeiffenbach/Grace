@@ -29,12 +29,7 @@ implementation onto navigation stack (move_base and amcl)
 6. Change numpy to use float64
     * Go to [yolo_detect.py](scripts/yolo_detect.py), and control click on `ros_numpy`. Then, control click on `point_cloud2`.
     * In `point_cloud2.py`, find `get_xyz_points()`, change `dtype` to `dtype=np.float64`. Saving will require a sudo password.
-7. `virtualenv -p python3.8 yolovenv` to create the virtual environment.
-8. `source yolovenv/bin/activate` to activate the virtual environment.
-9. `python3.8 -m pip install -r requirements.txt` to install the requirements.
-    * If installing the requirements fails, try running `pip install --upgrade pip` and trying again.
-10. Change the shebang in [yolo_detect.py](scripts/yolo_detect.py) to be the path to **your** [yolovenv/bin/python](yolovenv/bin/python)
-    * This is within the [gitignore](.gitignore), so clicking the link above within GitHub will not work.
+7. Run the install script located at [install/install.sh](install/install.sh). **IMPORTANT**: cd into the [install](/install/) directory first.
 
 ## Usage
 
