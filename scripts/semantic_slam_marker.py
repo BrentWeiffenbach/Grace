@@ -460,7 +460,7 @@ class SemanticSLAM:
             _point.header.stamp = rospy.Time.now()
             _point.point.x = obj.pos[0]
             _point.point.y = obj.pos[1]
-            self.point_pub.publish(_point)
+            # self.point_pub.publish(_point)
             yield obj
 
     def add_markers(self, to_frame_rel):

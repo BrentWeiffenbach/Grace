@@ -290,7 +290,7 @@ class GraceNode:
         goal_thread.start()
 
     def goal_callback(self, goal: RobotGoal) -> None:
-        result: bool = self.slam_controller.find_goal(goal, timeout=60 * 15)
+        result: bool = self.slam_controller.find_goal(goal, timeout=60 * 1)  # 1 minute
         if result:
             rospy.loginfo("Reached goal!")
 
@@ -299,6 +299,8 @@ class GraceNode:
     ) -> None:
         if state_dict[state] == "SUCCEEDED":
             self.next_state()
+        elif state_dict[state] == "ABORTED":
+            rospy.logerr("move_base failed to go to the goal pose!")
 
     def publish_goal(self) -> None:
         """Publishes GraceNode's current goal using `goal_publisher`. If `goal` is None, it will log an error and do nothing.
@@ -341,7 +343,7 @@ if __name__ == "__main__":
     grace = GraceNode(verbose=True)
     rospy.on_shutdown(grace.shutdown)
     grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
-    rospy.sleep(3) # Sleep for an arbitrary 3 seconds to allow sim map to load
+    rospy.sleep(3)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
         grace.run()

@@ -2,7 +2,7 @@
 
 
 import threading
-from math import atan2, radians
+from math import atan2, radians, sqrt
 from typing import Callable, Dict, Tuple, Union
 
 import actionlib
@@ -47,6 +47,7 @@ class SlamController:
         self.goal: RobotGoal
         self.semantic_map: Object2DArray
         self.lock: bool = False
+        self.goal_lock = threading.Lock()
 
         self.yield_to_master: Callable = done_cb or (
             lambda: SlamController.verbose_log(
@@ -73,6 +74,15 @@ class SlamController:
     def find_goal(
         self, goal: Union[RobotGoal, None], timeout: Union[int, None]
     ) -> bool:
+        """Attempts to find the goal within `timeout` seconds.
+
+        Args:
+            goal (Union[RobotGoal, None]): The goal object to find.
+            timeout (Union[int, None]): The amount of time to give the goal before.
+
+        Returns:
+            bool: BUGGY. A boolean representing if the object was sucessfully found.
+        """
         if goal is None:
             rospy.logerr("SlamController cannot start exploring with no goal!")
             return False
@@ -89,16 +99,16 @@ class SlamController:
             timeout or 0
         )  # or 0 since it will not be used if there is no timeout
 
-        while timeout is None or end_time.__gt__(rospy.Time.now()):
+        while timeout is None or end_time > rospy.Time.now():
             # BUG: This loop is kinda really bad. It doesn't loop much at all...
             if self.lock:
                 continue
 
             # Get the goal pose
-            continue_flag: bool
+            explore_flag: bool
             goal_pose: Pose
-            continue_flag, goal_pose = self.calculate_goal_pose(goal)
-            if continue_flag:
+            explore_flag, goal_pose = self.calculate_goal_pose(goal)
+            if explore_flag:
                 continue
 
             goto_thread: threading.Thread = self.goto(
@@ -106,19 +116,29 @@ class SlamController:
             )
 
             while goto_thread.is_alive():
-                if rospy.Time.now() >= end_time:
+                if rospy.Time.now() >= end_time and timeout is not None:
                     # Run out of time
-                    rospy.loginfo("Slam Controller ran out of time to find object!")
+                    rospy.logwarn("Slam Controller ran out of time to find object!")
                     self.move_base.cancel_all_goals()
                     goto_thread.join()
                     return False
 
-                cb_result: Union[None, bool] = self.goto_cb(
-                    tick=0.1, goto_thread=goto_thread
-                )
-                if cb_result is not None:
-                    # Pass up the chain if it returned something
-                    return cb_result
+                if self.goal_needs_update(current_goal=goal, goal_pose=goal_pose):
+                    SlamController.verbose_log("Recalculating goal...")
+                    self.move_base.cancel_goal()
+                    with self.goal_lock:
+                        # Recalculate goal
+                        updated_goal_pose: Pose
+                        explore_flag, updated_goal_pose = self.calculate_goal_pose(goal)
+                        if explore_flag:
+                            # TODO: Implement explore logic
+                            SlamController.verbose_log("Explore not implemented yet!")
+                            continue
+
+                        goto_thread: threading.Thread = self.goto(
+                            updated_goal_pose, timeout=rospy.Duration(timeout or 0)
+                        )
+                rospy.sleep(0.1)
             # BUG: This should return based off goal, rather than just returning True every time
             return True
         return False
@@ -130,23 +150,21 @@ class SlamController:
             goal (RobotGoal): The RobotGoal.
 
         Returns:
-            Tuple (continue_flag: bool, goal_pose: Pose): continue_flag is a flag that represents if the parent loop should continue.
+            Tuple (explore_flag: bool, goal_pose: Pose): explore_flag is a flag that represents if the object was not found, and exploring is needed.
 
         Example:
             ```
-            continue_flag: bool
+            explore_flag: bool
             goal_pose: Pose
-            continue_flag, goal_pose = calculate_goal_pose(goal)
-            if continue_flag:
-                continue
+            explore_flag, goal_pose = calculate_goal_pose(goal)
+            if explore_flag:
+                # Implement exploration logic here
             # goal_pose is defined at this point. Keep going...
             ```
         """
         goal_coords: Union[Point, None] = self.find_object_in_map(goal.child_object)
         if goal_coords is None:
-            # TODO: Explore frontier here
             SlamController.verbose_log("Object not initially found. Exploring...")
-            SlamController.verbose_log("Explore not implemented yet!")
             return True, Pose()  # Empty Pose object to make it not be None
 
         goal_pose: Pose = self.calculate_offset(goal_coords)
@@ -219,7 +237,7 @@ class SlamController:
         ```
         """
 
-        def execute_goto() -> bool:
+        def execute_goto() -> None:
             SlamController.verbose_log(f"Going to position {obj}")
             # Go towards object
             # https://github.com/HotBlackRobotics/hotblackrobotics.github.io/blob/master/en/blog/_posts/2018-01-29-action-client-py.md
@@ -231,43 +249,59 @@ class SlamController:
                 goal=dest, feedback_cb=self.feedback_cb, done_cb=self.done_cb
             )
 
-            # TODO: Add callbacks to this to allow it to use more accurate maps
-            wait = self.move_base.wait_for_result(timeout=timeout)
-            if not wait:
-                rospy.logerr("Action server not availible!")
-                self.lock = False
-                return False
+            start_time: rospy.Time = rospy.Time.now()
+            while not rospy.is_shutdown():
+                # Can be any of the actionlib.GoalStatus constants
+                state: int = self.move_base.get_state()
+                if state == actionlib.GoalStatus.SUCCEEDED:
+                    break
 
-            # Can be any of the actionlib.GoalStatus constants
-            state: int = self.move_base.get_state()
+                if rospy.Time.now() - start_time > timeout:
+                    rospy.logwarn("Slam Controller ran out of time to find object!")
+                    self.move_base.cancel_goal()
+                    break
+                rospy.sleep(0.1)
+
             self.lock = False
-            if SlamController.verbose:
-                SlamController.verbose_log(
-                    f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."
-                )
-
-            return state == actionlib.GoalStatus.SUCCEEDED
+            # if SlamController.verbose:
+            #     SlamController.verbose_log(
+            #         f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."
+            #     )
 
         thread = threading.Thread(target=execute_goto)
         thread.start()
         return thread
 
-    def goto_cb(
-        self,
-        tick: Union[rospy.Duration, int, float],
-        goto_thread: threading.Thread,
-    ) -> Union[None, bool]:
-        """Run every `tick` seconds.
+    def goal_needs_update(
+        self, current_goal: RobotGoal, goal_pose: Pose, going_to_child: bool = True
+    ) -> bool:
+        # BUG: This heuristic is very bad and simply does not work
+        # find_object_in_map will return None even when it has seen an object before
+        # Is this a problem with semantic_map?
+        # return False # Keeping this return False will return the code to being stable
+        return self.move_base.get_state() == actionlib.GoalStatus.ABORTED
+        new_point = self.find_object_in_map(
+            current_goal.child_object if going_to_child else current_goal.parent_object
+        )
 
-        Args:
-            tick (rospy.Duration | int | float): The amount of time the function should sleep.
-            goto_thread (threading.Thread): The goto thread. See `threading` documentation for uses.
+        if new_point is None:
+            return False
 
-        Returns:
-            Union[None, bool]: It either does not return anything, or returns a bool that should be passed up the chain.
-        """
-        # TODO: Update goal position here
-        rospy.sleep(tick)
+        distance: float = sqrt(
+            (goal_pose.position.x - new_point.x) ** 2
+            + (goal_pose.position.y - new_point.y) ** 2
+            + (goal_pose.position.z - new_point.z) ** 2
+        )
+
+        # Check if the points are not equal (aka the position has changed)
+        # do_update: bool = not SlamController.are_points_equal(
+        #     p1=goal_pose.position, p2=new_point, epsilon=1e-2
+        # )
+        threshold = 0.5
+        do_update: bool = distance > threshold
+        if do_update:
+            rospy.sleep(1)
+        return do_update
 
     def get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.
@@ -308,6 +342,25 @@ class SlamController:
             )
             return False
         return True
+
+    @staticmethod
+    def are_points_equal(p1: Point, p2: Point, epsilon: float = 1e-6) -> bool:
+        """Compares if two points are equal based on their x, y, and z fields within a tolerence of epsilon.
+
+        Args:
+            p1 (Point): The first point.
+            p2 (Point): The second point.
+            epsilon (float, optional): The tolerance to compare the two points to. Defaults to 1e-6.
+
+        Returns:
+            bool: If the two points are equal within a tolerance
+        """
+        # abs(a, b) < epsilon will compare if a, b are equal within a tolerence
+        return (
+            abs(p1.x - p2.x) < epsilon
+            and abs(p1.y - p2.y) < epsilon
+            and abs(p1.z - p2.z) < epsilon
+        )
 
     def run(self) -> None:
         rospy.spin()
