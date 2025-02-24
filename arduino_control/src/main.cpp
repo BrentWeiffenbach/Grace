@@ -6,6 +6,12 @@
 #include <moveit_msgs/DisplayTrajectory.h>
 #include <Arduino.h>
 
+// PUBLISHERS
+sensor_msgs::JointState jointStateMsg;
+ros::Publisher jointStatePub("/grace/arm_joint_states", &jointStateMsg);
+std_msgs::String armStatusMsg;
+ros::Publisher armStatusPub("/grace/arm_status", &armStatusMsg);
+
 // ros serial node handler
 ros::NodeHandle nh;
 
@@ -60,6 +66,14 @@ struct StepperMotor {
   float currentPosition;
 };
 
+enum ArmStatus {
+  WAITING,
+  EXECUTING,
+  COMPLETED
+};
+
+ArmStatus currentStatus = WAITING;
+
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
 StepperMotor motors[6] = {
   {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 500, 0, 0, false, 0.0, 0.0},  // J1
@@ -77,19 +91,36 @@ void moveMotor(int motorNumber) {
   motor.currentStep = 0;
   motor.moving = true;
 
-  if (motor.targetPosition > motor.currentPosition) {
-      digitalWrite(motor.dirPin, HIGH); // forward
+  if (motor.targetPosition < motor.currentPosition) {
+      digitalWrite(motor.dirPin, HIGH); // reverse
   } else {
-      digitalWrite(motor.dirPin, LOW); // reverse
+      digitalWrite(motor.dirPin, LOW); // forward
   }
   // nh.loginfo("Executing motor movement");
 }
 
+/// UPDATE FUNCTIONS ///
+void updateArmStatus() {
+  switch (currentStatus) {
+    case WAITING:
+      armStatusMsg.data = "waiting";
+      break;
+    case EXECUTING:
+      armStatusMsg.data = "executing";
+      break;
+    case COMPLETED:
+      armStatusMsg.data = "completed";
+      break;
+    }
+    armStatusPub.publish(&armStatusMsg);
+}
+
 void updateMotors() {
+  bool allMotorsStopped = true;
   for (int i = 0; i < 6; i++) {
     StepperMotor &motor = motors[i];
     if (motor.moving) {
-      // nh.loginfo("Motor moving");
+      allMotorsStopped = false;
       if (motor.currentStep < motor.stepsToMove) {
         digitalWrite(motor.stepPin, HIGH);
         delayMicroseconds(motor.delayBetweenSteps);
@@ -99,9 +130,12 @@ void updateMotors() {
         motor.currentPosition += (motor.targetPosition > motor.currentPosition) ? motor.stepsPerDeg / motor.gearRatio : -motor.stepsPerDeg / motor.gearRatio;
       } else {
         motor.moving = false;
-        // nh.loginfo("Goal reached");
       }
     }
+  }
+  if (allMotorsStopped && currentStatus != COMPLETED) {
+    currentStatus = COMPLETED;
+    updateArmStatus();
   }
 }
 
@@ -116,6 +150,8 @@ void updateGripper(){
 /// CALLBACK FUNCTIONS ///
 void goalStateCb(const sensor_msgs::JointState& msg) {
   nh.loginfo("Goal state received");
+  currentStatus = EXECUTING;
+  updateArmStatus();
   for (int i = 0; i < static_cast<int>(msg.position_length); i++) {
     if (i < 6) {
       motors[i].targetPosition = msg.position[i];
@@ -161,20 +197,18 @@ void limitSwitchJ6ISR() {
   motors[5].currentPosition = 0.0;  // Set J6 position to 0
 }
 
-// SUBSCRIBERS
-ros::Subscriber<sensor_msgs::JointState> goalStateSub("/goal_state", &goalStateCb);
-ros::Subscriber<std_msgs::String> gripperSub("/gripper", &gripperCb);
-
-// PUBLISHERS
-sensor_msgs::JointState jointStateMsg;
-ros::Publisher jointStatePub("/joint_states", &jointStateMsg);
+// SUBSCRIBERSrosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=115200
+ros::Subscriber<sensor_msgs::JointState> goalStateSub("/grace/arm_goal", &goalStateCb);
+ros::Subscriber<std_msgs::String> gripperSub("/grace/gripper", &gripperCb);
 
 void setup() {
   // start ROS node
+  nh.getHardware()->setBaud(115200);
   nh.initNode();
   nh.subscribe(goalStateSub);
   nh.subscribe(gripperSub);
   nh.advertise(jointStatePub);
+  nh.advertise(armStatusPub);
   
   // Initialize stepper motor pins
   for (int i = 0; i < 6; i++) {
@@ -200,7 +234,7 @@ void setup() {
 
   jointStateMsg.position_length = 6;
   jointStateMsg.position = new float[6];
-  delay(1000);  // Add a delay to allow the node to initialize
+  // delay(1000);  // Add a delay to allow the node to initialize
 }
 
 void publishJointStates() {
