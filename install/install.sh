@@ -4,7 +4,6 @@
 # sudo apt install rosbash
 # sudo apt-get install ros-melodic-gazebo* ros-melodic-robot-state-publisher ros-melodic-xacro
 # sudo apt install python3.8.0
-cd ..
 
 verbose=false
 
@@ -32,6 +31,12 @@ fi
 #####################
 # Get the full python path for the shebang here
 grace_dir="$(cd "$(dirname "$0")" && pwd)"
+# Make the script run the same in install or in just Grace
+if [[ "$grace_dir" == */install ]]; then
+    grace_dir="$(dirname "$grace_dir")"
+fi
+cd $grace_dir
+
 python_path="$grace_dir/yolovenv/bin/python"
 
 if [[ ! -f "$python_path" ]]; then

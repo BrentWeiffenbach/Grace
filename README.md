@@ -29,7 +29,7 @@ implementation onto navigation stack (move_base and amcl)
 6. Change numpy to use float64
     * Go to [yolo_detect.py](scripts/yolo_detect.py), and control click on `ros_numpy`. Then, control click on `point_cloud2`.
     * In `point_cloud2.py`, find `get_xyz_points()`, change `dtype` to `dtype=np.float64`. Saving will require a sudo password.
-7. Run the install script located at [install/install.sh](install/install.sh). **IMPORTANT**: cd into the [install](/install/) directory first.
+7. Run the install script located at [install/install.sh](install/install.sh).
 
 ## Usage
 
