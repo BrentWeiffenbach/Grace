@@ -7,5 +7,6 @@ torch
 ultralytics
 rospkg
 lapx>=0.5.2
+defusedxml
 # netifaces
 # sudo apt-get install ros-melodic-ros-numpy

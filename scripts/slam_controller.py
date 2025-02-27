@@ -21,9 +21,7 @@ from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation
 
 goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
-"""
-Gets all of the non-callable integer constants from actionlib.GoalStatus msg. 
-"""
+"""Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
 
 class SlamController:
@@ -66,10 +64,18 @@ class SlamController:
         self.move_base.wait_for_server()  # Wait until move_base server starts
         SlamController.verbose_log("move_base action server started!")
 
+        # Get initial pose of turtlebot for homing
+        self.initial_pose: Pose = self.get_current_pose()
+
     def semantic_map_callback(self, msg: Object2DArray) -> None:
         # if not self.lock:
         #     self.semantic_map = msg
         self.semantic_map = msg
+
+    def explore(self) -> None:
+        self.move_base.cancel_all_goals()
+        SlamController.verbose_log("Explore not implemented yet!")
+        # self.done_cb(3, None)
 
     def find_goal(
         self, goal: Union[RobotGoal, None], timeout: Union[int, None]
@@ -99,49 +105,44 @@ class SlamController:
             timeout or 0
         )  # or 0 since it will not be used if there is no timeout
 
-        while timeout is None or end_time > rospy.Time.now():
-            # BUG: This loop is kinda really bad. It doesn't loop much at all...
-            if self.lock:
-                continue
+        # Get the goal pose
+        explore_flag: bool
+        goal_pose: Pose
+        explore_flag, goal_pose = self.calculate_goal_pose(goal)
+        if explore_flag:
+            self.explore()
+            return self.find_goal(goal, timeout)
 
-            # Get the goal pose
-            explore_flag: bool
-            goal_pose: Pose
-            explore_flag, goal_pose = self.calculate_goal_pose(goal)
-            if explore_flag:
-                continue
+        goto_thread: threading.Thread = self.goto(
+            goal_pose, timeout=rospy.Duration(timeout or 0)
+        )
 
-            goto_thread: threading.Thread = self.goto(
-                goal_pose, timeout=rospy.Duration(timeout or 0)
-            )
+        while goto_thread.is_alive():
+            if rospy.Time.now() >= end_time and timeout is not None:
+                # Run out of time
+                rospy.logwarn("Slam Controller ran out of time to find object!")
+                self.move_base.cancel_all_goals()
+                goto_thread.join()
+                return False
 
-            while goto_thread.is_alive():
-                if rospy.Time.now() >= end_time and timeout is not None:
-                    # Run out of time
-                    rospy.logwarn("Slam Controller ran out of time to find object!")
-                    self.move_base.cancel_all_goals()
-                    goto_thread.join()
-                    return False
+            if self.goal_needs_update(current_goal=goal, goal_pose=goal_pose):
+                SlamController.verbose_log("Recalculating goal...")
+                self.move_base.cancel_goal()
+                with self.goal_lock:
+                    # Recalculate goal
+                    updated_goal_pose: Pose
+                    explore_flag, updated_goal_pose = self.calculate_goal_pose(goal)
+                    if explore_flag:
+                        # TODO: Implement explore logic
+                        self.explore()
+                        return self.find_goal(goal, timeout)
 
-                if self.goal_needs_update(current_goal=goal, goal_pose=goal_pose):
-                    SlamController.verbose_log("Recalculating goal...")
-                    self.move_base.cancel_goal()
-                    with self.goal_lock:
-                        # Recalculate goal
-                        updated_goal_pose: Pose
-                        explore_flag, updated_goal_pose = self.calculate_goal_pose(goal)
-                        if explore_flag:
-                            # TODO: Implement explore logic
-                            SlamController.verbose_log("Explore not implemented yet!")
-                            continue
-
-                        goto_thread: threading.Thread = self.goto(
-                            updated_goal_pose, timeout=rospy.Duration(timeout or 0)
-                        )
-                rospy.sleep(0.1)
-            # BUG: This should return based off goal, rather than just returning True every time
-            return True
-        return False
+                    goto_thread: threading.Thread = self.goto(
+                        updated_goal_pose, timeout=rospy.Duration(timeout or 0)
+                    )
+            rospy.sleep(0.1)
+        # BUG: This should return based off goal, rather than just returning True every time
+        return True
 
     def calculate_goal_pose(self, goal: RobotGoal) -> Tuple[bool, Pose]:
         """Calculates the goal pose and explores if necessary.
@@ -256,9 +257,9 @@ class SlamController:
                 if state == actionlib.GoalStatus.SUCCEEDED:
                     break
 
-                if rospy.Time.now() - start_time > timeout:
+                if rospy.Time.now() - start_time > timeout and timeout != 0:
                     rospy.logwarn("Slam Controller ran out of time to find object!")
-                    self.move_base.cancel_goal()
+                    self.move_base.cancel_all_goals()
                     break
                 rospy.sleep(0.1)
 
@@ -302,6 +303,12 @@ class SlamController:
         if do_update:
             rospy.sleep(1)
         return do_update
+
+    def home(self) -> None:
+        """Homes the TurtleBot back to its starting position."""
+        SlamController.verbose_log("Homing to starting location...")
+        HOMING_TIMEOUT_SEC: int = 60 * 1  # 1 minute
+        self.goto(self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC))
 
     def get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.

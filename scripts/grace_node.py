@@ -2,7 +2,7 @@
 
 
 import threading
-from typing import Dict, Final, List, Union
+from typing import Dict, Final, List, Tuple, Union
 
 import rospy
 from grace.msg import RobotGoalMsg, RobotState
@@ -222,10 +222,11 @@ class GraceNode:
                 rospy.loginfo(
                     f"Changed state from {state_to_str(_temp_state)} to {state_to_str(new_state)}."
                 )
+            self.execute_state(self.state, _temp_state)
         except ValueError as ve:
             rospy.logerr(f"Error while changing state: {ve}")
 
-    def next_state(self) -> int:
+    def next_state(self) -> Tuple[int, int]:
         """Advances `self.state` according to the state machine.
 
         * WAITING \3 EXPLORING
@@ -240,7 +241,7 @@ class GraceNode:
         * UNKNOWN \3 WAITING
 
         Returns:
-            int: The new state.
+            tuple (new_state: int, old_state: int): The new state and old state.
         """
         new_state: int
         # BUG: MIGHT cause a race condition when updating from goto
@@ -250,7 +251,7 @@ class GraceNode:
         elif self.state == RobotState.EXPLORING:
             new_state = RobotState.PLACING if self.has_object else RobotState.PICKING
         elif self.state == RobotState.PICKING:
-            new_state = RobotState.EXPLORING
+            new_state = RobotState.HOMING
         elif self.state == RobotState.PLACING:
             new_state = RobotState.HOMING
         elif self.state == RobotState.HOMING:
@@ -261,9 +262,7 @@ class GraceNode:
             )
             new_state = RobotState.WAITING
 
-        # Pass the new state through the callback function
-        self.state_callback(new_state)
-        return self.state
+        return new_state, self.state
 
     # endregion
     # region Goal
@@ -286,10 +285,11 @@ class GraceNode:
         self._goal = new_goal  # new_goal will be validated within RobotGoal's setters
         if GraceNode.verbose:
             rospy.loginfo(f"Changed goal from {_temp_goal} to {self._goal}.")
-        goal_thread = threading.Thread(target=self.goal_callback, args=(self._goal,))
-        goal_thread.start()
+        # goal_thread = threading.Thread(target=self.goal_callback, args=(self._goal,))
+        # goal_thread.start()
 
     def goal_callback(self, goal: RobotGoal) -> None:
+        # TODO: Move this out of goal_callback because why is it here
         result: bool = self.slam_controller.find_goal(goal, timeout=60 * 1)  # 1 minute
         if result:
             rospy.loginfo("Reached goal!")
@@ -298,7 +298,9 @@ class GraceNode:
         self, state: int, result: MoveBaseResult, state_dict: Dict[int, str]
     ) -> None:
         if state_dict[state] == "SUCCEEDED":
-            self.next_state()
+            new_state, old_state = self.next_state()
+            self.state_callback(new_state)
+            # self.execute_state(new_state=new_state, old_state=old_state)
         elif state_dict[state] == "ABORTED":
             rospy.logerr("move_base failed to go to the goal pose!")
 
@@ -317,9 +319,41 @@ class GraceNode:
             self.goal.parent_object,
             self.goal.child_object,
         )
-        self.state_callback(RobotState.EXPLORING)
         if GraceNode.verbose:
             rospy.loginfo(f"Successfully published goal! {self.goal}.")
+        threading.Thread(target=self.state_callback, args=(RobotState.EXPLORING,)).start()
+
+    # endregion
+    # region State Implementation
+    def execute_state(self, new_state: int, old_state: int) -> None:
+        if new_state == RobotState.WAITING:
+            self.slam_controller.move_base.cancel_all_goals()
+        elif new_state == RobotState.EXPLORING:
+            # If previous state was HOMING, then it already has an object
+            self.explore(go_to_child=not self.has_object)
+        elif new_state == RobotState.PICKING:
+            self.pick()
+        elif new_state == RobotState.PLACING:
+            self.place()
+        elif new_state == RobotState.HOMING:
+            self.slam_controller.home()
+
+    def explore(self, go_to_child: bool) -> None:
+        print("Exploring")
+        self.slam_controller.find_goal(self.goal, timeout=60 * 1)
+        ...
+
+    def pick(self) -> None:
+        print("Picking")
+        self.has_object = True
+        self.slam_controller.explore()
+        ...
+
+    def place(self) -> None:
+        print("Placing")
+        self.has_object = False
+        self.slam_controller.explore()
+        ...
 
     # endregion
     def __call__(self) -> None:
