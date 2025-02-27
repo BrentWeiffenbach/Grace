@@ -1,6 +1,7 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
+import random
 import threading
 from math import atan2, radians, sqrt
 from typing import Callable, Dict, Tuple, Union
@@ -68,87 +69,83 @@ class SlamController:
         self.initial_pose: Pose = self.get_current_pose()
 
     def semantic_map_callback(self, msg: Object2DArray) -> None:
-        # if not self.lock:
-        #     self.semantic_map = msg
         self.semantic_map = msg
 
-    def explore(self) -> None:
-        self.move_base.cancel_all_goals()
-        SlamController.verbose_log("Explore not implemented yet!")
-        # self.done_cb(3, None)
-
-    def find_goal(
-        self, goal: Union[RobotGoal, None], timeout: Union[int, None]
-    ) -> bool:
-        """Attempts to find the goal within `timeout` seconds.
-
-        Args:
-            goal (Union[RobotGoal, None]): The goal object to find.
-            timeout (Union[int, None]): The amount of time to give the goal before.
-
-        Returns:
-            bool: BUGGY. A boolean representing if the object was sucessfully found.
-        """
-        if goal is None:
-            rospy.logerr("SlamController cannot start exploring with no goal!")
-            return False
-
-        SlamController.verbose_log(f"SlamController recieved new goal! {goal}")
-
+    def explore_until_found(
+        self,
+        goal: RobotGoal,
+        find_child: bool = True,
+        exploration_timeout: rospy.Duration = rospy.Duration(60),
+    ) -> Union[Pose, None]:
         # Give semantic map time to sleep
         is_semantic_map_loaded: bool = self.wait_for_semantic_map(sleep_time_s=10)
         if not is_semantic_map_loaded:
-            return False
+            return None
 
         start_time: rospy.Time = rospy.Time.now()
-        end_time: rospy.Time = start_time + rospy.Duration(
-            timeout or 0
-        )  # or 0 since it will not be used if there is no timeout
+        exploration_timeout = max(exploration_timeout, rospy.Duration(0))
 
-        # Get the goal pose
-        explore_flag: bool
-        goal_pose: Pose
-        explore_flag, goal_pose = self.calculate_goal_pose(goal)
-        if explore_flag:
-            self.explore()
-            return self.find_goal(goal, timeout)
+        while not rospy.is_shutdown():
+            if rospy.Time.now() - start_time > exploration_timeout:
+                return None
 
-        goto_thread: threading.Thread = self.goto(
-            goal_pose, timeout=rospy.Duration(timeout or 0)
-        )
+            # See if object is in semantic map
+            if (
+                self.find_object_in_map(
+                    goal.child_object if find_child else goal.parent_object
+                )
+                is not None
+            ):
+                _, goal_pose = self.calculate_goal_pose(goal, find_child=find_child)
+                SlamController.verbose_log("Found object while exploring!")
+                return goal_pose
 
-        while goto_thread.is_alive():
-            if rospy.Time.now() >= end_time and timeout is not None:
-                # Run out of time
-                rospy.logwarn("Slam Controller ran out of time to find object!")
-                self.move_base.cancel_all_goals()
-                goto_thread.join()
-                return False
+            # Explore map
+            frontier_pose = self.compute_frontier_goal_pose()
+            if frontier_pose is None:
+                SLEEP_SECONDS = 1
+                SlamController.verbose_log(
+                    f"No frontiers found. Waiting for {SLEEP_SECONDS} {'seconds' if SLEEP_SECONDS != 1 else 'second'}."
+                )
+                rospy.sleep(SLEEP_SECONDS)
+                continue
 
-            if self.goal_needs_update(current_goal=goal, goal_pose=goal_pose):
-                SlamController.verbose_log("Recalculating goal...")
-                self.move_base.cancel_goal()
-                with self.goal_lock:
-                    # Recalculate goal
-                    updated_goal_pose: Pose
-                    explore_flag, updated_goal_pose = self.calculate_goal_pose(goal)
-                    if explore_flag:
-                        # TODO: Implement explore logic
-                        self.explore()
-                        return self.find_goal(goal, timeout)
+            # Frontier found
+            goto_thread: threading.Thread = self.goto(
+                frontier_pose, timeout=rospy.Duration(30)
+            )
+            goto_thread.join()
+            rospy.sleep(2)
+        return None
 
-                    goto_thread: threading.Thread = self.goto(
-                        updated_goal_pose, timeout=rospy.Duration(timeout or 0)
-                    )
-            rospy.sleep(0.1)
-        # BUG: This should return based off goal, rather than just returning True every time
-        return True
+    def compute_frontier_goal_pose(self) -> Union[Pose, None]:
+        random_point = Point(random.randint(0, 4), random.random(), random.random()) 
+        return self.calculate_offset(random_point)
 
-    def calculate_goal_pose(self, goal: RobotGoal) -> Tuple[bool, Pose]:
+    def navigate_to_pose(
+        self, goal_pose: Pose, timeout: rospy.Duration = rospy.Duration(60)
+    ) -> bool:
+        """A wrapper for goto. Will go to the given pose and return if it was successful.
+
+        Args:
+            goal_pose (Pose): The pose to go to.
+            timeout (rospy.Duration, optional): The amount of time given to the Turtlebot to go to the pose. Defaults to rospy.Duration(60).
+
+        Returns:
+            bool: If the TurtleBot was successful in reaching the pose (according to move_base).
+        """
+        goto_thread: threading.Thread = self.goto(obj=goal_pose, timeout=timeout)
+        goto_thread.join()
+        return self.move_base.get_state() == actionlib.GoalStatus.SUCCEEDED
+
+    def calculate_goal_pose(
+        self, goal: RobotGoal, find_child: bool = True
+    ) -> Tuple[bool, Pose]:
         """Calculates the goal pose and explores if necessary.
 
         Args:
             goal (RobotGoal): The RobotGoal.
+            find_child (bool): A flag representing if the child should be found or not. Defaults to True.
 
         Returns:
             Tuple (explore_flag: bool, goal_pose: Pose): explore_flag is a flag that represents if the object was not found, and exploring is needed.
@@ -163,7 +160,9 @@ class SlamController:
             # goal_pose is defined at this point. Keep going...
             ```
         """
-        goal_coords: Union[Point, None] = self.find_object_in_map(goal.child_object)
+        goal_coords: Union[Point, None] = self.find_object_in_map(
+            goal.child_object if find_child else goal.parent_object
+        )
         if goal_coords is None:
             SlamController.verbose_log("Object not initially found. Exploring...")
             return True, Pose()  # Empty Pose object to make it not be None
@@ -257,7 +256,7 @@ class SlamController:
                 if state == actionlib.GoalStatus.SUCCEEDED:
                     break
 
-                if rospy.Time.now() - start_time > timeout and timeout != 0:
+                if rospy.Time.now() - start_time > timeout and timeout != rospy.Duration(0):
                     rospy.logwarn("Slam Controller ran out of time to find object!")
                     self.move_base.cancel_all_goals()
                     break
@@ -308,7 +307,9 @@ class SlamController:
         """Homes the TurtleBot back to its starting position."""
         SlamController.verbose_log("Homing to starting location...")
         HOMING_TIMEOUT_SEC: int = 60 * 1  # 1 minute
-        self.goto(self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC))
+        self.move_base.cancel_all_goals()
+        self.goto(self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC)).join()
+        self.dummy_done_with_task()
 
     def get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.
@@ -349,6 +350,10 @@ class SlamController:
             )
             return False
         return True
+
+    def dummy_done_with_task(self) -> None:
+        """Used as a stub function for emulating that a task has finished."""
+        self.yield_to_master(3, None, goal_statuses)
 
     @staticmethod
     def are_points_equal(p1: Point, p2: Point, epsilon: float = 1e-6) -> bool:

@@ -285,14 +285,6 @@ class GraceNode:
         self._goal = new_goal  # new_goal will be validated within RobotGoal's setters
         if GraceNode.verbose:
             rospy.loginfo(f"Changed goal from {_temp_goal} to {self._goal}.")
-        # goal_thread = threading.Thread(target=self.goal_callback, args=(self._goal,))
-        # goal_thread.start()
-
-    def goal_callback(self, goal: RobotGoal) -> None:
-        # TODO: Move this out of goal_callback because why is it here
-        result: bool = self.slam_controller.find_goal(goal, timeout=60 * 1)  # 1 minute
-        if result:
-            rospy.loginfo("Reached goal!")
 
     def done_cb(
         self, state: int, result: MoveBaseResult, state_dict: Dict[int, str]
@@ -321,7 +313,11 @@ class GraceNode:
         )
         if GraceNode.verbose:
             rospy.loginfo(f"Successfully published goal! {self.goal}.")
-        threading.Thread(target=self.state_callback, args=(RobotState.EXPLORING,)).start()
+
+        # Kickstart GRACE
+        threading.Thread(
+            target=self.state_callback, args=(RobotState.EXPLORING,)
+        ).start()
 
     # endregion
     # region State Implementation
@@ -339,20 +335,40 @@ class GraceNode:
             self.slam_controller.home()
 
     def explore(self, go_to_child: bool) -> None:
+        assert self.goal
+        EXPLORE_SECONDS = 60
         print("Exploring")
-        self.slam_controller.find_goal(self.goal, timeout=60 * 1)
-        ...
+        found_pose = self.slam_controller.explore_until_found(
+            self.goal,
+            find_child=go_to_child,
+            exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
+        )
+        if found_pose is None:
+            rospy.logwarn("Exploration timed out without finding the object!")
+            self.state_callback(RobotState.WAITING)
+            return
+
+        success: bool = self.slam_controller.navigate_to_pose(
+            found_pose, timeout=rospy.Duration(0)
+        )
+        if success:
+            next_state, old_state = self.next_state()
+            self.state_callback(next_state)
+            return
+
+        rospy.logwarn("Failed to navigate to the object!")
+        self.state_callback(RobotState.WAITING)
 
     def pick(self) -> None:
         print("Picking")
         self.has_object = True
-        self.slam_controller.explore()
+        self.slam_controller.dummy_done_with_task()
         ...
 
     def place(self) -> None:
         print("Placing")
         self.has_object = False
-        self.slam_controller.explore()
+        self.slam_controller.dummy_done_with_task()
         ...
 
     # endregion
