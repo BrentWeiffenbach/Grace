@@ -337,7 +337,7 @@ class GraceNode:
     def explore(self, go_to_child: bool) -> None:
         assert self.goal
         EXPLORE_SECONDS = 60
-        print("Exploring")
+        rospy.loginfo("Exploring")
         found_pose = self.slam_controller.explore_until_found(
             self.goal,
             find_child=go_to_child,
@@ -360,13 +360,15 @@ class GraceNode:
         self.state_callback(RobotState.WAITING)
 
     def pick(self) -> None:
-        print("Picking")
+        rospy.loginfo("Picking")
         self.has_object = True
+        rospy.sleep(5)
         self.slam_controller.dummy_done_with_task()
 
     def place(self) -> None:
-        print("Placing")
+        rospy.loginfo("Placing")
         self.has_object = False
+        rospy.sleep(5)
         self.slam_controller.dummy_done_with_task()
 
     # endregion

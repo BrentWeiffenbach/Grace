@@ -308,7 +308,7 @@ class SlamController:
 
     def home(self) -> None:
         """Homes the TurtleBot back to its starting position."""
-        SlamController.verbose_log("Homing to starting location...")
+        rospy.loginfo("Homing")
         # BUG: It never goes to the next step after reaching near the homing location
         HOMING_TIMEOUT_SEC: int = 60 * 1  # 1 minute
         self.move_base.cancel_all_goals()
