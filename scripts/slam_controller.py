@@ -45,8 +45,6 @@ class SlamController:
         SlamController.verbose = verbose
         self.goal: RobotGoal
         self.semantic_map: Object2DArray
-        self.lock: bool = False
-        self.goal_lock = threading.Lock()
 
         self.yield_to_master: Callable = done_cb or (
             lambda: SlamController.verbose_log(
@@ -216,7 +214,9 @@ class SlamController:
         """
         self.yield_to_master(status, result, goal_statuses)
 
-    def goto(self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True) -> threading.Thread:
+    def goto(
+        self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True
+    ) -> threading.Thread:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
@@ -239,15 +239,15 @@ class SlamController:
         """
 
         def execute_goto() -> None:
-            SlamController.verbose_log(f"Going to position {obj}")
             # Go towards object
-            # https://github.com/HotBlackRobotics/hotblackrobotics.github.io/blob/master/en/blog/_posts/2018-01-29-action-client-py.md
             dest = MoveBaseGoal()
             dest.target_pose.header.frame_id = "map"
             dest.target_pose.header.stamp = rospy.Time.now()
             dest.target_pose.pose = obj
             self.move_base.send_goal(
-                goal=dest, feedback_cb=self.feedback_cb, done_cb=self.done_cb if yield_when_done else None
+                goal=dest,
+                feedback_cb=self.feedback_cb,
+                done_cb=self.done_cb if yield_when_done else None,
             )
 
             start_time: rospy.Time = rospy.Time.now()
@@ -266,7 +266,6 @@ class SlamController:
                     break
                 rospy.sleep(0.1)
 
-            self.lock = False
             # if SlamController.verbose:
             #     SlamController.verbose_log(
             #         f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."

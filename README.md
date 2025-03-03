@@ -14,9 +14,6 @@ To get the sim world used in testing clone: <https://github.com/aws-robotics/aws
 TODO:
 Make a requirements.txt
 Proper frontier navigation
-YOLO implementation
-YOLO detections in rviz
-implementation onto navigation stack (move_base and amcl)
 
 ## Installation
 

@@ -258,6 +258,7 @@ class YoloDetect:
         # range_bearing.probability = detection.Class_distribution
         # Create an array of all one's, except for the known probability
         # Hacky way to interface with Zhentian's code without actually getting Class_distributions
+        # BUG: If there are enough detections, this causes an IndexError
         _alpha: NDArray[np.float64] = np.ones(len(classes.keys()))
         _alpha[range_bearing.id] = detection.conf
         range_bearing.probability = _alpha
