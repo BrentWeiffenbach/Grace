@@ -363,13 +363,11 @@ class GraceNode:
         print("Picking")
         self.has_object = True
         self.slam_controller.dummy_done_with_task()
-        ...
 
     def place(self) -> None:
         print("Placing")
         self.has_object = False
         self.slam_controller.dummy_done_with_task()
-        ...
 
     # endregion
     def __call__(self) -> None:

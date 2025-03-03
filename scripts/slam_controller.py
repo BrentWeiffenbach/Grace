@@ -112,14 +112,14 @@ class SlamController:
 
             # Frontier found
             goto_thread: threading.Thread = self.goto(
-                frontier_pose, timeout=rospy.Duration(30)
+                frontier_pose, timeout=rospy.Duration(30), yield_when_done=False
             )
             goto_thread.join()
             rospy.sleep(2)
         return None
 
     def compute_frontier_goal_pose(self) -> Union[Pose, None]:
-        random_point = Point(random.randint(0, 4), random.random(), random.random()) 
+        random_point = Point(random.randint(0, 4), random.random(), random.random())
         return self.calculate_offset(random_point)
 
     def navigate_to_pose(
@@ -189,7 +189,7 @@ class SlamController:
             [np.cos(obj_angle + np.pi), np.sin(obj_angle + np.pi)]
         )
         # Magic number that works sorta in rviz but isn't reliable
-        offset_position = np.array([point.x, point.y]) + inverse_direction * 0.5
+        offset_position = np.array([point.x, point.y]) + inverse_direction * 0.4
         new_quaternion = Rotation.from_euler(
             "xyz", [0, 0, radians(obj_angle)]
         ).as_quat()
@@ -216,12 +216,13 @@ class SlamController:
         """
         self.yield_to_master(status, result, goal_statuses)
 
-    def goto(self, obj: Pose, timeout: rospy.Duration) -> threading.Thread:
+    def goto(self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True) -> threading.Thread:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
             obj (Pose): The pose move_base should attempt to go to.
             timeout (rospy.Duration): The timeout for the move_base wait.
+            yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
 
         Returns:
             threading.Thread: A thread containing the goto call.
@@ -246,7 +247,7 @@ class SlamController:
             dest.target_pose.header.stamp = rospy.Time.now()
             dest.target_pose.pose = obj
             self.move_base.send_goal(
-                goal=dest, feedback_cb=self.feedback_cb, done_cb=self.done_cb
+                goal=dest, feedback_cb=self.feedback_cb, done_cb=self.done_cb if yield_when_done else None
             )
 
             start_time: rospy.Time = rospy.Time.now()
@@ -256,7 +257,10 @@ class SlamController:
                 if state == actionlib.GoalStatus.SUCCEEDED:
                     break
 
-                if rospy.Time.now() - start_time > timeout and timeout != rospy.Duration(0):
+                if (
+                    rospy.Time.now() - start_time > timeout
+                    and timeout != rospy.Duration(0)
+                ):
                     rospy.logwarn("Slam Controller ran out of time to find object!")
                     self.move_base.cancel_all_goals()
                     break
@@ -306,9 +310,12 @@ class SlamController:
     def home(self) -> None:
         """Homes the TurtleBot back to its starting position."""
         SlamController.verbose_log("Homing to starting location...")
+        # BUG: It never goes to the next step after reaching near the homing location
         HOMING_TIMEOUT_SEC: int = 60 * 1  # 1 minute
         self.move_base.cancel_all_goals()
-        self.goto(self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC)).join()
+        self.goto(
+            self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC)
+        ).join()
         self.dummy_done_with_task()
 
     def get_current_pose(self) -> Pose:
