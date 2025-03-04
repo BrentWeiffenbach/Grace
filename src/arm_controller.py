@@ -45,6 +45,9 @@ class ArmController:
                 self.publish_timer.shutdown()
                 self.publish_timer = None
             self.final_point_sent = True
+        elif self.arm_status == "lost_sync":
+            rospy.logwarn("Lost sync with device, attempting to reconnect...")
+            self.reconnect()
 
     def send_next_trajectory_point(self):
         if self.current_point_index < len(self.trajectory_points):
@@ -59,9 +62,13 @@ class ArmController:
             self.arm_goal_pub.publish(joint_state)
             rospy.loginfo("Sent joint state for trajectory point {}: {}".format(self.current_point_index, joint_state.position))
             self.current_point_index += 1
-            self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point)
+            if self.publish_timer is None:
+                self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point)
         else:
             rospy.loginfo("All trajectory points have been sent")
+            if self.publish_timer is not None:
+                self.publish_timer.shutdown()
+                self.publish_timer = None
 
     def republish_current_point(self, event):
         if self.arm_status != "executing" and not self.final_point_sent:
@@ -75,6 +82,21 @@ class ArmController:
                 self.current_point_index - 1, point.positions, joint_state.position))
             self.arm_goal_pub.publish(joint_state)
             rospy.loginfo("Re-sent joint state for trajectory point {}: {}".format(self.current_point_index - 1, joint_state.position))
+
+    def reconnect(self):
+        # Reinitialize the necessary components
+        rospy.loginfo("Reinitializing connection...")
+        self.arm_status = None
+        self.current_point_index = 0
+        self.final_point_sent = False
+        if self.publish_timer is not None:
+            self.publish_timer.shutdown()
+            self.publish_timer = None
+        rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
+        rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
+        self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10)
+        rospy.loginfo("Reconnection complete. Resending trajectory points...")
+        self.send_next_trajectory_point()
 
     def run(self):
         rospy.spin()

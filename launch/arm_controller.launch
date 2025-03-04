@@ -2,7 +2,7 @@
     <!-- Launch the onboard Arduino node using rosserial -->
     <node name="arduino_node" pkg="rosserial_python" type="serial_node.py" output="screen">
         <param name="port" value="/dev/ttyUSB0"/>
-        <param name="baud" value="115200"/>
+        <param name="baud" value="250000"/>
     </node>
 
     <node name="grace_arm_controller" pkg="grace_arm_control" type="arm_controller.py" output="screen"/>

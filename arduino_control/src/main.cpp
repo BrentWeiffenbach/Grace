@@ -42,11 +42,11 @@ ros::NodeHandle nh;
 #define EN_J6 24    // E1 enable pin
 
 #define LIMIT_SWITCH_J1 3  // Limit switch pin for X-
-#define LIMIT_SWITCH_J2 2  // Limit switch pin for Y-
-#define LIMIT_SWITCH_J3 14  // Limit switch pin for Z-
-#define LIMIT_SWITCH_J4 15 // Limit switch pin for E0-
-#define LIMIT_SWITCH_J5 18  // Limit switch pin for E1-
-#define LIMIT_SWITCH_J6 19 // Limit switch pin for DigStep-
+#define LIMIT_SWITCH_J2 2  // Limit switch pin for X+
+#define LIMIT_SWITCH_J3 20  // Limit switch pin for I2C 20
+#define LIMIT_SWITCH_J4 21 // Limit switch pin for I2C 21
+#define LIMIT_SWITCH_J5 18  // Limit switch pin for D18 Z-
+#define LIMIT_SWITCH_J6 19 // Limit switch pin for D19 Z+
 
 Servo gripperServo;
 unsigned long gripperStartTime = 0;
@@ -77,19 +77,25 @@ ArmStatus currentStatus = WAITING;
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
 StepperMotor motors[6] = {
   {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},  // J1
-  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0}, // J2
-  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},  // J3
+  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 2500, 0, 0, false, LinkedList<float>(), 0.0}, // J2
+  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 1000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
   {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},   // J4
-  {STEP_J5, DIR_J5, EN_J5, 0.9, 1.0, 500, 0, 0, false, LinkedList<float>(), 0.0},           // J5
-  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 500, 0, 0, false, LinkedList<float>(), 0.0}            // J6
+  {STEP_J5, DIR_J5, EN_J5, 0.9, 32.0 / 16.0, 2500, 0, 0, false, LinkedList<float>(), 0.0},           // J5
+  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 2500, 0, 0, false, LinkedList<float>(), 0.0}            // J6
 };
 
 void moveMotor(int motorNumber) {
   StepperMotor &motor = motors[motorNumber];
+  char debugMsg[100];
+  snprintf(debugMsg, 100, "target position for motor %d: %f", motorNumber, motor.targetPosition.get(0));
+  nh.loginfo(debugMsg);
   float stepper_degrees = abs(motor.targetPosition.get(0) - motor.currentPosition) * motor.gearRatio;
   motor.stepsToMove = int(stepper_degrees / motor.stepsPerDeg);
   motor.currentStep = 0;
   motor.moving = true;
+  char logMsg[100];
+  snprintf(logMsg, 100, "Moving motor %d, steps to move: %d", motorNumber, motor.stepsToMove);
+  nh.loginfo(logMsg);
 
   if (motor.targetPosition.get(0) < motor.currentPosition) {
       digitalWrite(motor.dirPin, HIGH); // reverse
@@ -131,6 +137,7 @@ void updateMotors() {
       } else {
         nh.loginfo("Reached trajectory point, moving to next");
         motor.targetPosition.remove(0);
+        moveMotor(i);
         if (motor.targetPosition.size() == 0) {
           nh.loginfo("Stopping motor, no more target positions");
           motor.moving = false;
@@ -146,7 +153,9 @@ void updateMotors() {
 
 void updateGripper(){
   if (gripperActive && (millis() - gripperStartTime >= 5000)) {
-    gripperServo.detach();  // Stop the servo
+    if (gripperServo.read() == 180) {
+      gripperServo.detach();  // Stop the servo if it was opened
+    }
     gripperActive = false;
     nh.loginfo("Gripper stopped");
   }
@@ -185,6 +194,7 @@ void goalStateCb(const sensor_msgs::JointState& msg) {
 
 void gripperCb(const std_msgs::String& msg) {
   nh.loginfo("Gripper command received");
+  gripperServo.attach(4);
   if (strcmp(msg.data, "close") == 0) {
     gripperServo.write(0);  // Close the gripper
     nh.loginfo("Gripper closing");
@@ -201,23 +211,60 @@ void gripperCb(const std_msgs::String& msg) {
 }
 
 /// INTERUPT SERVICE REQUESTS ///
+volatile unsigned long lastDebounceTimeJ1 = 0;
+volatile unsigned long lastDebounceTimeJ2 = 0;
+volatile unsigned long lastDebounceTimeJ3 = 0;
+volatile unsigned long lastDebounceTimeJ4 = 0;
+volatile unsigned long lastDebounceTimeJ5 = 0;
+volatile unsigned long lastDebounceTimeJ6 = 0;
+const unsigned long debounceDelay = 50;  // 50 milliseconds debounce delay
+
 void limitSwitchJ1ISR() {
-  motors[0].currentPosition = 0.0;  // Set J1 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ1) > debounceDelay) {
+    motors[0].currentPosition = 0.0;  // Set J1 position to 0
+    lastDebounceTimeJ1 = currentTime;
+  }
 }
+
 void limitSwitchJ2ISR() {
-  motors[1].currentPosition = 0.0;  // Set J2 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ2) > debounceDelay) {
+    motors[1].currentPosition = 0.0;  // Set J2 position to 0
+    lastDebounceTimeJ2 = currentTime;
+  }
 }
+
 void limitSwitchJ3ISR() {
-  motors[2].currentPosition = 0.0;  // Set J3 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ3) > debounceDelay) {
+    motors[2].currentPosition = 0.0;  // Set J3 position to 0
+    lastDebounceTimeJ3 = currentTime;
+  }
 }
+
 void limitSwitchJ4ISR() {
-  motors[3].currentPosition = 0.0;  // Set J4 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ4) > debounceDelay) {
+    motors[3].currentPosition = 0.0;  // Set J4 position to 0
+    lastDebounceTimeJ4 = currentTime;
+  }
 }
+
 void limitSwitchJ5ISR() {
-  motors[4].currentPosition = 0.0;  // Set J5 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ5) > debounceDelay) {
+    motors[4].currentPosition = 0.0;  // Set J5 position to 0
+    lastDebounceTimeJ5 = currentTime;
+  }
 }
+
 void limitSwitchJ6ISR() {
-  motors[5].currentPosition = 0.0;  // Set J6 position to 0
+  unsigned long currentTime = millis();
+  if ((currentTime - lastDebounceTimeJ6) > debounceDelay) {
+    motors[5].currentPosition = 0.0;  // Set J6 position to 0
+    lastDebounceTimeJ6 = currentTime;
+  }
 }
 
 // SUBSCRIBERSrosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=115200
@@ -226,7 +273,7 @@ ros::Subscriber<std_msgs::String> gripperSub("/grace/gripper", &gripperCb);
 
 void setup() {
   // start ROS node
-  nh.getHardware()->setBaud(115200);
+  nh.getHardware()->setBaud(250000);
   nh.initNode();
   nh.subscribe(goalStateSub);
   nh.subscribe(gripperSub);
@@ -244,20 +291,26 @@ void setup() {
 
   // Initialize limit switch
   pinMode(LIMIT_SWITCH_J1, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_J2, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_J3, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_J4, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_J5, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_J6, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J1), limitSwitchJ1ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J2), limitSwitchJ2ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J3), limitSwitchJ3ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J4), limitSwitchJ4ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J5), limitSwitchJ5ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J6), limitSwitchJ6ISR, FALLING);
-
+  
   // Initialize servo
   gripperServo.attach(4);  // Attach the servo to pin 4
   
 
   jointStateMsg.position_length = 6;
-  jointStateMsg.position = new float[6];
-  // delay(1000);  // Add a delay to allow the node to initialize
+  static float jointPositions[6];
+  jointStateMsg.position = jointPositions;
+  delay(1000);  // Add a delay to allow the node to initialize
 }
 
 void publishJointStates() {
