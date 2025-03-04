@@ -14,6 +14,7 @@ class ArmController:
         self.trajectory_points = []
         self.current_point_index = 0
         self.publish_timer = None
+        self.final_point_sent = False
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
@@ -26,6 +27,7 @@ class ArmController:
         joint_trajectory = planned_trajectory.joint_trajectory
         self.trajectory_points = joint_trajectory.points
         self.current_point_index = 0
+        self.final_point_sent = False
         rospy.loginfo("Number of points in the trajectory: {}".format(len(self.trajectory_points)))
         for i, point in enumerate(self.trajectory_points):
             rospy.loginfo("Trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
@@ -35,17 +37,23 @@ class ArmController:
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
         rospy.loginfo("Arm status: {}".format(self.arm_status))
-        if self.arm_status == "completed":
+        if self.arm_status == "waiting":
             self.send_next_trajectory_point()
-        elif self.arm_status == "executing" and self.publish_timer is not None:
-            self.publish_timer.shutdown()
-            self.publish_timer = None
+        elif self.arm_status == "executing" or self.arm_status == "completed":
+            rospy.loginfo("Stopping timer so no more publishes should occur")
+            if self.publish_timer is not None:
+                self.publish_timer.shutdown()
+                self.publish_timer = None
+            self.final_point_sent = True
 
     def send_next_trajectory_point(self):
         if self.current_point_index < len(self.trajectory_points):
             point = self.trajectory_points[self.current_point_index]
             joint_state = JointState()
             joint_state.position = [math.degrees(pos) for pos in point.positions]
+            if self.current_point_index == len(self.trajectory_points) - 1:
+                rospy.loginfo("Publishing final trajectory point")
+                joint_state.header.frame_id = "Goal"
             rospy.loginfo("Publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
                 self.current_point_index, point.positions, joint_state.position))
             self.arm_goal_pub.publish(joint_state)
@@ -56,10 +64,13 @@ class ArmController:
             rospy.loginfo("All trajectory points have been sent")
 
     def republish_current_point(self, event):
-        if self.arm_status != "executing":
+        if self.arm_status != "executing" and not self.final_point_sent:
             point = self.trajectory_points[self.current_point_index - 1]
             joint_state = JointState()
             joint_state.position = [math.degrees(pos) for pos in point.positions]
+            if self.current_point_index == len(self.trajectory_points):
+                rospy.loginfo("Publishing final trajectory point")
+                joint_state.header.frame_id = "Goal"
             rospy.loginfo("Re-publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
                 self.current_point_index - 1, point.positions, joint_state.position))
             self.arm_goal_pub.publish(joint_state)

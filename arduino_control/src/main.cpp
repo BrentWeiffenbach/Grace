@@ -3,7 +3,7 @@
 #include <sensor_msgs/JointState.h>
 #include <Servo.h>
 #include <std_msgs/String.h>
-#include <moveit_msgs/DisplayTrajectory.h>
+#include <LinkedList.h>
 #include <Arduino.h>
 
 // PUBLISHERS
@@ -62,7 +62,7 @@ struct StepperMotor {
   int stepsToMove;
   int currentStep;
   bool moving;
-  float targetPosition;
+  LinkedList<float> targetPosition;
   float currentPosition;
 };
 
@@ -76,22 +76,22 @@ ArmStatus currentStatus = WAITING;
 
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
 StepperMotor motors[6] = {
-  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 500, 0, 0, false, 0.0, 0.0},  // J1
-  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 500, 0, 0, false, 0.0, 0.0}, // J2
-  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 500, 0, 0, false, 0.0, 0.0},  // J3
-  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 500, 0, 0, false, 0.0, 0.0},   // J4
-  {STEP_J5, DIR_J5, EN_J5, 0.9, 1.0, 500, 0, 0, false, 0.0, 0.0},           // J5
-  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 500, 0, 0, false, 0.0, 0.0}            // J6
+  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},  // J1
+  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0}, // J2
+  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},  // J3
+  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},   // J4
+  {STEP_J5, DIR_J5, EN_J5, 0.9, 1.0, 500, 0, 0, false, LinkedList<float>(), 0.0},           // J5
+  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 500, 0, 0, false, LinkedList<float>(), 0.0}            // J6
 };
 
 void moveMotor(int motorNumber) {
   StepperMotor &motor = motors[motorNumber];
-  float stepper_degrees = abs(motor.targetPosition - motor.currentPosition) * motor.gearRatio;
+  float stepper_degrees = abs(motor.targetPosition.get(0) - motor.currentPosition) * motor.gearRatio;
   motor.stepsToMove = int(stepper_degrees / motor.stepsPerDeg);
   motor.currentStep = 0;
   motor.moving = true;
 
-  if (motor.targetPosition < motor.currentPosition) {
+  if (motor.targetPosition.get(0) < motor.currentPosition) {
       digitalWrite(motor.dirPin, HIGH); // reverse
   } else {
       digitalWrite(motor.dirPin, LOW); // forward
@@ -127,13 +127,18 @@ void updateMotors() {
         digitalWrite(motor.stepPin, LOW);
         delayMicroseconds(motor.delayBetweenSteps);
         motor.currentStep++;
-        motor.currentPosition += (motor.targetPosition > motor.currentPosition) ? motor.stepsPerDeg / motor.gearRatio : -motor.stepsPerDeg / motor.gearRatio;
+        motor.currentPosition += (motor.targetPosition.get(0) > motor.currentPosition) ? motor.stepsPerDeg / motor.gearRatio : -motor.stepsPerDeg / motor.gearRatio;
       } else {
-        motor.moving = false;
+        nh.loginfo("Reached trajectory point, moving to next");
+        motor.targetPosition.remove(0);
+        if (motor.targetPosition.size() == 0) {
+          nh.loginfo("Stopping motor, no more target positions");
+          motor.moving = false;
+        }
       }
     }
   }
-  if (allMotorsStopped && currentStatus != COMPLETED) {
+  if (allMotorsStopped && currentStatus == EXECUTING) {
     currentStatus = COMPLETED;
     updateArmStatus();
   }
@@ -149,14 +154,32 @@ void updateGripper(){
 
 /// CALLBACK FUNCTIONS ///
 void goalStateCb(const sensor_msgs::JointState& msg) {
-  nh.loginfo("Goal state received");
-  currentStatus = EXECUTING;
-  updateArmStatus();
+  nh.loginfo(("Trajectory point received"));
+  // add point to target position list
   for (int i = 0; i < static_cast<int>(msg.position_length); i++) {
     if (i < 6) {
-      motors[i].targetPosition = msg.position[i];
-      moveMotor(i);
+      motors[i].targetPosition.add(msg.position[i]);
     }
+  }
+  
+  // check if it is final point in trajectory
+  const char* header = msg.header.frame_id;
+  const char* goal = "Goal";
+  char debugMsg[100];
+  snprintf(debugMsg, 100, "Received joint state: %f, header: %s, goal: %s", static_cast<double>(msg.position[0]), header, goal);
+  nh.loginfo(debugMsg);
+  if (strcmp(header, goal) == 0) {
+    nh.loginfo("Received the final point in the trajectory");
+    currentStatus = EXECUTING;
+    updateArmStatus();
+    for (int j = 0; j < 6; j++) {
+      moveMotor(j);
+    }
+  
+  } else {
+    nh.loginfo("Point is not goal");
+    currentStatus = WAITING;
+    updateArmStatus();
   }
 }
 
