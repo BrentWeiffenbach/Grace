@@ -34,4 +34,4 @@ To launch the turtlebot navigation in sim, run `roslaunch grace grace.launch gma
 
 ## Known Issues
 
-A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.
+* A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.

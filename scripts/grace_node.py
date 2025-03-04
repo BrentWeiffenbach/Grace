@@ -332,7 +332,12 @@ class GraceNode:
         elif new_state == RobotState.PLACING:
             self.place()
         elif new_state == RobotState.HOMING:
-            self.slam_controller.home()
+            self.home()
+    
+    def home(self) -> None:
+        rospy.loginfo("Homing")
+        self.slam_controller.dummy_done_with_task()
+        ...
 
     def explore(self, go_to_child: bool) -> None:
         assert self.goal
@@ -349,7 +354,7 @@ class GraceNode:
             return
 
         success: bool = self.slam_controller.navigate_to_pose(
-            found_pose, timeout=rospy.Duration(0)
+            found_pose, timeout=rospy.Duration(100)
         )
         if success:
             next_state, old_state = self.next_state()
@@ -362,13 +367,11 @@ class GraceNode:
     def pick(self) -> None:
         rospy.loginfo("Picking")
         self.has_object = True
-        rospy.sleep(5)
         self.slam_controller.dummy_done_with_task()
 
     def place(self) -> None:
         rospy.loginfo("Placing")
         self.has_object = False
-        rospy.sleep(5)
         self.slam_controller.dummy_done_with_task()
 
     # endregion
@@ -392,7 +395,7 @@ if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     grace = GraceNode(verbose=True)
     rospy.on_shutdown(grace.shutdown)
-    grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
+    grace.goal = RobotGoal(parent_object="cup", child_object="dining table")
     rospy.sleep(3)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

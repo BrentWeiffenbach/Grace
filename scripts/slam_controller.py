@@ -3,7 +3,7 @@
 
 import random
 import threading
-from math import atan2, radians, sqrt
+from math import atan2, radians
 from typing import Callable, Dict, Tuple, Union
 
 import actionlib
@@ -58,6 +58,8 @@ class SlamController:
             callback=self.semantic_map_callback,
         )
 
+        self.est_goal_pub = rospy.Publisher(name="/semantic_map/est_goal_pose", data_class=Pose, queue_size=10)
+
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         SlamController.verbose_log("Starting move_base action server...")
         self.move_base.wait_for_server()  # Wait until move_base server starts
@@ -85,7 +87,7 @@ class SlamController:
 
         while not rospy.is_shutdown():
             if rospy.Time.now() - start_time > exploration_timeout:
-                return None
+                break
 
             # See if object is in semantic map
             if (
@@ -117,7 +119,9 @@ class SlamController:
         return None
 
     def compute_frontier_goal_pose(self) -> Union[Pose, None]:
+        return None
         random_point = Point(random.randint(0, 4), random.random(), random.random())
+        rospy.loginfo("Using random point as substitute for frontier")
         return self.calculate_offset(random_point)
 
     def navigate_to_pose(
@@ -132,6 +136,7 @@ class SlamController:
         Returns:
             bool: If the TurtleBot was successful in reaching the pose (according to move_base).
         """
+        self.est_goal_pub.publish(goal_pose)
         goto_thread: threading.Thread = self.goto(obj=goal_pose, timeout=timeout)
         goto_thread.join()
         return self.move_base.get_state() == actionlib.GoalStatus.SUCCEEDED
@@ -275,36 +280,6 @@ class SlamController:
         thread.start()
         return thread
 
-    def goal_needs_update(
-        self, current_goal: RobotGoal, goal_pose: Pose, going_to_child: bool = True
-    ) -> bool:
-        # BUG: This heuristic is very bad and simply does not work
-        # find_object_in_map will return None even when it has seen an object before
-        # Is this a problem with semantic_map?
-        # return False # Keeping this return False will return the code to being stable
-        return self.move_base.get_state() == actionlib.GoalStatus.ABORTED
-        new_point = self.find_object_in_map(
-            current_goal.child_object if going_to_child else current_goal.parent_object
-        )
-
-        if new_point is None:
-            return False
-
-        distance: float = sqrt(
-            (goal_pose.position.x - new_point.x) ** 2
-            + (goal_pose.position.y - new_point.y) ** 2
-            + (goal_pose.position.z - new_point.z) ** 2
-        )
-
-        # Check if the points are not equal (aka the position has changed)
-        # do_update: bool = not SlamController.are_points_equal(
-        #     p1=goal_pose.position, p2=new_point, epsilon=1e-2
-        # )
-        threshold = 0.5
-        do_update: bool = distance > threshold
-        if do_update:
-            rospy.sleep(1)
-        return do_update
 
     def home(self) -> None:
         """Homes the TurtleBot back to its starting position."""

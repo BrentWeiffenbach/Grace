@@ -47,7 +47,7 @@ fi
 $verbose && echo "Changing shebangs..."
 
 # Declare files that use relative shebangs here:
-python_files=("yolo_detect.py" "add_marker.py" "ultralytics_patch.py" "grace_node.py" "slam_controller.py")
+python_files=("yolo_detect.py" "add_marker.py" "ultralytics_patch.py" "grace_node.py" "slam_controller.py" "frontier_search.py")
 
 for python_file in "${python_files[@]}"; do
     full_path="scripts/$python_file"
@@ -156,7 +156,7 @@ fi
 # TODO: Add verbosity to this
 [[ -d out/SLAM ]] || mkdir out/SLAM
 
-$verbose && echo "Running install_frontier.sh..."
-$verbose && ./install/install_frontier.sh -v || ./install/install_frontier.sh
+# $verbose && echo "Running install_frontier.sh..."
+# $verbose && ./install/install_frontier.sh -v || ./install/install_frontier.sh
 
 exit 0 # Successfully exit
