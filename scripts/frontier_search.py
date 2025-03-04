@@ -28,9 +28,15 @@ class FrontierSearch:
         self.map_img = self.convert_to_img()
 
         # TODO: Move this out of map callback to its own on demand callback
-        self.compute_centroids(self.map_img)
+        keypoints = self.compute_centroids(self.map_img)
+        self.publish_markers(keypoints)
 
-    def est_goal_cb(self, msg: Pose) -> None: ...  # TODO: Use for selecting frontiers
+    def est_goal_cb(self, msg: Pose) -> None:
+        # TODO: Use for selecting frontiers
+        in_costmap = self.is_pose_in_occupancy_grid(msg)
+        rospy.loginfo(
+            f"The given pose {'is' if in_costmap else 'is not'} in the costmap."
+        )
 
     def convert_to_img(self) -> cv2.typing.MatLike:
         grayscale_map = {-1: 0, 0: 128, 100: 255}
@@ -49,13 +55,19 @@ class FrontierSearch:
         kp, _ = sift.detectAndCompute(image, None, None, False)  # type: ignore
 
         valid_kps = [k for k in kp if 128 >= image[int(k.pt[1]), int(k.pt[0])] > 0]
+        keypoints = [
+            Point(*self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0)
+            for k in valid_kps
+        ]
 
-        # TODO: Change this from a MarkerArray to a more suitable topic type
+        return keypoints
+
+    def publish_markers(self, keypoints: list):
         marker_array = MarkerArray()
         marker_array.markers = []
         marker_id = 0
 
-        for k in valid_kps:
+        for k in keypoints:
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = rospy.Time.now()
@@ -64,9 +76,7 @@ class FrontierSearch:
             marker.type = Marker.SPHERE
             marker.action = Marker.ADD
 
-            marker.pose.position = Point(
-                *self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0
-            )
+            marker.pose.position = k
 
             marker.scale.x = 0.05
             marker.scale.y = 0.05
@@ -83,6 +93,20 @@ class FrontierSearch:
             marker_id += 1
         self.markpub.publish(marker_array)
         # return cv2.drawKeypoints(image, valid_kps, None, (255, 0, 0), flags=0)  # type: ignore
+
+    def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:
+        # Detects if a given pose is in the occupancy grid
+        # Might not be accurate. Was kind of difficult to test this.
+        assert self.map_img is not None and self.map_img.size > 0
+        occupancy_coords = self.convert_map_coords_to_img_coords(
+            (pose.position.x, pose.position.y)
+        )
+        if occupancy_coords[0] > len(self.map_img) or occupancy_coords[1] > len(
+            self.map_img
+        ):
+            return False
+
+        return 255 >= self.map_img[occupancy_coords] > 0
 
     def convert_img_coords_to_map_coords(
         self, img_coords: Tuple[float, float]
@@ -101,6 +125,19 @@ class FrontierSearch:
         ) * self.map.info.resolution, self.map.info.origin.position.y + float(
             img_coords[1]
         ) * self.map.info.resolution
+
+    def convert_map_coords_to_img_coords(
+        self, map_coords: Tuple[float, float]
+    ) -> Tuple[int, int]:
+        assert self.map
+        x = int(
+            (map_coords[0] - self.map.info.origin.position.x) / self.map.info.resolution
+        )
+
+        y = int(
+            (map_coords[1] - self.map.info.origin.position.x) / self.map.info.resolution
+        )
+        return x, y
 
     def run(self) -> None:
         rospy.spin()
