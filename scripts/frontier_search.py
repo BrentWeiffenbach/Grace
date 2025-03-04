@@ -1,6 +1,7 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
+from typing import Sequence, Tuple
 import cv2
 import numpy as np
 import rospy
@@ -12,6 +13,8 @@ from visualization_msgs.msg import Marker, MarkerArray
 class FrontierSearch:
     def __init__(self) -> None:
         self.map: OccupancyGrid
+        self.map_img: cv2.typing.MatLike
+        """A variable to store the computed grayscale map"""
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_callback)
         self.est_goal_sub = rospy.Subscriber(
             "/semantic_map/est_goal_pose", Pose, self.est_goal_cb
@@ -22,10 +25,12 @@ class FrontierSearch:
 
     def map_callback(self, msg: OccupancyGrid) -> None:
         self.map = msg
-        # TODO: Move this out of map callback to its own on demand callback
-        self.compute_centroids(self.convert_to_img())
+        self.map_img = self.convert_to_img()
 
-    def est_goal_cb(self, msg: Pose) -> None: ... # TODO: Use for selecting frontiers
+        # TODO: Move this out of map callback to its own on demand callback
+        self.compute_centroids(self.map_img)
+
+    def est_goal_cb(self, msg: Pose) -> None: ...  # TODO: Use for selecting frontiers
 
     def convert_to_img(self) -> cv2.typing.MatLike:
         grayscale_map = {-1: 0, 0: 128, 100: 255}
@@ -37,13 +42,15 @@ class FrontierSearch:
         return grayscale_image  # type: ignore
 
     def compute_centroids(self, image: cv2.typing.MatLike):
-        sift = cv2.SIFT.create()
+        sift: cv2.SIFT = cv2.SIFT.create()
 
         image = np.uint8(image)  # type: ignore
-        kp, descriptors = sift.detectAndCompute(image, None, None, False)  # type: ignore
+        kp: Sequence[cv2.KeyPoint]
+        kp, _ = sift.detectAndCompute(image, None, None, False)  # type: ignore
 
         valid_kps = [k for k in kp if 128 >= image[int(k.pt[1]), int(k.pt[0])] > 0]
 
+        # TODO: Change this from a MarkerArray to a more suitable topic type
         marker_array = MarkerArray()
         marker_array.markers = []
         marker_id = 0
@@ -58,11 +65,7 @@ class FrontierSearch:
             marker.action = Marker.ADD
 
             marker.pose.position = Point(
-                self.map.info.origin.position.x
-                + float(k.pt[0]) * self.map.info.resolution,
-                self.map.info.origin.position.y
-                + float(k.pt[1]) * self.map.info.resolution,
-                0.0,
+                *self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0
             )
 
             marker.scale.x = 0.05
@@ -80,6 +83,24 @@ class FrontierSearch:
             marker_id += 1
         self.markpub.publish(marker_array)
         # return cv2.drawKeypoints(image, valid_kps, None, (255, 0, 0), flags=0)  # type: ignore
+
+    def convert_img_coords_to_map_coords(
+        self, img_coords: Tuple[float, float]
+    ) -> Tuple[float, float]:
+        """Converts the given coordinates from image coordinates to coordinates in the actual map.
+
+        Args:
+            img_coords (Tuple[float, float]): The image coordinates to convert.
+
+        Returns:
+            tuple (x: float, y: float): The converted coordinates in the map frame.
+        """
+        assert self.map
+        return self.map.info.origin.position.x + float(
+            img_coords[0]
+        ) * self.map.info.resolution, self.map.info.origin.position.y + float(
+            img_coords[1]
+        ) * self.map.info.resolution
 
     def run(self) -> None:
         rospy.spin()
