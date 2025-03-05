@@ -8,7 +8,7 @@ import rospy
 from grace.msg import RobotGoalMsg, RobotState
 from move_base_msgs.msg import MoveBaseResult
 
-# Note: from slam_controller import SlamController is locally imported below
+# Note: from grace_navigation import GraceNavigation is locally imported below
 
 
 def get_constants_from_msg(msg: type) -> Dict[int, str]:
@@ -194,9 +194,9 @@ class GraceNode:
             )
 
         # Local import to resolve circular importing
-        from slam_controller import SlamController
+        from scripts.grace_navigation import GraceNavigation
 
-        self.slam_controller = SlamController(
+        self.grace_navigation = GraceNavigation(
             done_cb=self.done_cb, verbose=GraceNode.verbose
         )
 
@@ -336,7 +336,7 @@ class GraceNode:
     def execute_state(self, new_state: int, old_state: int) -> None:
         # BUG: Immediately goes through entire state machine after first goal is reached
         if new_state == RobotState.WAITING:
-            self.slam_controller.move_base.cancel_all_goals()
+            self.grace_navigation.move_base.cancel_all_goals()
         elif new_state == RobotState.EXPLORING:
             # If previous state was HOMING, then it already has an object (invariant I believe)
             self.explore(go_to_child=not self.has_object)
@@ -349,13 +349,13 @@ class GraceNode:
 
     def home(self) -> None:
         rospy.loginfo("Homing")
-        self.slam_controller.dummy_done_with_task()
+        self.grace_navigation.dummy_done_with_task()
 
     def explore(self, go_to_child: bool) -> None:
         assert self.goal
         EXPLORE_SECONDS = 60
         rospy.loginfo("Exploring")
-        found_pose = self.slam_controller.explore_until_found(
+        found_pose = self.grace_navigation.explore_until_found(
             self.goal,
             find_child=go_to_child,
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
@@ -365,7 +365,7 @@ class GraceNode:
             self.change_state(RobotState.WAITING)
             return
 
-        success: bool = self.slam_controller.navigate_to_pose(
+        success: bool = self.grace_navigation.navigate_to_pose(
             found_pose, timeout=rospy.Duration(100)
         )
         if success:
@@ -379,12 +379,12 @@ class GraceNode:
     def pick(self) -> None:
         rospy.loginfo("Picking")
         self.has_object = True
-        self.slam_controller.dummy_done_with_task()
+        self.grace_navigation.dummy_done_with_task()
 
     def place(self) -> None:
         rospy.loginfo("Placing")
         self.has_object = False
-        self.slam_controller.dummy_done_with_task()
+        self.grace_navigation.dummy_done_with_task()
 
     # endregion
     def __call__(self) -> None:
@@ -398,7 +398,7 @@ class GraceNode:
 
     def shutdown(self) -> None:
         """The callback for when the GraceNode needs to be shutdown through a ROSInterruptExecption."""
-        self.slam_controller.shutdown()
+        self.grace_navigation.shutdown()
         if GraceNode.verbose:
             rospy.loginfo("Shutting down GraceNode!")
 

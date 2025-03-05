@@ -25,30 +25,30 @@ goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
 
-class SlamController:
+class GraceNavigation:
     verbose: bool = False
 
     @staticmethod
     def verbose_log(log: str) -> None:
-        """Logs the input to the console if `SlamController.verbose` is True. Also uses `rospy.logdebug()`.
+        """Logs the input to the console if `GraceNavigation.verbose` is True. Also uses `rospy.logdebug()`.
 
         Args:
             log (str): The log to print conditionally.
         """
-        if SlamController.verbose:
+        if GraceNavigation.verbose:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
     def __init__(
         self, done_cb: Union[Callable, None] = None, verbose: bool = False
     ) -> None:
-        SlamController.verbose = verbose
+        GraceNavigation.verbose = verbose
         self.goal: RobotGoal
         self.semantic_map: Object2DArray
 
         self.yield_to_master: Callable = done_cb or (
-            lambda: SlamController.verbose_log(
-                "done_cb not provided to SlamController!"
+            lambda: GraceNavigation.verbose_log(
+                "done_cb not provided to GraceNavigation!"
             )
         )
 
@@ -61,9 +61,9 @@ class SlamController:
         self.est_goal_pub = rospy.Publisher(name="/semantic_map/est_goal_pose", data_class=Pose, queue_size=10)
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
-        SlamController.verbose_log("Starting move_base action server...")
+        GraceNavigation.verbose_log("Starting move_base action server...")
         self.move_base.wait_for_server()  # Wait until move_base server starts
-        SlamController.verbose_log("move_base action server started!")
+        GraceNavigation.verbose_log("move_base action server started!")
 
         # Get initial pose of turtlebot for homing
         self.initial_pose: Pose = self.get_current_pose()
@@ -97,14 +97,14 @@ class SlamController:
                 is not None
             ):
                 _, goal_pose = self.calculate_goal_pose(goal, find_child=find_child)
-                SlamController.verbose_log("Found object while exploring!")
+                GraceNavigation.verbose_log("Found object while exploring!")
                 return goal_pose
 
             # Explore map
             frontier_pose = self.compute_frontier_goal_pose()
             if frontier_pose is None:
                 SLEEP_SECONDS = 1
-                SlamController.verbose_log(
+                GraceNavigation.verbose_log(
                     f"No frontiers found. Waiting for {SLEEP_SECONDS} {'seconds' if SLEEP_SECONDS != 1 else 'second'}."
                 )
                 rospy.sleep(SLEEP_SECONDS)
@@ -175,7 +175,7 @@ class SlamController:
             goal.child_object if find_child else goal.parent_object
         )
         if goal_coords is None:
-            SlamController.verbose_log("Object not initially found. Exploring...")
+            GraceNavigation.verbose_log("Object not initially found. Exploring...")
             return True, Pose()  # Empty Pose object to make it not be None
 
         goal_pose: Pose = self.calculate_offset(goal_coords)
@@ -274,13 +274,13 @@ class SlamController:
                     rospy.Time.now() - start_time > timeout
                     and timeout != rospy.Duration(0)
                 ):
-                    rospy.logwarn("Slam Controller ran out of time to find object!")
+                    rospy.logwarn("Grace Navigator ran out of time to find object!")
                     self.move_base.cancel_all_goals()
                     break
                 rospy.sleep(0.1)
 
-            # if SlamController.verbose:
-            #     SlamController.verbose_log(
+            # if GraceNavigation.verbose:
+            #     GraceNavigation.verbose_log(
             #         f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."
             #     )
 
@@ -335,7 +335,7 @@ class SlamController:
         result = result or rospy.wait_for_message("/semantic_map", Object2DArray)
         if not result:
             rospy.logerr(
-                f"Slam Controller could not receive a map after waiting for {sleep_time_s} seconds."
+                f"Grace Navigation could not receive a map after waiting for {sleep_time_s} seconds."
             )
             return False
         return True
@@ -367,16 +367,16 @@ class SlamController:
         rospy.spin()
 
     def shutdown(self) -> None:
-        SlamController.verbose_log("Shutting down SlamController.")
+        GraceNavigation.verbose_log("Shutting down GraceNavigation.")
         self.move_base.cancel_all_goals()
 
 
 if __name__ == "__main__":
-    rospy.init_node("slam_controller")
-    slam_controller = SlamController(verbose=True)
-    rospy.on_shutdown(slam_controller.shutdown)
+    rospy.init_node("grace_navigation")
+    grace_navigation = GraceNavigation(verbose=True)
+    rospy.on_shutdown(grace_navigation.shutdown)
     try:
-        slam_controller.run()
+        grace_navigation.run()
     except rospy.ROSInterruptException:
-        slam_controller.shutdown()
-        rospy.loginfo("SlamController shut down.")
+        grace_navigation.shutdown()
+        rospy.loginfo("GraceNavigation shut down.")
