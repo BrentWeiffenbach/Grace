@@ -1,11 +1,12 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
 
 
-from typing import Sequence, Tuple
+from typing import List, Sequence, Tuple
+
 import cv2
 import numpy as np
 import rospy
-from geometry_msgs.msg import Pose, Point, Quaternion
+from geometry_msgs.msg import Point, Pose, Quaternion
 from nav_msgs.msg import OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -19,7 +20,7 @@ class FrontierSearch:
         self.est_goal_sub = rospy.Subscriber(
             "/semantic_map/est_goal_pose", Pose, self.est_goal_cb
         )
-        self.markpub = rospy.Publisher(
+        self.centroid_marker_pub = rospy.Publisher(
             "/frontier/centroids", MarkerArray, queue_size=10
         )
 
@@ -47,7 +48,7 @@ class FrontierSearch:
         grayscale_image = np.uint8(grayscale_image)
         return grayscale_image  # type: ignore
 
-    def compute_centroids(self, image: cv2.typing.MatLike):
+    def compute_centroids(self, image: cv2.typing.MatLike) -> List[Point]:
         sift: cv2.SIFT = cv2.SIFT.create()
 
         image = np.uint8(image)  # type: ignore
@@ -55,14 +56,14 @@ class FrontierSearch:
         kp, _ = sift.detectAndCompute(image, None, None, False)  # type: ignore
 
         valid_kps = [k for k in kp if 128 >= image[int(k.pt[1]), int(k.pt[0])] > 0]
-        keypoints = [
+        keypoints: List[Point] = [
             Point(*self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0)
             for k in valid_kps
         ]
 
         return keypoints
 
-    def publish_markers(self, keypoints: list):
+    def publish_markers(self, keypoints: list, namespace: str = "sift_keypoints"):
         marker_array = MarkerArray()
         marker_array.markers = []
         marker_id = 0
@@ -71,7 +72,7 @@ class FrontierSearch:
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = rospy.Time.now()
-            marker.ns = "sift_keypoints"
+            marker.ns = namespace
             marker.id = marker_id
             marker.type = Marker.SPHERE
             marker.action = Marker.ADD
@@ -91,7 +92,7 @@ class FrontierSearch:
 
             marker_array.markers.append(marker)
             marker_id += 1
-        self.markpub.publish(marker_array)
+        self.centroid_marker_pub.publish(marker_array)
         # return cv2.drawKeypoints(image, valid_kps, None, (255, 0, 0), flags=0)  # type: ignore
 
     def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:

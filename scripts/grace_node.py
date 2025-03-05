@@ -334,6 +334,7 @@ class GraceNode:
     # endregion
     # region State Implementation
     def execute_state(self, new_state: int, old_state: int) -> None:
+        # BUG: Immediately goes through entire state machine after first goal is reached
         if new_state == RobotState.WAITING:
             self.slam_controller.move_base.cancel_all_goals()
         elif new_state == RobotState.EXPLORING:
@@ -406,7 +407,7 @@ if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     grace = GraceNode(verbose=True)
     rospy.on_shutdown(grace.shutdown)
-    grace.goal = RobotGoal(parent_object="cup", child_object="dining table")
+    grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
     rospy.sleep(3)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

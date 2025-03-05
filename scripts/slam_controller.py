@@ -123,6 +123,13 @@ class SlamController:
         random_point = Point(random.randint(0, 4), random.random(), random.random())
         rospy.loginfo("Using random point as substitute for frontier")
         return self.calculate_offset(random_point)
+    
+    def frontier_explore_to_object(self, obj_pose: Pose) -> Pose:
+        # Tells frontier_search to go in the direction of the goal pose
+        # Stops frontier_search when the goal pose is within the costmap
+        # TODO: Decide whether to implement this or not
+        # It might be better to implement this somewhere else
+        ...
 
     def navigate_to_pose(
         self, goal_pose: Pose, timeout: rospy.Duration = rospy.Duration(60)
@@ -139,6 +146,7 @@ class SlamController:
         self.est_goal_pub.publish(goal_pose)
         goto_thread: threading.Thread = self.goto(obj=goal_pose, timeout=timeout)
         goto_thread.join()
+        # BUG: move_base.get_state here can still return the previous goal's get_state
         return self.move_base.get_state() == actionlib.GoalStatus.SUCCEEDED
 
     def calculate_goal_pose(
@@ -192,7 +200,7 @@ class SlamController:
             [np.cos(obj_angle + np.pi), np.sin(obj_angle + np.pi)]
         )
         # Magic number that works sorta in rviz but isn't reliable
-        offset_position = np.array([point.x, point.y]) + inverse_direction * 0.4
+        offset_position = np.array([point.x, point.y]) + inverse_direction * 0.5
         new_quaternion = Rotation.from_euler(
             "xyz", [0, 0, radians(obj_angle)]
         ).as_quat()
