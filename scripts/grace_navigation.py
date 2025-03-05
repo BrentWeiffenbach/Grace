@@ -2,7 +2,6 @@
 
 
 import random
-import threading
 from math import atan2, radians
 from typing import Callable, Dict, Tuple, Union
 
@@ -10,16 +9,16 @@ import actionlib
 import numpy as np
 import rospy
 from geometry_msgs.msg import Point, Pose, Quaternion
-from grace.msg import Object2D, Object2DArray
-from grace_node import RobotGoal, get_constants_from_msg
+from grace.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
+from grace_node import GraceNode, RobotGoal, get_constants_from_msg
 from move_base_msgs.msg import (
     MoveBaseAction,
-    MoveBaseFeedback,
     MoveBaseGoal,
     MoveBaseResult,
 )
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation
+from std_msgs.msg import Bool
 
 goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
@@ -39,18 +38,15 @@ class GraceNavigation:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
-    def __init__(
-        self, done_cb: Union[Callable, None] = None, verbose: bool = False
-    ) -> None:
+    def __init__(self, verbose: bool = False) -> None:
         GraceNavigation.verbose = verbose
         self.goal: RobotGoal
+        self.state: int
         self.semantic_map: Object2DArray
 
-        self.yield_to_master: Callable = done_cb or (
-            lambda: GraceNavigation.verbose_log(
-                "done_cb not provided to GraceNavigation!"
-            )
-        )
+        self.yield_to_master: Callable = (
+            lambda: rospy.logfatal("yield_to_master is not actually implemented!")
+        )  # TODO: Remove this and make it use ROS topics instead of trying to go to yield to grace_node
 
         self.semantic_map_sub = rospy.Subscriber(
             name="/semantic_map",
@@ -58,25 +54,81 @@ class GraceNavigation:
             callback=self.semantic_map_callback,
         )
 
-        self.est_goal_pub = rospy.Publisher(name="/semantic_map/est_goal_pose", data_class=Pose, queue_size=10)
+        self.goal_sub = rospy.Subscriber(
+            name=GraceNode.GOAL_TOPIC,
+            data_class=RobotGoalMsg,
+            callback=self.goal_callback,
+        )
+
+        self.state_sub = rospy.Subscriber(
+            name=GraceNode.STATE_TOPIC,
+            data_class=RobotState,
+            callback=self.state_callback,
+        )
+
+        # self.has_object_sub = rospy.Subscriber(name=has_object_TOPIC, data_class=Bool, callback=self.has_object_)
+
+        self.est_goal_pub = rospy.Publisher(
+            name="/semantic_map/est_goal_pose", data_class=Pose, queue_size=10
+        )
+
+        self.status_pub = rospy.Publisher(
+            name=GraceNode.NAV_STATUS_TOPIC,
+            data_class=actionlib.GoalStatus,
+            queue_size=10,
+        )
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         GraceNavigation.verbose_log("Starting move_base action server...")
         self.move_base.wait_for_server()  # Wait until move_base server starts
         GraceNavigation.verbose_log("move_base action server started!")
 
-        # Get initial pose of turtlebot for homing
-        self.initial_pose: Pose = self.get_current_pose()
-
     def semantic_map_callback(self, msg: Object2DArray) -> None:
         self.semantic_map = msg
 
+    def goal_callback(self, msg: RobotGoalMsg) -> None:
+        goal = RobotGoal(place_location=msg.place_location, pick_object=msg.pick_object)
+        self.goal = goal
+
+    def state_callback(self, msg: RobotState) -> None:
+        self.state = msg.state
+        if msg.state == RobotState.EXPLORING:
+            self.explore()
+
+    def publish_status(self, status: int) -> None:
+        # Publish LOST as the state since it will never naturally be published
+        dummy_goal_status = actionlib.GoalStatus(None, status, None)
+        self.status_pub.publish(dummy_goal_status)
+
+    def publish_timeout(self) -> None:
+        # Publish LOST as the state since it will never naturally be published
+        self.publish_status(actionlib.GoalStatus.LOST)
+
+    def explore(self) -> None:
+        assert self.goal
+        EXPLORE_SECONDS = 60
+        rospy.loginfo("Exploring")
+        found_pose = self.explore_until_found(
+            exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
+        )
+        if found_pose is None:
+            rospy.logwarn("Exploration timed out without finding the object!")
+            self.publish_timeout()
+            return
+
+        success: bool = self.navigate_to_pose(found_pose, timeout=rospy.Duration(100))
+        if success:
+            self.publish_status(actionlib.GoalStatus.SUCCEEDED)
+            return
+
+        rospy.logwarn("Failed to navigate to the object!")
+        self.publish_timeout()
+
     def explore_until_found(
         self,
-        goal: RobotGoal,
-        find_child: bool = True,
         exploration_timeout: rospy.Duration = rospy.Duration(60),
     ) -> Union[Pose, None]:
+        assert self.goal
         # Give semantic map time to sleep
         is_semantic_map_loaded: bool = self.wait_for_semantic_map(sleep_time_s=10)
         if not is_semantic_map_loaded:
@@ -85,19 +137,36 @@ class GraceNavigation:
         start_time: rospy.Time = rospy.Time.now()
         exploration_timeout = max(exploration_timeout, rospy.Duration(0))
 
+        has_object = rospy.wait_for_message(
+            topic=GraceNode.HAS_OBJECT_TOPIC,
+            topic_type=Bool,
+            timeout=rospy.Duration(10),
+        )
+
+        assert has_object
+
+        has_object = has_object.data
+
         while not rospy.is_shutdown():
+            if self.state != RobotState.EXPLORING:
+                self.move_base.cancel_all_goals()
+                break
+
             if rospy.Time.now() - start_time > exploration_timeout:
                 break
 
             # See if object is in semantic map
             if (
                 self.find_object_in_map(
-                    goal.child_object if find_child else goal.parent_object
+                    self.goal.place_location if has_object else self.goal.pick_object
                 )
                 is not None
             ):
-                _, goal_pose = self.calculate_goal_pose(goal, find_child=find_child)
-                GraceNavigation.verbose_log("Found object while exploring!")
+                rospy.loginfo(f"Has object: {has_object}")
+                _, goal_pose = self.calculate_goal_pose(has_object)
+                GraceNavigation.verbose_log(
+                    f"Found {self.goal.place_location if has_object else self.goal.pick_object} while exploring!"
+                )
                 return goal_pose
 
             # Explore map
@@ -111,10 +180,7 @@ class GraceNavigation:
                 continue
 
             # Frontier found
-            goto_thread: threading.Thread = self.goto(
-                frontier_pose, timeout=rospy.Duration(30), yield_when_done=False
-            )
-            goto_thread.join()
+            self.goto(frontier_pose, timeout=rospy.Duration(30), yield_when_done=False)
             rospy.sleep(2)
         return None
 
@@ -123,7 +189,7 @@ class GraceNavigation:
         random_point = Point(random.randint(0, 4), random.random(), random.random())
         rospy.loginfo("Using random point as substitute for frontier")
         return self.calculate_offset(random_point)
-    
+
     def frontier_explore_to_object(self, obj_pose: Pose) -> Pose:
         # Tells frontier_search to go in the direction of the goal pose
         # Stops frontier_search when the goal pose is within the costmap
@@ -144,19 +210,15 @@ class GraceNavigation:
             bool: If the TurtleBot was successful in reaching the pose (according to move_base).
         """
         self.est_goal_pub.publish(goal_pose)
-        goto_thread: threading.Thread = self.goto(obj=goal_pose, timeout=timeout)
-        goto_thread.join()
+        self.goto(obj=goal_pose, timeout=timeout)
         # BUG: move_base.get_state here can still return the previous goal's get_state
         return self.move_base.get_state() == actionlib.GoalStatus.SUCCEEDED
 
-    def calculate_goal_pose(
-        self, goal: RobotGoal, find_child: bool = True
-    ) -> Tuple[bool, Pose]:
+    def calculate_goal_pose(self, has_object: bool) -> Tuple[bool, Pose]:
         """Calculates the goal pose and explores if necessary.
 
         Args:
-            goal (RobotGoal): The RobotGoal.
-            find_child (bool): A flag representing if the child should be found or not. Defaults to True.
+            has_object (bool): A flag representing if the child should be found or not.
 
         Returns:
             Tuple (explore_flag: bool, goal_pose: Pose): explore_flag is a flag that represents if the object was not found, and exploring is needed.
@@ -172,7 +234,7 @@ class GraceNavigation:
             ```
         """
         goal_coords: Union[Point, None] = self.find_object_in_map(
-            goal.child_object if find_child else goal.parent_object
+            self.goal.place_location if has_object else self.goal.pick_object
         )
         if goal_coords is None:
             GraceNavigation.verbose_log("Object not initially found. Exploring...")
@@ -210,14 +272,6 @@ class GraceNavigation:
         new_pose.orientation = Quaternion(*new_quaternion)
         return new_pose
 
-    def feedback_cb(self, feedback: MoveBaseFeedback) -> None:
-        """The callback when the robot moves.
-
-        Args:
-            feedback (MoveBaseFeedback): The MoveBaseFeedback msg. It contains a `base_position` attribute.
-        """
-        pass
-
     def done_cb(self, status: int, result: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
 
@@ -225,80 +279,40 @@ class GraceNavigation:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
             result (MoveBaseResult): The result of the move base.
         """
-        self.yield_to_master(status, result, goal_statuses)
+        self.publish_status(status)
 
     def goto(
         self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True
-    ) -> threading.Thread:
+    ) -> None:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
             obj (Pose): The pose move_base should attempt to go to.
             timeout (rospy.Duration): The timeout for the move_base wait.
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
-
-        Returns:
-            threading.Thread: A thread containing the goto call.
-
-        Example:
-        ```
-            goto_thread: threading.Thread = self.goto(goal_pose, timeout=rospy.Duration(timeout or 0))
-            while goto_thread.is_alive():
-                # Do stuff
-                if you_want_to_cancel:
-                    self.move_base.cancel_all_goals()
-                    goto_thread.join()
-        ```
         """
+        # Go towards object
+        dest = MoveBaseGoal()
+        dest.target_pose.header.frame_id = "map"
+        dest.target_pose.header.stamp = rospy.Time.now()
+        dest.target_pose.pose = obj
+        self.move_base.send_goal(
+            goal=dest,
+            done_cb=self.done_cb if yield_when_done else None,
+        )
 
-        def execute_goto() -> None:
-            # Go towards object
-            dest = MoveBaseGoal()
-            dest.target_pose.header.frame_id = "map"
-            dest.target_pose.header.stamp = rospy.Time.now()
-            dest.target_pose.pose = obj
-            self.move_base.send_goal(
-                goal=dest,
-                feedback_cb=self.feedback_cb,
-                done_cb=self.done_cb if yield_when_done else None,
-            )
+        start_time: rospy.Time = rospy.Time.now()
+        while not rospy.is_shutdown():
+            # Can be any of the actionlib.GoalStatus constants
+            state: int = self.move_base.get_state()
+            if state == actionlib.GoalStatus.SUCCEEDED:
+                break
 
-            start_time: rospy.Time = rospy.Time.now()
-            while not rospy.is_shutdown():
-                # Can be any of the actionlib.GoalStatus constants
-                state: int = self.move_base.get_state()
-                if state == actionlib.GoalStatus.SUCCEEDED:
-                    break
-
-                if (
-                    rospy.Time.now() - start_time > timeout
-                    and timeout != rospy.Duration(0)
-                ):
-                    rospy.logwarn("Grace Navigator ran out of time to find object!")
-                    self.move_base.cancel_all_goals()
-                    break
-                rospy.sleep(0.1)
-
-            # if GraceNavigation.verbose:
-            #     GraceNavigation.verbose_log(
-            #         f"The move_base state at the end of goto was {goal_statuses.get(state)}({state})."
-            #     )
-
-        thread = threading.Thread(target=execute_goto)
-        thread.start()
-        return thread
-
-
-    def home(self) -> None:
-        """Homes the TurtleBot back to its starting position."""
-        rospy.loginfo("Homing")
-        # BUG: It never goes to the next step after reaching near the homing location
-        HOMING_TIMEOUT_SEC: int = 60 * 1  # 1 minute
-        self.move_base.cancel_all_goals()
-        self.goto(
-            self.initial_pose, timeout=rospy.Duration(secs=HOMING_TIMEOUT_SEC)
-        ).join()
-        self.dummy_done_with_task()
+            if rospy.Time.now() - start_time > timeout and timeout != rospy.Duration(0):
+                rospy.logwarn("Grace Navigator ran out of time to find object!")
+                self.move_base.cancel_all_goals()
+                break
+            rospy.sleep(0.1)
 
     def get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.
@@ -342,7 +356,7 @@ class GraceNavigation:
 
     def dummy_done_with_task(self) -> None:
         """Used as a stub function for emulating that a task has finished."""
-        self.yield_to_master(3, None, goal_statuses)
+        self.publish_status(3)
 
     @staticmethod
     def are_points_equal(p1: Point, p2: Point, epsilon: float = 1e-6) -> bool:

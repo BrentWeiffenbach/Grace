@@ -49,4 +49,5 @@
     </group>
 
     <node name="GraceNode" pkg="grace" type="grace_node.py" output="screen"></node>
+    <node name="GraceNavigation" pkg="grace" type="grace_navigation.py" output="screen"></node>
 </launch>

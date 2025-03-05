@@ -1,14 +1,10 @@
 #!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
+from typing import Dict, Final, List, Union
 
-
-import threading
-from typing import Dict, Final, List, Tuple, Union
-
+import actionlib
 import rospy
 from grace.msg import RobotGoalMsg, RobotState
-from move_base_msgs.msg import MoveBaseResult
-
-# Note: from grace_navigation import GraceNavigation is locally imported below
+from std_msgs.msg import Bool
 
 
 def get_constants_from_msg(msg: type) -> Dict[int, str]:
@@ -29,9 +25,9 @@ def get_constants_from_msg(msg: type) -> Dict[int, str]:
 
 
 class RobotGoal:
-    """A RobotGoal consists of a `parent_object` and a `child_object`. The `parent_object` is the destination to place the `child_object`.
+    """A RobotGoal consists of a `place_location` and a `pick_object`. The `place_location` is the destination to place the `pick_object`.
 
-    An example is with a coffee cup and a table, the `parent_object` would be the table and the `child_object` is the coffee cup.
+    An example is with a coffee cup and a table, the `place_location` would be the table and the `pick_object` is the coffee cup.
     """
 
     classes: List[str]= ["person","bicycle","car","motorcycle","airplane","bus","train",
@@ -47,48 +43,48 @@ class RobotGoal:
                          "microwave","oven","toaster","sink","refrigerator","book","clock",
                          "vase","scissors","teddy bear","hair drier","toothbrush"]  # fmt: skip
 
-    def __init__(self, parent_object: str, child_object: str) -> None:
+    def __init__(self, place_location: str, pick_object: str) -> None:
         """
         Args:
-            parent_object (str): The object to place the `child_object` on. Must be a valid YOLO class.
-            child_object (str): The object to place on a `parent_object`. Must be a valid YOLO class.
+            place_location (str): The object to place the `pick_object` on. Must be a valid YOLO class.
+            pick_object (str): The object to place on a `place_location`. Must be a valid YOLO class.
         """
-        self.parent_object = parent_object
-        self.child_object = child_object
+        self.place_location = place_location
+        self.pick_object = pick_object
 
     @property
-    def parent_object(self) -> str:
-        """The object to place the `child_object` on. The table in a coffee cup/table relationship.
+    def place_location(self) -> str:
+        """The object to place the `pick_object` on. The table in a coffee cup/table relationship.
 
         Returns:
-            str: The parent object's class name.
+            str: The place location object's class name.
         """
-        return self._parent_object
+        return self._place_location
 
     @property
-    def child_object(self) -> str:
-        """The object to place on a `parent_object`. The coffee cup in a coffee cup/table relationship.
+    def pick_object(self) -> str:
+        """The object to place on a `place_location`. The coffee cup in a coffee cup/table relationship.
 
         Returns:
-            str: The child object's class name.
+            str: The pick object's class name.
         """
-        return self._child_object
+        return self._pick_object
 
-    @parent_object.setter
-    def parent_object(self, new_parent_object: str) -> None:
-        if not RobotGoal.is_valid_class(new_parent_object):
+    @place_location.setter
+    def place_location(self, place_location: str) -> None:
+        if not RobotGoal.is_valid_class(place_location):
             raise ValueError(
-                f"Invalid parent object. {new_parent_object} is not in RobotGoal.classes!"
+                f"Invalid place location. {place_location} is not in RobotGoal.classes!"
             )
-        self._parent_object = new_parent_object
+        self._place_location = place_location
 
-    @child_object.setter
-    def child_object(self, new_child_object: str) -> None:
-        if not RobotGoal.is_valid_class(new_child_object):
+    @pick_object.setter
+    def pick_object(self, new_pick_object: str) -> None:
+        if not RobotGoal.is_valid_class(new_pick_object):
             raise ValueError(
-                f"Invalid child object. {new_child_object} is not in RobotGoal.classes!"
+                f"Invalid pick object. {new_pick_object} is not in RobotGoal.classes!"
             )
-        self._child_object = new_child_object
+        self._pick_object = new_pick_object
 
     @staticmethod
     def is_valid_class(_cls: str) -> bool:
@@ -98,15 +94,15 @@ class RobotGoal:
         if not isinstance(other, RobotGoal):
             return False
         return (
-            self.child_object == other.child_object
-            and self.parent_object == other.parent_object
+            self.pick_object == other.pick_object
+            and self.place_location == other.place_location
         )
 
     def __str__(self) -> str:
-        return f"Goal: Place {self.child_object} on a {self.parent_object}"
+        return f"Goal: Place {self.pick_object} on a {self.place_location}"
 
     def __repr__(self) -> str:
-        return f"RobotGoal(parent_object={self.parent_object}, child_object={self.child_object})"
+        return f"RobotGoal(place_location={self.place_location}, pick_object={self.pick_object})"
 
 
 _states: Dict[int, str] = get_constants_from_msg(RobotState)
@@ -134,6 +130,7 @@ def state_to_str(state: int) -> str:
     return f"{_states.get(state)} ({state})"
 
 
+# region GraceNode
 class GraceNode:
     """The main node for controlling the turtlebot. Is the link between a (as of January 23, 2025) theoretical frontend and the turtlebot. Send a goal to /grace/goal to kickstart the application.
 
@@ -143,18 +140,30 @@ class GraceNode:
         verbose (bool, optional): Whether verbose output should be logged. Defaults to False.
         STATE_TOPIC (str, Final): The topic to publish the states to.
         GOAL_TOPIC (str, Final): The topic to publish the goals to.
+        NAV_STATUS_TOPIC (str, Final): Topic navigation status is published to.
+        ARM_CONTROL_TOPIC (str, Final): Topic for arm controller status being published to.
+        HAS_OBJECT_TOPIC (str, Final): Topic for if the arm has an object or not.
 
     Publishers:
         state_publisher (RobotState): Publishes to STATE_TOPIC. Details the current state of GRACE.
-        goal_publisher (RobotGoal): Publishes to GOAL_TOPIC. Contains GRACE's parent and child object.
+        goal_publisher (RobotGoalMsg): Publishes to GOAL_TOPIC. Contains GRACE's place loaction and pick object.
+        has_object_publisher (Bool): Publishes to HAS_OBJECT_TOPIC if GRACE has an object.
 
     Subscribers:
-        state_subscriber (RobotState): Subscribes to STATE_TOPIC. Used to keep `state` updated.
+        nav_status_subscriber (actionlib.GoalStatus): Subscribes to NAV_STATUS_TOPIC. Used to update state based on status of exploring/navigation.
+        arm_control_status_subscriber (Bool): Subscribes to ARM_CONTROL_TOPIC. Updates state based on top level arm controller status.
     """
 
     verbose: bool = False
+
     STATE_TOPIC: Final[str] = "/grace/state"
     GOAL_TOPIC: Final[str] = "/grace/goal"
+    NAV_STATUS_TOPIC: Final[str] = "/grace/nav_status"
+    ARM_CONTROL_TOPIC: Final[str] = "/grace/arm_control_status"
+    HAS_OBJECT_TOPIC: Final[str] = "/grace/has_object"
+
+    nav_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
+    """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
     def __init__(self, verbose: bool = False) -> None:
         """Initializes the GraceNode.
@@ -169,21 +178,34 @@ class GraceNode:
         # TODO: Add a user-friendly input to change the goal and display the state.
         self._state = RobotState.WAITING
         self._goal = None
+
         self.has_object: bool = False
 
+        # state pub
         self.state_publisher = rospy.Publisher(
-            name=GraceNode.STATE_TOPIC, data_class=RobotState, queue_size=5
+            name=GraceNode.STATE_TOPIC, data_class=RobotState, queue_size=5, latch=True
         )
-
+        # goal pub
         self.goal_publisher = rospy.Publisher(
             name=GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, queue_size=5
         )
-        self.state_subscriber = rospy.Subscriber(
-            GraceNode.STATE_TOPIC, data_class=RobotState, callback=self.change_state
+        # has_object pub
+        self.has_object_publisher = rospy.Publisher(
+            name=GraceNode.HAS_OBJECT_TOPIC, data_class=Bool, queue_size=2, latch=True
         )
-        # self.goal_subscriber = rospy.Subscriber(
-        #     GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, callback=self.goal_callback
-        # )
+        self.has_object_publisher.publish(False)
+        # navigation status sub
+        self.nav_status_subscriber = rospy.Subscriber(
+            GraceNode.NAV_STATUS_TOPIC,
+            data_class=actionlib.GoalStatus,
+            callback=self.navigation_cb,
+        )
+        # arm control status
+        self.arm_control_status_subscriber = rospy.Subscriber(
+            GraceNode.ARM_CONTROL_TOPIC,
+            data_class=Bool,
+            callback=self.arm_control_cb,
+        )
 
         self.state = self._state  # Run the guard function in the setter
         self.state_publisher.publish(self.state)
@@ -193,14 +215,7 @@ class GraceNode:
                 f"GRACE is currently {state_to_str(self.state)}{f'. {self.goal}.' if self.goal else ' with no current goal.'}"
             )
 
-        # Local import to resolve circular importing
-        from scripts.grace_navigation import GraceNavigation
-
-        self.grace_navigation = GraceNavigation(
-            done_cb=self.done_cb, verbose=GraceNode.verbose
-        )
-
-    # region State
+    # region Setters
     @property
     def state(self) -> int:
         """The state of the turtlebot. The default state is `RobotState.WAITING`.
@@ -217,79 +232,17 @@ class GraceNode:
                 f"Invalid state {new_state}. It is not a defined state in RobotState.msg"
             )
         self._state = new_state
+        self.state_publisher.publish(self.state)
 
-    def change_state(self, new_state: Union[RobotState, int]) -> None:
-        """Used for changing the state of the state machine. Will advance the state machine based on the provided state.
-        This is not the `state.setter` because setting the state and setting & advancing the state should be separate.
-
-        Args:
-            new_state (RobotState | int): The state to change `self.state` to.
-        """
-        _temp_state: int = self.state  # Used for verbose logging
-        try:
-            cleaned_state: int
-            if isinstance(new_state, int):
-                cleaned_state = new_state
-            else:
-                cleaned_state = new_state.state
-            self.state = cleaned_state
-            if GraceNode.verbose:
-                rospy.loginfo(
-                    f"Changed state from {state_to_str(_temp_state)} to {state_to_str(cleaned_state)}."
-                )
-            self.execute_state(self.state, _temp_state)
-        except ValueError as ve:
-            rospy.logerr(f"Error while changing state: {ve}")
-
-    def next_state(self) -> Tuple[int, int]:
-        """Determines what `self.state` will be next according to the state machine. Note that this does not change `self.state`.
-
-        * WAITING \3 EXPLORING
-        * PICKING \3 HOMING
-        * PLACING \3 HOMING
-        * EXPLORING \3
-            * Arrived at child \3 PICKING
-            * Arrived at parent \3 PLACING
-        * HOMING \3
-            * Object Picked up \3 EXPLORING
-            * Object Placed \3 WAITING
-        * UNKNOWN \3 WAITING
-
-        Returns:
-            tuple (new_state: int, old_state: int): The new state and old state.
-        """
-        new_state: int
-        # BUG: MIGHT cause a race condition when updating from goto
-        # Not sure yet...
-        if self.state == RobotState.WAITING:
-            new_state = RobotState.EXPLORING
-        elif self.state == RobotState.EXPLORING:
-            new_state = RobotState.PLACING if self.has_object else RobotState.PICKING
-        elif self.state == RobotState.PICKING:
-            new_state = RobotState.HOMING
-        elif self.state == RobotState.PLACING:
-            new_state = RobotState.HOMING
-        elif self.state == RobotState.HOMING:
-            new_state = RobotState.EXPLORING if self.has_object else RobotState.WAITING
-        else:
-            rospy.logwarn(
-                "Unknown state; cannot go to next state. Defaulting to WAITING"
-            )
-            new_state = RobotState.WAITING
-
-        return new_state, self.state
-
-    # endregion
-    # region Goal
     @property
     def goal(self) -> Union[RobotGoal, None]:
-        """The goal of the turtlebot. Contains a parent_object and a child_object. See `RobotGoal`'s documentation for details.
+        """The goal of the turtlebot. Contains a place_location and a pick_object. See `RobotGoal`'s documentation for details.
 
         Returns:
             RobotGoal: The turtlebot's goal.
 
         Usage:
-            >>> grace.goal = RobotGoal(parent_object="dining table", child_object="cup") # Set the goal
+            >>> grace.goal = RobotGoal(place_location="dining table", pick_object="cup") # Set the goal
             >>> grace.publish_goal() # Publish the goal
         """
         return self._goal
@@ -301,90 +254,70 @@ class GraceNode:
         if GraceNode.verbose:
             rospy.loginfo(f"Changed goal from {_temp_goal} to {self._goal}.")
 
-    def done_cb(
-        self, state: int, result: MoveBaseResult, state_dict: Dict[int, str]
-    ) -> None:
-        if state_dict[state] == "SUCCEEDED":
-            new_state, old_state = self.next_state()
-            self.change_state(new_state)
-        elif state_dict[state] == "ABORTED":
-            rospy.logerr("move_base failed to go to the goal pose!")
-
-    def publish_goal(self) -> None:
-        """Publishes GraceNode's current goal using `goal_publisher`. If `goal` is None, it will log an error and do nothing.
-
-        Usage:
-            >>> grace.goal = RobotGoal(parent_object="dining table", child_object="cup") # Set the goal
-            >>> grace.publish_goal() # Publish the goal
+    # endregion
+    # region Status Callbacks
+    def navigation_cb(self, state_msg: actionlib.GoalStatus) -> None:
         """
-        if self.goal is None:
-            rospy.logerr("Attempted to publish an empty goal in GraceNode. Ignoring...")
+        Callback function for navigation status updates.
+        This function is called when the navigation status changes. It updates the
+        state of the robot based on the navigation result and the current state of
+        the robot.
+        Args:
+            state_msg (int): The navigation status code.
+        Returns:
+            None
+        """
+        # only update state if we are exploring
+        if self.state != RobotState.EXPLORING:
             return
+        if GraceNode.nav_statuses[state_msg.status] == "SUCCEEDED":
+            if self.has_object:
+                self.state = RobotState.PLACING
+            else:
+                self.state = RobotState.PICKING
+        elif GraceNode.nav_statuses[state_msg.status] == "ABORTED":
+            self.state = RobotState.WAITING
+            rospy.logerr("move_base failed to go to the goal pose!")
+        # LOST represents the node exploration timing out without finding the object
+        elif GraceNode.nav_statuses[state_msg.status] == "LOST":
+            self.state = RobotState.WAITING
+            rospy.logerr("move_base timed out without finding the goal object!")
 
-        self.goal_publisher.publish(
-            self.goal.parent_object,
-            self.goal.child_object,
-        )
-        if GraceNode.verbose:
-            rospy.loginfo(f"Successfully published goal! {self.goal}.")
+    def arm_control_cb(self, is_completed: Bool) -> None:
+        """
+        Callback function to control the state of the robot's arm.
+        This function updates the robot's state based on the completion status of
+        arm movements such as picking, placing, and homing. The state transitions
+        are as follows:
+        - If the robot is in the WAITING or EXPLORING state, the function returns immediately.
+        - If the robot is in the PICKING state and the action is completed, the state changes to HOMING and the robot is marked as having an object.
+        - If the robot is in the PLACING state and the action is completed, the state changes to HOMING.
+        - If the robot is in the HOMING state:
+            - If the robot has an object and the action is completed, the object is released and the state changes to WAITING.
+            - If the action is completed without having an object, the state changes to EXPLORING.
+        Args:
+            is_completed (Bool): A flag indicating whether the arm movement action is completed.
+        """
 
-        # Kickstart GRACE
-        threading.Thread(target=self.change_state, args=(RobotState.EXPLORING,)).start()
+        # only update arm state from picking / placing / homeing
+        if self.state == RobotState.WAITING or self.state == RobotState.EXPLORING:
+            return
+        if self.state == RobotState.PICKING and is_completed.data:
+            self.state = RobotState.HOMING
+            self.has_object = True
+            self.has_object_publisher.publish(self.has_object)
+        elif self.state == RobotState.PLACING and is_completed.data:
+            self.has_object = False
+            self.has_object_publisher.publish(self.has_object)
+            self.state = RobotState.HOMING
+        elif self.state == RobotState.HOMING:
+            if self.has_object and is_completed.data:
+                self.state = RobotState.EXPLORING
+            elif is_completed.data:
+                self.state = RobotState.WAITING
 
     # endregion
-    # region State Implementation
-    def execute_state(self, new_state: int, old_state: int) -> None:
-        # BUG: Immediately goes through entire state machine after first goal is reached
-        if new_state == RobotState.WAITING:
-            self.grace_navigation.move_base.cancel_all_goals()
-        elif new_state == RobotState.EXPLORING:
-            # If previous state was HOMING, then it already has an object (invariant I believe)
-            self.explore(go_to_child=not self.has_object)
-        elif new_state == RobotState.PICKING:
-            self.pick()
-        elif new_state == RobotState.PLACING:
-            self.place()
-        elif new_state == RobotState.HOMING:
-            self.home()
-
-    def home(self) -> None:
-        rospy.loginfo("Homing")
-        self.grace_navigation.dummy_done_with_task()
-
-    def explore(self, go_to_child: bool) -> None:
-        assert self.goal
-        EXPLORE_SECONDS = 60
-        rospy.loginfo("Exploring")
-        found_pose = self.grace_navigation.explore_until_found(
-            self.goal,
-            find_child=go_to_child,
-            exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
-        )
-        if found_pose is None:
-            rospy.logwarn("Exploration timed out without finding the object!")
-            self.change_state(RobotState.WAITING)
-            return
-
-        success: bool = self.grace_navigation.navigate_to_pose(
-            found_pose, timeout=rospy.Duration(100)
-        )
-        if success:
-            next_state, old_state = self.next_state()
-            self.change_state(next_state)
-            return
-
-        rospy.logwarn("Failed to navigate to the object!")
-        self.change_state(RobotState.WAITING)
-
-    def pick(self) -> None:
-        rospy.loginfo("Picking")
-        self.has_object = True
-        self.grace_navigation.dummy_done_with_task()
-
-    def place(self) -> None:
-        rospy.loginfo("Placing")
-        self.has_object = False
-        self.grace_navigation.dummy_done_with_task()
+    # region Node Functions
 
     # endregion
     def __call__(self) -> None:
@@ -398,16 +331,37 @@ class GraceNode:
 
     def shutdown(self) -> None:
         """The callback for when the GraceNode needs to be shutdown through a ROSInterruptExecption."""
-        self.grace_navigation.shutdown()
         if GraceNode.verbose:
             rospy.loginfo("Shutting down GraceNode!")
+
+    def publish_goal(self) -> None:
+        """Publishes GraceNode's current goal using `goal_publisher`. If `goal` is None, it will log an error and do nothing.
+
+        Usage:
+            >>> grace.goal = RobotGoal(place_location="dining table", pick_object="cup") # Set the goal
+            >>> grace.publish_goal() # Publish the goal
+        """
+        if self.goal is None:
+            rospy.logerr("Attempted to publish an empty goal in GraceNode. Ignoring...")
+            return
+
+        self.goal_publisher.publish(
+            self.goal.place_location,
+            self.goal.pick_object,
+        )
+        if GraceNode.verbose:
+            rospy.loginfo(f"Successfully published goal! {self.goal}.")
+
+        # Start exploring!
+        self.state = RobotState.EXPLORING
 
 
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     grace = GraceNode(verbose=True)
     rospy.on_shutdown(grace.shutdown)
-    grace.goal = RobotGoal(parent_object="dining table", child_object="cup")
+    # TODO: Implement interface for setting goals
+    grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
     rospy.sleep(3)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

@@ -1,2 +1,2 @@
-string parent_object
-string child_object
+string place_location
+string pick_object
