@@ -20,6 +20,10 @@ class ArmController:
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10)
 
+        # Dummy topics for MoveIt! to recognize the controllers
+        self.dummy_arm_controller_pub = rospy.Publisher('grace/arm_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
+        self.dummy_gripper_controller_pub = rospy.Publisher('grace/gripper_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
+
     def move_group_result_callback(self, msg):
         rospy.loginfo("Received move group result")
         move_group_action = msg.result

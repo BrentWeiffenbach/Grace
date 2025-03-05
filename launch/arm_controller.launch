@@ -4,6 +4,9 @@
         <param name="port" value="/dev/ttyUSB0"/>
         <param name="baud" value="250000"/>
     </node>
-
+    <!-- top level controller -->
     <node name="grace_arm_controller" pkg="grace_arm_control" type="arm_controller.py" output="screen"/>
+    
+    <!-- joint state converter -->
+    <node name="grace_arm_joint_converter" pkg="grace_arm_control" type="arm_angles_converter.py" output="screen"/>
 </launch>

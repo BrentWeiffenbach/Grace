@@ -8,7 +8,7 @@
 
 // PUBLISHERS
 sensor_msgs::JointState jointStateMsg;
-ros::Publisher jointStatePub("/grace/arm_joint_states", &jointStateMsg);
+ros::Publisher jointStatePub("/grace/arm_joint_angles", &jointStateMsg);
 std_msgs::String armStatusMsg;
 ros::Publisher armStatusPub("/grace/arm_status", &armStatusMsg);
 
@@ -75,19 +75,20 @@ enum ArmStatus {
 ArmStatus currentStatus = WAITING;
 
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
+// TODO TUNE DELAY
 StepperMotor motors[6] = {
-  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},  // J1
-  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 2500, 0, 0, false, LinkedList<float>(), 0.0}, // J2
-  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 1000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
-  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 500, 0, 0, false, LinkedList<float>(), 0.0},   // J4
-  {STEP_J5, DIR_J5, EN_J5, 0.9, 32.0 / 16.0, 2500, 0, 0, false, LinkedList<float>(), 0.0},           // J5
-  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 2500, 0, 0, false, LinkedList<float>(), 0.0}            // J6
+  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 8000, 0, 0, false, LinkedList<float>(), 0.0},  // J1
+  {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 8000, 0, 0, false, LinkedList<float>(), 0.0}, // J2
+  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 8000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
+  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 8000, 0, 0, false, LinkedList<float>(), 0.0},   // J4
+  {STEP_J5, DIR_J5, EN_J5, 0.9, 32.0 / 16.0, 8000, 0, 0, false, LinkedList<float>(), 0.0},           // J5
+  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 8000, 0, 0, false, LinkedList<float>(), 0.0}            // J6
 };
 
 void moveMotor(int motorNumber) {
   StepperMotor &motor = motors[motorNumber];
   char debugMsg[100];
-  snprintf(debugMsg, 100, "target position for motor %d: %f", motorNumber, motor.targetPosition.get(0));
+  snprintf(debugMsg, 100, "target position for motor %d: %f", motorNumber, static_cast<double>(motor.targetPosition.get(0)));
   nh.loginfo(debugMsg);
   float stepper_degrees = abs(motor.targetPosition.get(0) - motor.currentPosition) * motor.gearRatio;
   motor.stepsToMove = int(stepper_degrees / motor.stepsPerDeg);
@@ -137,7 +138,6 @@ void updateMotors() {
       } else {
         nh.loginfo("Reached trajectory point, moving to next");
         motor.targetPosition.remove(0);
-        moveMotor(i);
         if (motor.targetPosition.size() == 0) {
           nh.loginfo("Stopping motor, no more target positions");
           motor.moving = false;
