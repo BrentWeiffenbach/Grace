@@ -32,6 +32,8 @@ Proper frontier navigation
 
 To launch the turtlebot navigation in sim, run `roslaunch grace grace.launch gmapping:=true`. Find the other arguments in the [grace](launch/grace.launch) launch file
 
+You can also set the output to verbose by using the `verbose:=true` argument.
+
 ## Known Issues
 
 * A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.

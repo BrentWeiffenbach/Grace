@@ -305,5 +305,7 @@ class YoloDetect:
 
 if __name__ == "__main__":
     rospy.init_node(name="yolo_detect")
-    yolo_detect = YoloDetect()
+    verbose = rospy.get_param("~verbose", False)
+    assert type(verbose) is bool
+    yolo_detect = YoloDetect(verbose=verbose)
     yolo_detect.run()

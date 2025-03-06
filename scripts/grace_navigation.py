@@ -624,7 +624,9 @@ class GraceNavigation:
 
 if __name__ == "__main__":
     rospy.init_node("grace_navigation")
-    grace_navigation = GraceNavigation(verbose=False)
+    verbose = rospy.get_param("~verbose", False)
+    assert type(verbose) is bool
+    grace_navigation = GraceNavigation(verbose=verbose)
     rospy.on_shutdown(grace_navigation.shutdown)
     rospy.sleep(5)
     try:

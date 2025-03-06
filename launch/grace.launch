@@ -7,6 +7,7 @@
     <arg name="yolo" default="false" doc="set flags to indicate that YOLO should run." />
     <arg name="map_file" default="$(find grace)/maps/my_map.yaml"/>
     <arg name="show_gazebo" default="true" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
+    <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
 
     <group if="$(arg sim)">
         <!-- Launch the TurtleBot world if simulation-->
@@ -35,7 +36,9 @@
 
     <!-- Launch YOLO -->
     <group if="$(arg yolo)">
-        <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen" />
+        <node name="yolo_detect" pkg="grace" type="yolo_detect.py" output="screen">
+            <param name="verbose" value="$(arg verbose)" />
+        </node>
         <node name="semantic_slam" pkg="grace" type="semantic_slam.py" output="screen" />
     </group>
 
@@ -47,6 +50,10 @@
         <include file="$(find turtlebot_teleop)/launch/keyboard_teleop.launch"/>
     </group>
 
-    <node name="GraceNode" pkg="grace" type="grace_node.py" output="screen"></node>
-    <node name="GraceNavigation" pkg="grace" type="grace_navigation.py" output="screen"></node>
+    <node name="GraceNode" pkg="grace" type="grace_node.py" output="screen">
+        <param name="verbose" value="$(arg verbose)" />
+    </node>
+    <node name="GraceNavigation" pkg="grace" type="grace_navigation.py" output="screen">
+        <param name="verbose" value="$(arg verbose)" />
+    </node>
 </launch>

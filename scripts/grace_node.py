@@ -390,9 +390,11 @@ def rotate_360() -> None:
 
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
+    verbose = rospy.get_param("~verbose", False)
+    assert type(verbose) is bool
     rospy.sleep(5)
     rotate_360()
-    grace = GraceNode(verbose=True)
+    grace = GraceNode(verbose=verbose)
     grace.state = RobotState.WAITING
     rospy.on_shutdown(grace.shutdown)
     grace.goal = RobotGoal(place_location="dining table", pick_object="bench")
