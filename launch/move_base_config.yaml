@@ -1,3 +1,6 @@
 local_costmap:
   inflation_layer:
-    enabled: false
+    enabled: true # defaults to true
+
+DWAPlannerROS:
+  xy_goal_tolerance: 0.15 # defaults to 0.15

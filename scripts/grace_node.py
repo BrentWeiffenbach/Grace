@@ -5,6 +5,7 @@ import actionlib
 import rospy
 from grace.msg import RobotGoalMsg, RobotState
 from std_msgs.msg import Bool
+from geometry_msgs.msg import Twist
 
 
 def get_constants_from_msg(msg: type) -> Dict[int, str]:
@@ -207,9 +208,6 @@ class GraceNode:
             callback=self.arm_control_cb,
         )
 
-        self.state = self._state  # Run the guard function in the setter
-        self.state_publisher.publish(self.state)
-
         if GraceNode.verbose:
             rospy.loginfo(
                 f"GRACE is currently {state_to_str(self.state)}{f'. {self.goal}.' if self.goal else ' with no current goal.'}"
@@ -270,6 +268,21 @@ class GraceNode:
         # only update state if we are exploring
         if self.state != RobotState.EXPLORING:
             return
+
+        if GraceNode.nav_statuses[state_msg.status] in ["SUCCEEDED"]:
+            rospy.loginfo(
+                f"Move base has status: {GraceNode.nav_statuses[state_msg.status]}"
+            )
+
+        elif GraceNode.nav_statuses[state_msg.status] in ["PREEMPTED"]:
+            rospy.logwarn(
+                f"Move base has status: {GraceNode.nav_statuses[state_msg.status]}"
+            )
+
+        else:
+            rospy.logerr(
+                f"Move base has status: {GraceNode.nav_statuses[state_msg.status]}"
+            )
         if GraceNode.nav_statuses[state_msg.status] == "SUCCEEDED":
             if self.has_object:
                 self.state = RobotState.PLACING
@@ -356,13 +369,34 @@ class GraceNode:
         self.state = RobotState.EXPLORING
 
 
+def rotate_360() -> None:
+    rotate_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
+    rotate_msg = Twist()
+    rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
+
+    # Rotate for 2*pi seconds to complete a full rotation
+    rotate_duration = rospy.Duration(int(2 * 3.14159))
+    rotate_end_time = rospy.Time.now() + rotate_duration
+
+    while rospy.Time.now() < rotate_end_time:
+        rotate_pub.publish(rotate_msg)
+        rospy.sleep(0.1)
+
+    # Stop rotation
+    rotate_msg.angular.z = 0.0
+    rotate_pub.publish(rotate_msg)
+    # Rotate 360 degrees before doing exploration
+
+
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
+    rospy.sleep(5)
+    rotate_360()
     grace = GraceNode(verbose=True)
+    grace.state = RobotState.WAITING
     rospy.on_shutdown(grace.shutdown)
-    # TODO: Implement interface for setting goals
-    grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
-    rospy.sleep(3)  # Sleep for an arbitrary 3 seconds to allow sim map to load
+    grace.goal = RobotGoal(place_location="dining table", pick_object="bench")
+    rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
         grace.run()

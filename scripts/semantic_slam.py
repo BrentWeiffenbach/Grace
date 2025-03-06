@@ -17,6 +17,7 @@ from tf2_ros import (
     TransformException,  # type: ignore
 )
 from visualization_msgs.msg import Marker, MarkerArray
+from grace.msg import RobotState
 
 
 class MapObject:
@@ -106,7 +107,6 @@ class SemanticSLAM:
         self.max_obj_id = 0  # type: int
         self.marker_array = MarkerArray()
         self.marker_array.markers = []
-
         # rospy.on_shutdown(self.save_data)
 
     def odom_callback(self, msg):
@@ -353,7 +353,7 @@ class SemanticSLAM:
 
         # Publish the found points???
         # self.publish_objects(to_frame_rel)
-        self.add_markers(to_frame_rel)
+        # self.add_markers(to_frame_rel) # Enable markers (if you so desire)
 
         self.entropy_series.append(average_entropy)
         semantic_map_msg.objects = objects
@@ -575,6 +575,7 @@ class SemanticSLAM:
 if __name__ == "__main__":
     rospy.init_node("semantic_slam")
     rospy.loginfo("Press Ctrl + C to terminate")
+    rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
     whatever = SemanticSLAM()
     try:
         rospy.spin()
