@@ -26,6 +26,6 @@ do
     esac
 done
 
-./grace_navigation $*
+./grace_navigation/install/install.sh $*
 
 exit 0 # Successfully exit
