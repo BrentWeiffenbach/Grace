@@ -61,7 +61,7 @@
         <parent link="arm_link" />
         <child link="link_1" />
         <axis xyz="0 0 -1" />
-        <limit lower="-6.28" upper="6.28" effort="2.8" velocity="3" />
+        <limit lower="-1.85005" upper="1.85005" effort="2.8" velocity="3" />
     </joint>
     <link name="link_2">
         
@@ -91,8 +91,8 @@
         <origin xyz="0.0374999999999999 -0.0205999999999994 0.0356213176077246" rpy="0 0 0" />
         <parent link="link_1" />
         <child link="link_2" />
-        <axis xyz="0 -1 0" />
-        <limit lower="-2.3" upper="0.1739" effort="2.8" velocity="3" />
+        <axis xyz="0 1 0" />
+        <limit lower="-0.314159" upper="2.1" effort="2.8" velocity="3" />
     </joint>
     <link name="link_3">
         
@@ -123,7 +123,7 @@
         <parent link="link_2" />
         <child link="link_3" />
         <axis xyz="0 1 0" />
-        <limit lower="-1.3831" upper="1.2" effort="2.8" velocity="3" />
+        <limit lower="-0.610865" upper="0.7833" effort="2.8" velocity="3" />
     </joint>
     <link name="link_4">
         
@@ -154,7 +154,7 @@
         <parent link="link_3" />
         <child link="link_4" />
         <axis xyz="1 0 0" />
-        <limit lower="-6.28" upper="6.28" effort="0.26" velocity="3" />
+        <limit lower="-3.14" upper="3.14" effort="0.26" velocity="3" />
     </joint>
     <link name="link_5">
         
@@ -185,7 +185,7 @@
         <parent link="link_4" />
         <child link="link_5" />
         <axis xyz="0 1 0" />
-        <limit lower="-2" upper="2" effort="100" velocity="3" />
+        <limit lower="-1.74533" upper="1.74533" effort="100" velocity="3" />
     </joint>
     <link name="link_6">
         
