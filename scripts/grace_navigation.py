@@ -5,13 +5,13 @@ from typing import Dict, List, Tuple, Union
 import actionlib
 import numpy as np
 import rospy
+from bcolors import bcolors
 from frontier_search import FrontierSearch
-from geometry_msgs.msg import Point, Pose, Quaternion
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist
 from grace.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg
 from move_base_msgs.msg import (
     MoveBaseAction,
-    MoveBaseFeedback,
     MoveBaseGoal,
     MoveBaseResult,
 )
@@ -42,6 +42,7 @@ class GraceNavigation:
     def __init__(self, verbose: bool = False) -> None:
         GraceNavigation.verbose = verbose
         self.goal: RobotGoal
+        self.goal_pose: Pose
         self.state: int
         self.semantic_map: Object2DArray
 
@@ -84,6 +85,10 @@ class GraceNavigation:
             queue_size=10,
         )
 
+        self.blacklist_pub = rospy.Publisher(
+            name=GraceNode.BLACKLIST_TOPIC, data_class=Pose, queue_size=10
+        )
+
         self.should_update_goal: bool = True
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
@@ -112,6 +117,16 @@ class GraceNavigation:
     def state_callback(self, msg: RobotState) -> None:
         self.state = msg.state
         if msg.state == RobotState.EXPLORING:
+            try:
+                self.goal
+            except AttributeError:
+                goal_msg = rospy.wait_for_message(
+                    GraceNode.GOAL_TOPIC, RobotGoalMsg, timeout=10
+                )
+                self.goal_callback(goal_msg)  # type: ignore
+                self.explore()
+                return
+
             self.explore()
 
     def done_cb(self, status: int, result: MoveBaseResult) -> None:
@@ -121,27 +136,22 @@ class GraceNavigation:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
             result (MoveBaseResult): The result of the move base.
         """
-        self.publish_status(status)
+        if goal_statuses[status] not in ["PREEMPTED"]:
+            self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
-            ...
-
-    def no_aborted_cb(self, status: int, result: MoveBaseResult) -> None:
-        # Does not publish the state unlike done_cb
-        # Will ensure that the state is not aborted
-        if status == actionlib.GoalStatus.ABORTED:
-            ...
-
-    def feedback_cb(self, feedback: MoveBaseFeedback) -> None:
-        """The callback when the robot moves.
-
-        Args:
-            feedback (MoveBaseFeedback): The MoveBaseFeedback msg. It contains a `base_position` attribute.
-        """
-        pass
+            self.should_update_goal = True
+            # TODO: Make semantic slam listen to this and blacklist objects near this pose
+            self.blacklist_pub.publish(self.goal_pose)
 
     # region Publishers
     def publish_status(self, status: int) -> None:
-        dummy_goal_status = actionlib.GoalStatus(None, status, None)
+        """Publishes the current status to the status topic.
+
+        Args:
+            status (int): The status to be published.
+        """
+        dummy_goal_status = actionlib.GoalStatus()
+        dummy_goal_status.status = status
         self.status_pub.publish(dummy_goal_status)
 
     def publish_timeout(self) -> None:
@@ -203,6 +213,8 @@ class GraceNavigation:
 
     # region Exploration
     def explore(self) -> None:
+        # BUG: self.goal can possibly be undefined. It is difficult to reproduce how it happened.
+        # AttributeError: 'GraceNavigation' object has no attribute 'goal'
         assert self.goal
 
         EXPLORE_SECONDS = 180
@@ -218,7 +230,7 @@ class GraceNavigation:
             self.publish_status(actionlib.GoalStatus.ABORTED)
             return
 
-        rospy.loginfo("\033[92mReached object!\033[0m")
+        rospy.loginfo(bcolors.green("Reached object!"))
         self.move_base.cancel_all_goals()
         self.publish_status(actionlib.GoalStatus.SUCCEEDED)
         return
@@ -274,27 +286,27 @@ class GraceNavigation:
                         f"Found {target_obj_name} in semantic map"
                     )
 
-                    goal_pose: Pose = self.calculate_offset(obj_point)
+                    self.goal_pose: Pose = self.calculate_offset(obj_point)
                     self.publish_markers(
-                        [goal_pose.position], "Object_Goal", color=(0, 0, 1)
+                        [self.goal_pose.position], "Object_Goal", color=(0, 0, 1)
                     )
 
                     # Goal is in occupancy grid
-                    if self.frontier_search.is_pose_in_occupancy_grid(goal_pose):
+                    if self.frontier_search.is_pose_in_occupancy_grid(self.goal_pose):
                         GraceNavigation.verbose_log(
                             f"Goal for {target_obj_name} is accessible, navigating to it"
                         )
                         navigating_to_object = True
 
-                        self.move_base.cancel_all_goals()
-
                         self.goto(
-                            goal_pose, timeout=rospy.Duration(30), yield_when_done=True
+                            self.goal_pose,
+                            timeout=rospy.Duration(30),
+                            yield_when_done=True,
                         )
 
-                        current_pose = self.get_current_pose()
+                        current_pose: Pose = self.get_current_pose()
                         if GraceNavigation.are_points_equal(
-                            goal_pose.position, current_pose.position, epsilon=0.2
+                            self.goal_pose.position, current_pose.position, epsilon=0.2
                         ):
                             GraceNavigation.verbose_log(
                                 "Successfully reached the object!"
@@ -303,12 +315,18 @@ class GraceNavigation:
 
                         distance = np.linalg.norm(
                             [
-                                goal_pose.position.x - current_pose.position.x,
-                                goal_pose.position.y - current_pose.position.y,
+                                self.goal_pose.position.x - current_pose.position.x,
+                                self.goal_pose.position.y - current_pose.position.y,
                             ]
                         )
-                        if distance < 0.25:
+                        if distance < 0.3:
                             GraceNavigation.verbose_log("Close enough to the object!")
+                            if not GraceNavigation.are_orientations_equal(
+                                self.goal_pose.orientation,
+                                current_pose.orientation,
+                                epsilon=0.1,
+                            ):
+                                self.turn_towards_goal_pose()
                             return True
 
                         rospy.sleep(1)
@@ -321,7 +339,7 @@ class GraceNavigation:
 
             if not navigating_to_object:
                 frontier_pose = self.compute_frontier_goal_pose(
-                    heuristic_pose=self.get_current_pose(), publish_markers=True
+                    heuristic_pose=self.get_current_pose()
                 )
 
                 if frontier_pose is None:
@@ -347,6 +365,18 @@ class GraceNavigation:
 
         return None
 
+    def turn_towards_goal_pose(self):
+        GraceNavigation.verbose_log("Turning to face final pose of object")
+        direction: Quaternion = self.calculate_direction_towards_object(
+            self.goal_pose.position
+        )
+        cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=10)
+        twist = Twist()
+        twist.angular.z = direction.z
+        cmd_vel_pub.publish(twist)
+        rospy.sleep(1)
+        cmd_vel_pub.publish(Twist())  # Stop rotation
+
     def goto(
         self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True
     ) -> None:
@@ -364,8 +394,7 @@ class GraceNavigation:
         dest.target_pose.pose = obj
         self.move_base.send_goal(
             goal=dest,
-            done_cb=self.done_cb if yield_when_done else self.no_aborted_cb,
-            feedback_cb=self.feedback_cb,
+            done_cb=self.done_cb if yield_when_done else None,
         )
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
@@ -413,14 +442,14 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 1.0
-        MAX_DISTANCE = 15.0
+        MIN_DISTANCE = 2.0
+        MAX_DISTANCE = 10.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
         for frontier in frontiers:
-            frontier_pos = np.array([frontier.x, frontier.y])
-            distance: np.floating = np.linalg.norm(frontier_pos - current_position)
+            frontier_position = np.array([frontier.x, frontier.y])
+            distance: np.floating = np.linalg.norm(frontier_position - current_position)
 
             if distance < MIN_DISTANCE:
                 continue
@@ -428,26 +457,27 @@ class GraceNavigation:
             if distance > MAX_DISTANCE:
                 continue
 
-            # Basic score is inverse of distance
-            score: Union[np.floating, float] = 1.0 / max(distance, 0.1)
+            # Basic score is inverse distance
+            score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
             if target_pose is not None:
                 target_position = np.array(
                     [target_pose.position.x, target_pose.position.y]
                 )
-                robot_to_target = target_position - current_position
-                robot_to_frontier = frontier_pos - current_position
+                frontier_to_target = frontier_position - target_position
+                frontier_to_position = frontier_position - current_position
 
                 if (
-                    np.linalg.norm(robot_to_target) > 0
-                    and np.linalg.norm(robot_to_frontier) > 0
+                    np.linalg.norm(frontier_to_target) > 0
+                    and np.linalg.norm(frontier_to_position) > 0
                 ):
-                    cos_angle = np.dot(robot_to_target, robot_to_frontier) / (
-                        np.linalg.norm(robot_to_target)
-                        * np.linalg.norm(robot_to_frontier)
+                    cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
+                        np.linalg.norm(frontier_to_target)
+                        * np.linalg.norm(frontier_to_position)
                     )
+                    # boost score if frontier is in direction of target object
                     direction_factor = (cos_angle + 1) / 2
-                    score *= 1 + 2 * direction_factor
+                    score *= 1 + 3 * direction_factor
 
             scored_frontiers.append((frontier, score))
 
@@ -458,10 +488,15 @@ class GraceNavigation:
             return scored_frontiers[0][0]
         return None
 
-    def compute_frontier_goal_pose(
-        self, heuristic_pose: Pose, publish_markers: bool = False
-    ) -> Union[Pose, None]:
+    def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point] = self.frontier_search.compute_centroids()
+        
+        # Only keep keypoints that are within the occupancy grid (safely)
+        keypoints = [
+            kp
+            for kp in keypoints
+            if self.frontier_search.is_point_in_occupancy_grid(kp)
+        ]
         if not keypoints:
             return None
 
@@ -494,7 +529,9 @@ class GraceNavigation:
     def calculate_offset(self, point: Point) -> Pose:
         # point is in map coordinates
         # get current pose is from /odom
-        offset_position = np.array([point.x, point.y]) * 0.8
+        offset_position = (
+            np.array([point.x, point.y]) * 0.72
+        )  # The lower, the farther away from the semantic position
 
         new_pose = Pose()
         new_pose.position = Point(*offset_position, 0)
@@ -510,7 +547,7 @@ class GraceNavigation:
         new_quaternion = Rotation.from_euler("xyz", [0, 0, obj_angle]).as_quat()
         return Quaternion(*new_quaternion)
 
-    def create_navigable_goal(self, goal: Pose, safety_margin: int = 4) -> Pose:
+    def create_navigable_goal(self, goal: Pose, safety_margin: int = 8) -> Pose:
         resolution = self.frontier_search.map.info.resolution
         origin = self.frontier_search.map.info.origin.position
 
@@ -604,7 +641,7 @@ class GraceNavigation:
             epsilon (float, optional): The tolerance to compare the two points to. Defaults to 1e-6.
 
         Returns:
-            bool: If the two points are equal within a tolerance
+            bool: If the two points are equal within a tolerance.
         """
         # abs(a, b) < epsilon will compare if a, b are equal within a tolerence
         return (
@@ -612,6 +649,24 @@ class GraceNavigation:
             and abs(p1.y - p2.y) < epsilon
             and abs(p1.z - p2.z) < epsilon
         )
+
+    @staticmethod
+    def are_orientations_equal(
+        o1: Quaternion, o2: Quaternion, epsilon: float = 1e-6
+    ) -> bool:
+        """Compares if two quaternion's are equal based off of their x, y, z, and w fields within a tolerence of epsilon.
+
+        Args:
+            o1 (Quaternion): The first quaternion.
+            o2 (Quaternion): The second quaternion.
+            epsilon (float, optional): The tolerance to compare the twwo quaternions to. Defaults to 1e-6.
+
+        Returns:
+            bool: If the two quaternions are equal within a tolerance.
+        """
+        dot_product: float = abs(o1.x * o2.x + o1.y * o2.y + o1.z * o2.z + o1.w * o2.w)
+
+        return abs(dot_product - 1.0) < epsilon
 
     # region Run Node
     def run(self) -> None:

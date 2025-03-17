@@ -3,9 +3,10 @@ from typing import Dict, Final, List, Union
 
 import actionlib
 import rospy
+from bcolors import bcolors
+from geometry_msgs.msg import Twist
 from grace.msg import RobotGoalMsg, RobotState
 from std_msgs.msg import Bool
-from geometry_msgs.msg import Twist
 
 
 def get_constants_from_msg(msg: type) -> Dict[int, str]:
@@ -144,6 +145,7 @@ class GraceNode:
         NAV_STATUS_TOPIC (str, Final): Topic navigation status is published to.
         ARM_CONTROL_TOPIC (str, Final): Topic for arm controller status being published to.
         HAS_OBJECT_TOPIC (str, Final): Topic for if the arm has an object or not.
+        BLACKLIST_TOPIC (str, Final): Topic for semantic map blacklist.
 
     Publishers:
         state_publisher (RobotState): Publishes to STATE_TOPIC. Details the current state of GRACE.
@@ -162,6 +164,7 @@ class GraceNode:
     NAV_STATUS_TOPIC: Final[str] = "/grace/nav_status"
     ARM_CONTROL_TOPIC: Final[str] = "/grace/arm_control_status"
     HAS_OBJECT_TOPIC: Final[str] = "/grace/has_object"
+    BLACKLIST_TOPIC: Final[str] = "/semantic_map/blacklist"
 
     nav_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
     """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
@@ -271,7 +274,7 @@ class GraceNode:
 
         if GraceNode.nav_statuses[state_msg.status] in ["SUCCEEDED"]:
             rospy.loginfo(
-                f"Move base has status: {GraceNode.nav_statuses[state_msg.status]}"
+                f"Move base has status: {bcolors.green(GraceNode.nav_statuses[state_msg.status])}"
             )
 
         elif GraceNode.nav_statuses[state_msg.status] in ["PREEMPTED"]:
@@ -395,9 +398,9 @@ if __name__ == "__main__":
     rospy.sleep(5)
     rotate_360()
     grace = GraceNode(verbose=verbose)
-    grace.state = RobotState.WAITING
     rospy.on_shutdown(grace.shutdown)
-    grace.goal = RobotGoal(place_location="dining table", pick_object="bench")
+    grace.state = RobotState.WAITING
+    grace.goal = RobotGoal(place_location="dining table", pick_object="elephant")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

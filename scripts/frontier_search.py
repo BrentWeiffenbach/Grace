@@ -5,7 +5,7 @@ from typing import List, Sequence, Tuple
 
 import cv2
 import numpy as np
-from geometry_msgs.msg import Point, Pose
+from geometry_msgs.msg import Point, Pose, Quaternion
 from nav_msgs.msg import OccupancyGrid
 
 
@@ -46,8 +46,26 @@ class FrontierSearch:
             Point(*self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0)
             for k in valid_kps
         ]
+        
+        # Group keypoints by proximity
+        clusters = []
+        for k in keypoints:
+            added = False
+            for cluster in clusters:
+                if any(
+                    np.linalg.norm((k.x - ck.x, k.y - ck.y)) < 10
+                    for ck in cluster
+                ):
+                    cluster.append(k)
+                    added = True
+                    break
+            if not added:
+                clusters.append([k])
 
-        return keypoints
+        # Filter clusters with 3 or more keypoints
+        useful_kps = [k for cluster in clusters if len(cluster) >= 3 for k in cluster]
+
+        return useful_kps
 
     def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:
         img_coords = self.convert_map_coords_to_img_coords(
@@ -75,6 +93,12 @@ class FrontierSearch:
                     return False
 
         return self.map_img[y, x] == 128
+    
+    def is_point_in_occupancy_grid(self, point: Point) -> bool:
+        pose = Pose()
+        pose.position = point
+        pose.orientation = Quaternion(0, 0, 0, 1)
+        return self.is_pose_in_occupancy_grid(pose)
 
     def convert_img_coords_to_map_coords(
         self, img_coords: Tuple[float, float]
