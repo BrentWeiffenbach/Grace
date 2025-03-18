@@ -1,0 +1,9 @@
+* make sure name space is correct in urdf
+* ros_controllers.yaml make sure name space is correct
+* urdf make sure has right hardware interfaces depending on controller
+* some wacky packages never told me they were not installed 
+sudo apt install ros-melodic-controller-manager ros-melodic-position-controllers ros-melodic-joint-state-controller ros-melodic-joint-trajectory-controller ros-melodic-joint-limits-interface ros-melodic-transmission-interface
+
+
+
+planar joints:
