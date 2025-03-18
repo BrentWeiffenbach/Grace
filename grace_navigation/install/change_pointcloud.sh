@@ -31,7 +31,7 @@ cd "$grace_dir" || exit
 point_cloud2_path="/opt/ros/melodic/lib/python2.7/dist-packages/ros_numpy/point_cloud2.py"
 
 if [[ -f "$point_cloud2_path" && -r "$point_cloud2_path" ]]; then
-    original_code="def get_xyz_points(cloud_array, remove_nans=True, dtype=float):"
+    original_code="def get_xyz_points(cloud_array, remove_nans=True, dtype=np.float):"
     changed_code="def get_xyz_points(cloud_array, remove_nans=True, dtype=np.float64):"
     grep_options=""
     if [ "$verbose" == "false" ]; then
@@ -80,6 +80,8 @@ if [[ -f "$point_cloud2_path" && -r "$point_cloud2_path" ]]; then
     fi
 else
     echo "Could not find point_cloud2.py. Please sudo apt-get install ros-melodic-ros-numpy before running the install script."
+    echo "Trying to install rosnumpy...Rerun the script."
+    sudo apt-get install ros-melodic-ros-numpy
     exit 1
 fi
 

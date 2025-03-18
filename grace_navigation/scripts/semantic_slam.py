@@ -88,7 +88,6 @@ class SemanticSLAM:
         self.range_sub = rospy.Subscriber(
             "/range_bearing", RangeBearings, self.range_callback
         )
-        self.blacklist_sub = rospy.Subscriber("/semantic_map/blacklist", Pose, self.blacklist_cb)
         self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10, latch=True)
         self.point_pub = rospy.Publisher(
             "/semantic_map/point", PointStamped, queue_size=10
@@ -117,10 +116,6 @@ class SemanticSLAM:
         self.sigma_p = np.diag([self.pos_var, self.pos_var, self.ang_var])
         self.sigma_p_inv = inv(self.sigma_p)
         self.t = msg.header.stamp.to_sec()
-        
-    def blacklist_cb(self, msg):
-        # TODO: blacklist poses from this message
-        pass
     
     def range_callback(self, msg):
         if self.pos_var is None:

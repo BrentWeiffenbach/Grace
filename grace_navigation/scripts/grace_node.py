@@ -1,4 +1,4 @@
-#!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
+#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
 from typing import Dict, Final, List, Union
 
 import actionlib
@@ -145,7 +145,6 @@ class GraceNode:
         NAV_STATUS_TOPIC (str, Final): Topic navigation status is published to.
         ARM_CONTROL_TOPIC (str, Final): Topic for arm controller status being published to.
         HAS_OBJECT_TOPIC (str, Final): Topic for if the arm has an object or not.
-        BLACKLIST_TOPIC (str, Final): Topic for semantic map blacklist.
 
     Publishers:
         state_publisher (RobotState): Publishes to STATE_TOPIC. Details the current state of GRACE.
@@ -164,8 +163,7 @@ class GraceNode:
     NAV_STATUS_TOPIC: Final[str] = "/grace/nav_status"
     ARM_CONTROL_TOPIC: Final[str] = "/grace/arm_control_status"
     HAS_OBJECT_TOPIC: Final[str] = "/grace/has_object"
-    BLACKLIST_TOPIC: Final[str] = "/semantic_map/blacklist"
-
+    
     nav_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
     """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 

@@ -1,4 +1,4 @@
-#!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
+#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
 from math import atan2
 from typing import Dict, List, Tuple, Union
 
@@ -85,10 +85,6 @@ class GraceNavigation:
             queue_size=10,
         )
 
-        self.blacklist_pub = rospy.Publisher(
-            name=GraceNode.BLACKLIST_TOPIC, data_class=Pose, queue_size=10
-        )
-
         self.should_update_goal: bool = True
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
@@ -140,8 +136,6 @@ class GraceNavigation:
             self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
             self.should_update_goal = True
-            # TODO: Make semantic slam listen to this and blacklist objects near this pose
-            self.blacklist_pub.publish(self.goal_pose)
 
     # region Publishers
     def publish_status(self, status: int) -> None:
@@ -215,7 +209,7 @@ class GraceNavigation:
     def explore(self) -> None:
         # BUG: self.goal can possibly be undefined. It is difficult to reproduce how it happened.
         # AttributeError: 'GraceNavigation' object has no attribute 'goal'
-        assert self.goal
+        # assert self.goal
 
         EXPLORE_SECONDS = 180
         rospy.loginfo("Exploring")
@@ -239,7 +233,6 @@ class GraceNavigation:
         self,
         exploration_timeout: rospy.Duration = rospy.Duration(60),
     ) -> Union[bool, None]:
-        assert self.goal
 
         # Give semantic map time to load
         is_semantic_map_loaded: bool = self.wait_for_semantic_map(sleep_time_s=10)
@@ -256,6 +249,7 @@ class GraceNavigation:
         )
 
         assert has_object
+        assert self.goal
         has_object = has_object.data
         target_obj_name: str = (
             self.goal.place_location if has_object else self.goal.pick_object

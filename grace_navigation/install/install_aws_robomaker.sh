@@ -26,7 +26,7 @@ fi
 cd "$grace_dir" || exit
 
 # Go to catkin_ws/src
-cd ..
+cd ../..
 if [[ ! -d aws-robomaker-small-house-world ]]; then
     echo "aws-robomaker-small-house-world. Installing..."
     git clone https://github.com/aws-robotics/aws-robomaker-small-house-world.git
@@ -50,8 +50,9 @@ if [[ ! -d aws-robomaker-small-house-world ]]; then
     cd .. # go to catkin_ws
     
     $verbose && echo "Building aws-robomaker-small-house-world..."
-    catkin build aws-robomaker-small-house-world
-    verbose && echo "Built aws-robomaker-small-house-world!"
+    catkin build
+    source devel/setup.bash
+    $verbose && echo "Built aws-robomaker-small-house-world!"
 fi
 
 cd "$grace_dir" || exit

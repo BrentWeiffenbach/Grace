@@ -12,7 +12,7 @@
     <group if="$(arg sim)">
         <!-- Launch the TurtleBot world if simulation-->
         <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
-            <arg name="world_file" value="$(find grace)../aws-robomaker-small-house-world/worlds/small_house.world" />
+            <arg name="world_file" value="$(find grace)../../aws-robomaker-small-house-world/worlds/small_house.world" />
             <arg name="gui" value="$(arg show_gazebo)" />
         </include>
     </group>

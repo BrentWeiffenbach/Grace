@@ -1,4 +1,4 @@
-#!/home/alex/catkin_ws/src/Grace/yolovenv/bin/python
+#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
 import copy
 import os
 from typing import Dict, Final, List, Tuple, Union
@@ -11,7 +11,7 @@ import rospy
 import ultralytics_patch
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
-from object_ros_msgs.msg import RangeBearing, RangeBearings
+from grace.msg import RangeBearing, RangeBearings
 from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
@@ -143,8 +143,9 @@ class YoloDetect:
             self.latest_rgb_image is None or self.latest_depth_image is None
         ):  # Extracted to reduce the level of indentation
             return
-        if not self.detection_image_pub.get_num_connections():
-            return
+        # This was casuing bug where yolo view had to be open in rviz
+        # if not self.detection_image_pub.get_num_connections():
+        #     return
         if not self.isUpdated:
             return
 

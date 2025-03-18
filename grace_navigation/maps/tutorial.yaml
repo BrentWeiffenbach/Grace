@@ -1,4 +1,4 @@
-image: /home/alex/catkin_ws/src/Grace/maps/tutorial.pgm
+image: /home/brent/mqp_ws/src/Grace/grace_navigation/maps/tutorial.pgm
 resolution: 0.050000
 origin: [-15.400000, -12.200000, 0.000000]
 negate: 0

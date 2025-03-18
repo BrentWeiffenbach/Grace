@@ -26,11 +26,19 @@ do
     esac
 done
 
+grace_dir="$(cd "$(dirname "$0")" && pwd)"
+# Make the script run the same in install or in just Grace
+if [[ "$grace_dir" == */install ]]; then
+    grace_dir="$(dirname "$grace_dir")"
+fi
+cd "$grace_dir" || exit
+
 # Check if venv exists
 if  [[ ! -d yolovenv && ! -d "../yolovenv" ]]; then
     echo "yolovenv not found. Installing..."
 
     # Note: the line below is UNTESTED, so if it doesn't work, just run the command that is in the README...
+    python3.8 -m pip install virtualenv
     python3.8 -m virtualenv -p python3.8 yolovenv
     echo "yolovenv created."
 fi
@@ -39,13 +47,6 @@ fi
 # Change the shebangs
 #####################
 # Get the full python path for the shebang here
-grace_dir="$(cd "$(dirname "$0")" && pwd)"
-# Make the script run the same in install or in just Grace
-if [[ "$grace_dir" == */install ]]; then
-    grace_dir="$(dirname "$grace_dir")"
-fi
-cd "$grace_dir" || exit
-
 python_path="$grace_dir/yolovenv/bin/python"
 
 if [[ ! -f "$python_path" ]]; then
@@ -123,6 +124,7 @@ $verbose && echo "Running change_pointcloud.sh..."
 ./install/change_pointcloud.sh $*
 
 # TODO: Add verbosity to this
+[[ -d out ]] || mkdir out
 [[ -d out/SLAM ]] || mkdir out/SLAM
 
 # $verbose && echo "Running install_frontier.sh..."
