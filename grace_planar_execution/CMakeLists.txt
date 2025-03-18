@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(moveit_planar_execution)
+project(grace_planar_execution)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -105,7 +105,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES moveit_planar_execution
+#  LIBRARIES grace_planar_execution
 #  CATKIN_DEPENDS geometry_msgs moveit_msgs rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -123,7 +123,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/moveit_planar_execution.cpp
+#   src/${PROJECT_NAME}/grace_planar_execution.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -134,7 +134,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/moveit_planar_execution_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/grace_planar_execution_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -198,7 +198,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_moveit_planar_execution.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_grace_planar_execution.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
