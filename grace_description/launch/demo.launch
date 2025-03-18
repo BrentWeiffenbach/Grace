@@ -52,7 +52,7 @@
   </include>
 
     <!-- launch planar joint execution controller -->
-  <include file="$(find moveit_planar_execution)/launch/planar_execution.launch"/>
+  <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/>
 
   <!-- Run Rviz and load the default config to see the state of the move_group node -->
   <include file="$(find grace_arm_config)/launch/moveit_rviz.launch" if="$(arg use_rviz)">
