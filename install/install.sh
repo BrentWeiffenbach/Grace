@@ -33,8 +33,8 @@ if [[ "$grace_dir" == */install ]]; then
 fi
 cd "$grace_dir" || exit
 
+./install/install_moveit.sh $*
 ./install/install_ros_deps.sh $*
-# ./install/install_moveit.sh $*
 ./grace_navigation/install/install.sh $*
 
 exit 0 # Successfully exit
