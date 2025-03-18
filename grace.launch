@@ -1,0 +1,31 @@
+<launch>
+    <arg name="sim" default="true" doc="set flags to indicate this turtle is run in simulation mode." />
+    <arg name="headless" default="false" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
+    <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+
+    <group if="$(arg sim)">
+        <!-- Launch the TurtleBot world if simulation-->
+        <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
+            <arg name="world_file" value="$(find grace_navigation)../../aws-robomaker-small-house-world/worlds/small_house.world" />
+            <arg name="gui" value="$(eval not arg('headless'))" />
+        </include>
+    </group>
+
+    <!-- Launch the custom Gmapping -->
+    <include file="$(find grace_navigation)/launch/gmapping.launch">
+        <arg name="sim" value="$(arg sim)"/>
+    </include>
+
+    <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
+    <include file="$(find grace_navigation)/launch/grace_navigation.launch">
+        <param name="verbose" value="$(arg verbose)" />
+    </include>
+
+    <!-- master node for controlling state machine -->
+    <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen">
+        <param name="verbose" value="$(arg verbose)" />
+    </node>
+
+    <!-- Launch RViz for navigation visualizations--> 
+    <include file="$(find turtlebot_rviz_launchers)/launch/view_navigation.launch"/>
+</launch>

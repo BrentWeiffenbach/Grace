@@ -1,0 +1,17 @@
+<launch>
+    <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+
+    <!-- YOLO detection node for sematic slam -->
+    <node name="yolo_detect" pkg="grace_navigation" type="yolo_detect.py" output="screen">
+        <param name="verbose" value="$(arg verbose)" />
+    </node>
+
+    <!-- Semantic Slam node for publishing the semantic map -->
+    <node name="semantic_slam" pkg="grace_navigation" type="semantic_slam.py" output="screen" />
+
+    <!-- Navigation node frontier exploration and interactions with semantic slam-->
+    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation.py" output="screen">
+        <param name="verbose" value="$(arg verbose)" />
+    </node>
+
+</launch>

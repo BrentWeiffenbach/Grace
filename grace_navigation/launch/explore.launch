@@ -1,4 +1,0 @@
-<launch>
-    <node name="frontier_search" pkg="grace" type="frontier_search.py" output="screen">
-    </node>
-</launch>

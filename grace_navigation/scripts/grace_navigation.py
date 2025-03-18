@@ -294,7 +294,6 @@ class GraceNavigation:
 
                         self.goto(
                             self.goal_pose,
-                            timeout=rospy.Duration(30),
                             yield_when_done=True,
                         )
 
@@ -341,19 +340,16 @@ class GraceNavigation:
                     rospy.sleep(2)
                     continue
 
-                if self.should_update_goal or self.move_base.get_state() not in [
-                    actionlib.GoalStatus.ACTIVE,
-                    actionlib.GoalStatus.PENDING,
-                ]:
+                if self.should_update_goal or self.move_base.get_state() not in [actionlib.GoalStatus.PENDING]:
                     GraceNavigation.verbose_log(
                         "Navigating to a frontier for exploration"
                     )
                     self.should_update_goal = False
                     self.goto(
                         self.create_navigable_goal(frontier_pose),
-                        timeout=rospy.Duration(30),
                         yield_when_done=False,
                     )
+                    rospy.sleep(5)
 
             rospy.sleep(0.5)
 
@@ -372,13 +368,12 @@ class GraceNavigation:
         cmd_vel_pub.publish(Twist())  # Stop rotation
 
     def goto(
-        self, obj: Pose, timeout: rospy.Duration, yield_when_done: bool = True
+        self, obj: Pose, yield_when_done: bool = True
     ) -> None:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
             obj (Pose): The pose move_base should attempt to go to.
-            timeout (rospy.Duration): The timeout for the move_base wait.
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
         """
         # Go towards object

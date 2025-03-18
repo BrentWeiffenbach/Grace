@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>grace</name>
+  <name>grace_navigation</name>
   <version>0.1.0</version>
-  <description>The grace package</description>
+  <description>The grace_navigation package</description>
 
   <maintainer email="abeck@wpi.edu">Alexander</maintainer>
   <license>MIT</license>

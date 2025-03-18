@@ -25,7 +25,7 @@ cd "$grace_dir" || exit
 
 cd ../..
 curl -sLf https://raw.githubusercontent.com/gaunthan/Turtlebot2-On-Melodic/master/install_basic.sh | bash
-sudo apt-get install ros-melodic-gmapping ros-melodic-move-base
+sudo apt-get install ros-melodic-gmapping ros-melodic-move-base ros-melodic-dwa-local-planner
 sudo apt-get install ros-melodic-turtlebot-apps
 cd src
 git clone https://github.com/turtlebot/turtlebot_interactions.git
