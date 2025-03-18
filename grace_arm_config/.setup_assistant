@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: grace_arm_description
+    relative_path: urdf/grace_arm_description.urdf
+    xacro_args: ""
+  SRDF:
+    relative_path: config/grace_arm_description.srdf
+  CONFIG:
+    author_name: Brent
+    author_email: rweiff2022@gmail.com
+    generated_timestamp: 1733288720
