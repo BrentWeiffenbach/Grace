@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+
+<robot name="grace" xmlns:xacro="http://www.ros.org/wiki/xacro">
+   
+   <xacro:include filename="$(find grace_arm_description)/urdf/grace_arm_description.urdf.xacro" />
+   <xacro:include filename="$(find turtlebot_description)/robots/kobuki_hexagons_kinect.urdf.xacro" />
+
+   <xacro:grace_arm parent="plate_top_link"/>
+</robot>
