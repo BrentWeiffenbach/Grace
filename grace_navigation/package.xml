@@ -11,7 +11,7 @@
   <url type="repository">https://github.com/BrentWeiffenbach/Grace</url>
 
   <author email="abeck@wpi.edu">Alexander Beck</author>
-  <author email="bweiffenbach@wpi.edu">Brent Weiffenbach</author>
+  <author email="rweiff2022@gmail.com">Brent Weiffenbach</author>
 
 
   <buildtool_depend>catkin</buildtool_depend>

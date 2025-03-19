@@ -2,7 +2,6 @@
 
 Key Launch Files:
 
-* gmapping.launch a recreation of the gmapping launch file from the move_base navigation stack with sim args
 * grace.launch the main launch file to launch everything as needed, as arguments for sim, gmapping, and map_file. Ex. `roslaunch grace.launch sim:=true` Would launch a simulated turtlebot in a room example and begin gmapping, you can use 2D nav goals to have it move around the room. You can run it headless by providing `headless:=true`, which will hide Gazebo.
 
 Everything so far has been built from learn.turtlebot.com and [turtlebot_navigation](http://wiki.ros.org/turtlebot_navigation/Tutorials/Setup%20the%20Navigation%20Stack%20for%20TurtleBot)
