@@ -27,6 +27,8 @@ cd .. # Go to catkin_ws/src
 sudo apt-get install ros-melodic-pybind11-catkin
 sudo apt-get install libconsole-bridge-dev
 sudo apt-get install ros-melodic-pcl-ros
+
+$verbose && echo "Cloning required repositories..."
 git clone -b master https://github.com/PickNikRobotics/rviz_visual_tools
 git clone -b noetic-devel https://github.com/ros-planning/geometric_shapes.git geometric_shapes
 git clone -b noetic-devel https://github.com/moveit/srdfdom
@@ -35,6 +37,7 @@ git clone -b master https://github.com/moveit/moveit_msgs.git moveit_msgs
 git clone -b master https://github.com/moveit/moveit_resources.git moveit_resources
 git clone -b master https://github.com/moveit/moveit_tutorials.git moveit_tutorials
 git clone -b master https://github.com/moveit/moveit_visual_tools.git moveit_visual_tools
+$verbose && echo "Cloned github repositories!"
 
 cd .. # Go to catkin_ws
 
