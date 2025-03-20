@@ -11,7 +11,7 @@ import rospy
 import ultralytics_patch
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
-from grace.msg import RangeBearing, RangeBearings
+from grace_navigation.msg import RangeBearing, RangeBearings
 from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor

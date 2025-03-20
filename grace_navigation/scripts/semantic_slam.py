@@ -8,7 +8,7 @@ import tf2_ros
 from geometry_msgs.msg import Point, PointStamped, Quaternion, Pose
 from nav_msgs.msg import Odometry
 from numpy.linalg import eig, inv, norm
-from grace.msg import Object2D, Object2DArray, RangeBearings
+from grace_navigation.msg import Object2D, Object2DArray, RangeBearings
 from scipy.stats import dirichlet, entropy
 from tf import transformations
 from tf2_ros import (
@@ -17,7 +17,7 @@ from tf2_ros import (
     TransformException,  # type: ignore
 )
 from visualization_msgs.msg import Marker, MarkerArray
-from grace.msg import RobotState
+from grace_navigation.msg import RobotState
 
 
 class MapObject:

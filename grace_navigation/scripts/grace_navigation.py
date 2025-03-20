@@ -8,7 +8,7 @@ import rospy
 from bcolors import bcolors
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist
-from grace.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
+from grace_navigation.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg
 from move_base_msgs.msg import (
     MoveBaseAction,

@@ -24,20 +24,20 @@ fi
 cd "$grace_dir" || exit
 
 cd .. # Go to catkin_ws/src
-sudo apt-get install ros-melodic-pybind11-catkin ros-melodic-eigen-stl-containers ros-melodic-random-numbers ros-melodic-shape-msgs ros-melodic-object-recognition-msgs ros-melodic-graph-msgs ros-melodic-ruckig
+sudo apt-get install ros-melodic-pybind11-catkin ros-melodic-eigen-stl-containers ros-melodic-random-numbers ros-melodic-shape-msgs ros-melodic-object-recognition-msgs ros-melodic-graph-msgs ros-melodic-ruckig sudo apt install ros-melodic-eigenpy
 sudo apt-get install libconsole-bridge-dev
 sudo apt-get install libccd-dev libfcl-dev libglew-dev
 sudo apt-get install ros-melodic-pcl-ros
 
 $verbose && echo "Cloning required repositories..."
-# git clone -b master https://github.com/PickNikRobotics/rviz_visual_tools
-# git clone -b noetic-devel https://github.com/ros-planning/geometric_shapes.git geometric_shapes
-# git clone -b noetic-devel https://github.com/moveit/srdfdom
-# git clone -b main https://github.com/BrentWeiffenbach/moveit_planar_modification.git moveit
-# git clone -b master https://github.com/moveit/moveit_msgs.git moveit_msgs
-# git clone -b master https://github.com/moveit/moveit_resources.git moveit_resources
-# git clone -b master https://github.com/moveit/moveit_tutorials.git moveit_tutorials
-# git clone -b master https://github.com/moveit/moveit_visual_tools.git moveit_visual_tools
+git clone -b master https://github.com/PickNikRobotics/rviz_visual_tools
+git clone -b noetic-devel https://github.com/ros-planning/geometric_shapes.git geometric_shapes
+git clone -b noetic-devel https://github.com/moveit/srdfdom
+git clone -b main https://github.com/BrentWeiffenbach/moveit_planar_modification.git moveit
+git clone -b master https://github.com/moveit/moveit_msgs.git moveit_msgs
+git clone -b master https://github.com/moveit/moveit_resources.git moveit_resources
+git clone -b master https://github.com/moveit/moveit_tutorials.git moveit_tutorials
+git clone -b master https://github.com/moveit/moveit_visual_tools.git moveit_visual_tools
 $verbose && echo "Cloned github repositories!"
 
 cd ~ || exit
