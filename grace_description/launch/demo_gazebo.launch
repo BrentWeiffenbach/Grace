@@ -28,7 +28,7 @@
     <arg name="paused" value="$(arg paused)"/>
     <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
     <arg name="urdf_path" value="$(arg urdf_path)"/>
-    <arg name="world_file" value="$(find grace_description)../aws-robomaker-small-house-world/worlds/small_house.world" />
+    <arg name="world_file" value="$(find grace_description)../../aws-robomaker-small-house-world/worlds/small_house.world" />
   </include>
 
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">

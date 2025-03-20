@@ -2,6 +2,7 @@
     <arg name="sim" default="true" doc="set flags to indicate this turtle is run in simulation mode." />
     <arg name="headless" default="false" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+    <arg name="paused" default="false"/>
     <!-- URDF path for xacro containing both turtlebot and grace arm -->
     <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
 
@@ -10,17 +11,18 @@
 
     <group if="$(arg sim)">
         <!-- custom gazebo launch for mobile manipuaaltion base and arm -->
-        <!-- <include file="$(find grace_description)/launch/grace_gazebo.launch" >
+        <include file="$(find grace_description)/launch/gazebo.launch" >
+            <arg name="paused" value="$(arg paused)"/>
             <arg name="gazebo_gui" value="$(eval not arg('headless'))"/>
             <arg name="urdf_path" value="$(arg urdf_path)"/>
-            <arg name="world_file" value="$(find grace_description)../aws-robomaker-small-house-world/worlds/small_house.world" />
-        </include> -->
-
-        <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
-            <arg name="world_file" value="$(find grace_navigation)../../aws-robomaker-small-house-world/worlds/small_house.world" />
-            <arg name="gui" value="$(eval not arg('headless'))" />
+            <arg name="world_file" value="$(find grace_description)../../aws-robomaker-small-house-world/worlds/small_house.world" />
         </include>
     </group>
+
+    <!-- joint state publisher for arm joints and mobile base on seperate topics / GRAC -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+        <rosparam param="source_list">[mobile_base/joint_states, grace/joint_states]</rosparam>
+    </node>
 
     <!-- Launch the custom Gmapping -->
     <include file="$(find grace_navigation)/launch/gmapping.launch">
