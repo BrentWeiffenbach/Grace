@@ -34,7 +34,7 @@ curl -sLf https://raw.githubusercontent.com/gaunthan/Turtlebot2-On-Melodic/maste
 $verbose && echo "Finished turlebot install script!"
 
 sudo apt-get install ros-melodic-gmapping ros-melodic-move-base ros-melodic-dwa-local-planner
-sudo apt-get install ros-melodic-turtlebot-apps # This should be getting cloned in the above snippet
+# sudo apt-get install ros-melodic-turtlebot-apps # This should be getting cloned in the above snippet
 
 catkin clean
 catkin build
