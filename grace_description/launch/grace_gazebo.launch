@@ -13,26 +13,24 @@
     <arg name="world_name" value="$(arg world_file)"/>
     <arg name="joint_states" value="mobile_base/joint_states"/>
   </include>
-
-  <!-- send robot urdf to param server -->
-  <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
-
+  
   <!-- push robot_description to factory and spawn robot in gazebo at the origin, change x,y,z arguments to spawn in a different position -->
   <node name="spawn_gazebo_model" pkg="gazebo_ros" type="spawn_model" args="-urdf -param robot_description -model robot -x 0 -y 0 -z 0"
     respawn="false" output="screen" />
   
-  <include file="$(find grace_description)/launch/ros_controllers.launch"/>
+  <!-- TODO Figure out where to put this -->
+  <!-- <include file="$(find grace_description)/launch/ros_controllers.launch"/> -->
   
   <!-- Given the published joint states, publish tf for the robot links -->
-  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen"/>
+  <!-- <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen"/> -->
   
   <!-- Velocity muxer -->
-  <node pkg="nodelet" type="nodelet" name="mobile_base_nodelet_manager" args="manager"/>
+  <!-- <node pkg="nodelet" type="nodelet" name="mobile_base_nodelet_manager" args="manager"/>
   <node pkg="nodelet" type="nodelet" name="cmd_vel_mux"
         args="load yocs_cmd_vel_mux/CmdVelMuxNodelet mobile_base_nodelet_manager">
     <param name="yaml_cfg_file" value="$(find turtlebot_bringup)/param/mux.yaml"/>
     <remap from="cmd_vel_mux/output" to="mobile_base/commands/velocity"/>
-  </node>
+  </node> -->
 
   <!-- Bumper/cliff to pointcloud (not working, as it needs sensors/core messages) -->
   <include file="$(find turtlebot_bringup)/launch/includes/kobuki/bumper2pc.launch.xml"/>

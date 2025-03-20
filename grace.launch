@@ -2,9 +2,20 @@
     <arg name="sim" default="true" doc="set flags to indicate this turtle is run in simulation mode." />
     <arg name="headless" default="false" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+    <!-- URDF path for xacro containing both turtlebot and grace arm -->
+    <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
+
+    <!-- Load robot_description -->
+    <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
 
     <group if="$(arg sim)">
-        <!-- Launch the TurtleBot world if simulation-->
+        <!-- custom gazebo launch for mobile manipuaaltion base and arm -->
+        <!-- <include file="$(find grace_description)/launch/grace_gazebo.launch" >
+            <arg name="gazebo_gui" value="$(eval not arg('headless'))"/>
+            <arg name="urdf_path" value="$(arg urdf_path)"/>
+            <arg name="world_file" value="$(find grace_description)../aws-robomaker-small-house-world/worlds/small_house.world" />
+        </include> -->
+
         <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
             <arg name="world_file" value="$(find grace_navigation)../../aws-robomaker-small-house-world/worlds/small_house.world" />
             <arg name="gui" value="$(eval not arg('headless'))" />
@@ -17,9 +28,9 @@
     </include>
 
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
-    <include file="$(find grace_navigation)/launch/grace_navigation.launch">
-        <param name="verbose" value="$(arg verbose)" />
-    </include>
+    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen">
+        <param name="verbose" value="true" />
+    </node>
 
     <!-- master node for controlling state machine -->
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen">
