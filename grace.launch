@@ -28,9 +28,9 @@
     </include>
 
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
-    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen">
-        <param name="verbose" value="true" />
-    </node>
+    <include file="$(find grace_navigation)/launch/grace_navigation.launch">
+        <param name="verbose" value="$(arg verbose)" />
+    </include>
 
     <!-- master node for controlling state machine -->
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen">

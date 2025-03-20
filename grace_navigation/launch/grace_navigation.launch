@@ -10,7 +10,7 @@
     <node name="semantic_slam" pkg="grace_navigation" type="semantic_slam.py" output="screen" />
 
     <!-- Navigation node frontier exploration and interactions with semantic slam-->
-    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation.py" output="screen">
+    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 
