@@ -1,8 +1,10 @@
 <launch>
-    <arg name="sim" default="true" doc="set flags to indicate this turtle is run in simulation mode." />
+    <arg name="sim" default="false" doc="set flags to indicate this turtle is run in simulation mode." />
     <arg name="headless" default="false" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
     <arg name="paused" default="false"/>
+    <!-- rviz file default -->
+    <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
     <!-- URDF path for xacro containing both turtlebot and grace arm -->
     <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
 
@@ -19,26 +21,42 @@
         </include>
     </group>
 
-    <!-- joint state publisher for arm joints and mobile base on seperate topics / GRAC -->
+    <!-- joint state publisher for arm joints and mobile base on seperate topics -->
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
         <rosparam param="source_list">[mobile_base/joint_states, grace/joint_states]</rosparam>
     </node>
 
-    <!-- Launch the custom Gmapping -->
-    <include file="$(find grace_navigation)/launch/gmapping.launch">
-        <arg name="sim" value="$(arg sim)"/>
+    <!-- ARM CONTROL -->
+    <!-- commenting arm_control for now, could be used in a sim demo maybe -->
+    <!-- <include file="$(find grace_arm_control)/launch/arm_controller.launch"/> -->
+   
+   <!-- launch moveit for ik and motion planning -->
+    <include file="$(find grace_description)/launch/move_group.launch">
+        <arg name="allow_trajectory_execution" value="true"/>
+        <arg name="fake_execution" value="false"/>
+        <arg name="info" value="true"/>
+        <arg name="pipeline" value="ompl"/>
+        <arg name="load_robot_description" value="$(eval not arg('sim'))"/>
+        <arg name="remap" value="false"/>
     </include>
+    
+    <!-- launch planar joint execution controller for moveit to control the turtlebot-->
+    <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/>
+
+    <!-- NAVIGATION -->
+    <!-- Launch the custom Gmapping -->
+    <include file="$(find grace_navigation)/launch/gmapping.launch"/>
 
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
     <include file="$(find grace_navigation)/launch/grace_navigation.launch">
-        <param name="verbose" value="$(arg verbose)" />
+        <arg name="verbose" value="$(arg verbose)" />
     </include>
 
-    <!-- master node for controlling state machine -->
+    <!-- MASTER NODE for controlling state machine -->
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 
-    <!-- Launch RViz for navigation visualizations--> 
-    <include file="$(find turtlebot_rviz_launchers)/launch/view_navigation.launch"/>
+    <!-- Launch RViz for navigation and arm control visualizations--> 
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_file)"/>
 </launch>
