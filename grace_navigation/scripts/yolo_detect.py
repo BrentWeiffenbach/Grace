@@ -1,4 +1,5 @@
 #!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
+
 import copy
 import os
 from typing import Dict, Final, List, Tuple, Union
@@ -83,7 +84,7 @@ class YoloDetect:
 
         # Subscribers
         self.rgb_image_sub = rospy.Subscriber(
-            name="/camera/rgb/image_raw",
+            name="/camera/rgb/image_color",
             data_class=Image,
             callback=self.rgb_image_callback,
         )
@@ -105,9 +106,8 @@ class YoloDetect:
         self.latest_depth_image = None
         self.transformed_point = None
         self.camera_info: CameraInfo = rospy.wait_for_message(
-            topic="/camera/depth/camera_info", topic_type=CameraInfo
+            topic="/camera/rgb/camera_info", topic_type=CameraInfo
         )  # type: ignore
-
         # Timer to call the detection function at a fixed interval (4 times a second)
         self.timer = rospy.Timer(
             period=rospy.Duration(secs=DETECTION_INTERVAL),  # type: ignore
@@ -120,7 +120,8 @@ class YoloDetect:
     def depth_image_callback(self, img: Image) -> None:
         if not self.latch:
             # self.latest_depth_image = ros_numpy.numpify(msg=img)
-            self.latest_depth_image = self.convert_Image_to_cv2(img)
+            # self.latest_depth_image = self.convert_Image_to_cv2(img)
+            self.latest_depth_image = img
             self.isUpdated = True
 
     def rgb_image_callback(self, img: Image) -> None:
@@ -153,7 +154,7 @@ class YoloDetect:
         self.isUpdated = False
         self.latch = True  # Prevent callbacks from modifying any data
         image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
-        depth_array = self.latest_depth_image
+        depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # Convert to numpy array
 
         CONFIDENCE_SCORE: Final[float] = 0.5
         SHOW_DETECTION_BOXES: Final[bool] = False
@@ -204,7 +205,7 @@ class YoloDetect:
             det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
             det_annotated = cv2.circle(det_annotated, (x2, y2), 5, (0, 255, 0), -1)
             # Prevent taking the mean of an empty slice
-            if np.all(np.isnan(depth_array[y1:y2, x1:x2])):
+            if depth_array is None or np.all(np.isnan(depth_array[y1:y2, x1:x2])):
                 continue
             obj_range: float
             bearing: Tensor
@@ -227,7 +228,6 @@ class YoloDetect:
             )  # This should be self.img.header, but there is no header on the np array??
             range_msg.range_bearings = range_bearings
             self.range_pub.publish(range_msg)
-
         self.detection_image_pub.publish(
             ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
         )
@@ -260,7 +260,7 @@ class YoloDetect:
         # Create an array of all one's, except for the known probability
         # Hacky way to interface with Zhentian's code without actually getting Class_distributions
         # BUG: If there are enough detections, this causes an IndexError
-        # Bandaid fixed this by moduloing it by the length of _alpha
+        # Band-aid fixed this by moduloing it by the length of _alpha
         _alpha: NDArray[np.float64] = np.ones(len(classes.keys()))
         _alpha[range_bearing.id % len(_alpha)] = detection.conf
         range_bearing.probability = _alpha

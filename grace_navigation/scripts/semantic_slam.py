@@ -341,13 +341,14 @@ class SemanticSLAM:
         semantic_map_msg.header = msg.header
         objects = self.create_objects()
 
-        average_entropy, A_opt, D_opt, E_opt = (
-            self.write_and_calculate_avg_entropy_and_ade_opt(msg)
-        )
+        # These cause a modulo 0 error and is not useful
+        # average_entropy, A_opt, D_opt, E_opt = (
+        #     self.write_and_calculate_avg_entropy_and_ade_opt(msg)
+        # )
 
-        self.A_opt.append(A_opt)
-        self.D_opt.append(D_opt)
-        self.E_opt.append(E_opt)
+        # self.A_opt.append(A_opt)
+        # self.D_opt.append(D_opt)
+        # self.E_opt.append(E_opt)
 
         self.t_series.append(self.t)
 
@@ -355,7 +356,8 @@ class SemanticSLAM:
         # self.publish_objects(to_frame_rel)
         # self.add_markers(to_frame_rel) # Enable markers (if you so desire)
 
-        self.entropy_series.append(average_entropy)
+        # not used anymore:
+        # self.entropy_series.append(average_entropy)
         semantic_map_msg.objects = objects
         self.map_pub.publish(semantic_map_msg)
 

@@ -394,11 +394,11 @@ if __name__ == "__main__":
     verbose = rospy.get_param("~verbose", False)
     assert type(verbose) is bool
     rospy.sleep(5)
-    rotate_360()
+    # rotate_360()
     grace = GraceNode(verbose=verbose)
     rospy.on_shutdown(grace.shutdown)
     grace.state = RobotState.WAITING
-    grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
+    grace.goal = RobotGoal(place_location="dining table", pick_object="chair")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
