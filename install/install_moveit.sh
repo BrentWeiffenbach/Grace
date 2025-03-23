@@ -1,17 +1,20 @@
 #!/bin/bash
 verbose=false
+no_build=false
 
 function usage() {
     echo "Usage:"
     echo "-v: Enable verbose logging"
+    echo "-b: Disable building"
     echo "-h: Display this help message"
 }
 
-while getopts :vh flag
+while getopts :vhb flag
 do
     case "${flag}" in
         v) verbose=true;;
         h) usage;;
+        b) no_build=true;;
         *) ;;
     esac
 done
@@ -24,10 +27,10 @@ fi
 cd "$grace_dir" || exit
 
 cd .. # Go to catkin_ws/src
-sudo apt-get install ros-melodic-pybind11-catkin ros-melodic-eigen-stl-containers ros-melodic-random-numbers ros-melodic-shape-msgs ros-melodic-object-recognition-msgs ros-melodic-graph-msgs ros-melodic-ruckig ros-melodic-eigenpy ros-melodic-rosparam-shortcuts
-sudo apt-get install libconsole-bridge-dev
-sudo apt-get install libccd-dev libfcl-dev libglew-dev
-sudo apt-get install ros-melodic-pcl-ros
+sudo apt-get install -qq ros-melodic-pybind11-catkin ros-melodic-eigen-stl-containers ros-melodic-random-numbers ros-melodic-shape-msgs ros-melodic-object-recognition-msgs ros-melodic-graph-msgs ros-melodic-ruckig ros-melodic-eigenpy ros-melodic-rosparam-shortcuts
+sudo apt-get install -qq libconsole-bridge-dev
+sudo apt-get install -qq libccd-dev libfcl-dev libglew-dev
+sudo apt-get install -qq ros-melodic-pcl-ros
 
 $verbose && echo "Cloning required repositories..."
 [ -d "rviz_visual_tools" ] || git clone -b master https://github.com/PickNikRobotics/rviz_visual_tools
@@ -42,18 +45,13 @@ $verbose && echo "Cloned github repositories!"
 
 cd ~ || exit
 [ -d "ompl-1.6.0" ] || curl -sLf https://ompl.kavrakilab.org/install-ompl-ubuntu.sh | bash
-# [ -d "ompl" ] || git clone --single-branch --branch 1.5.2 https://github.com/ompl/ompl.git
-# cd ompl || exit
-# mkdir -p build/Release
-# cd build/Release || exit
-# cmake -DCMAKE_BUILD_TYPE=Release ../..
-# make -j$(nproc)
-# sudo make install
 
-cd .. # Go to catkin_ws
+cd "$grace_dir" || exit
+cd ../.. # Go to catkin_ws
 
-catkin clean
-catkin build
+$no_build || catkin clean
+$no_build || catkin build moveit
+$no_build || source devel/setup.bash
 
 cd "$grace_dir" || exit
 

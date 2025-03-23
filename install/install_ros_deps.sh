@@ -23,22 +23,23 @@ if [[ "$grace_dir" == */install ]]; then
 fi
 cd "$grace_dir" || exit
 
-python -m pip install netifaces
+python -m pip install netifaces # Install it globally
 
 cd .. # Go to catkin_ws/src
-git clone https://github.com/turtlebot/turtlebot_interactions.git
+[ -d "turtlebot_interactions" ] || git clone https://github.com/turtlebot/turtlebot_interactions.git
 cd .. # Go to catkin_ws
 
-$verbose && echo "Running turtlebot install script..."
-curl -sLf https://raw.githubusercontent.com/gaunthan/Turtlebot2-On-Melodic/master/install_basic.sh | bash
-$verbose && echo "Finished turlebot install script!"
+if [ ! -d "src/turtlebot" ]; then
+    $verbose && echo "Running turtlebot install script..."
+    curl -sLf https://raw.githubusercontent.com/gaunthan/Turtlebot2-On-Melodic/master/install_basic.sh | bash
+    $verbose && echo "Finished turlebot install script!"
+fi
 
-sudo apt-get install ros-melodic-gmapping ros-melodic-move-base ros-melodic-dwa-local-planner
-# sudo apt-get install ros-melodic-turtlebot-apps # This should be getting cloned in the above snippet
+sudo apt-get install -qq ros-melodic-gmapping ros-melodic-move-base ros-melodic-dwa-local-planner ros-melodic-rosserial ros-melodic-rosserial-arduino
 
 catkin clean
 catkin build
-source ~/.bashrc
+source devel/setup.bash
 cd "$grace_dir" || exit 
 
 
