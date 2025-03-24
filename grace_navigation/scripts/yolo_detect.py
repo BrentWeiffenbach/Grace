@@ -9,7 +9,6 @@ import numpy as np
 import requests
 import ros_numpy
 import rospy
-import ultralytics_patch
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
 from grace_navigation.msg import RangeBearing, RangeBearings

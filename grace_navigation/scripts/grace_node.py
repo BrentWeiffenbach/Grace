@@ -3,7 +3,6 @@ from typing import Dict, Final, List, Union
 
 import actionlib
 import rospy
-from bcolors import bcolors
 from geometry_msgs.msg import Twist
 from grace_navigation.msg import RobotGoalMsg, RobotState
 from std_msgs.msg import Bool
@@ -272,7 +271,7 @@ class GraceNode:
 
         if GraceNode.nav_statuses[state_msg.status] in ["SUCCEEDED"]:
             rospy.loginfo(
-                f"Move base has status: {bcolors.green(GraceNode.nav_statuses[state_msg.status])}"
+                f"Move base has status: {GraceNode.nav_statuses[state_msg.status]}"
             )
 
         elif GraceNode.nav_statuses[state_msg.status] in ["PREEMPTED"]:

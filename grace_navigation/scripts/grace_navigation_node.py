@@ -5,7 +5,6 @@ from typing import Dict, List, Tuple, Union
 import actionlib
 import numpy as np
 import rospy
-from bcolors import bcolors
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist
 from grace_navigation.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
@@ -224,7 +223,7 @@ class GraceNavigation:
             self.publish_status(actionlib.GoalStatus.ABORTED)
             return
 
-        rospy.loginfo(bcolors.green("Reached object!"))
+        rospy.loginfo("Reached object!")
         self.move_base.cancel_all_goals()
         self.publish_status(actionlib.GoalStatus.SUCCEEDED)
         return
