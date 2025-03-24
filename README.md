@@ -21,6 +21,9 @@ To launch the turtlebot navigation in sim, run `roslaunch grace.launch`. Find th
 
 You can also set the output to verbose by using the `verbose:=true` argument.
 
+Run the onboard on the TurtleBot by running `roslaunch onboard.launch`.
+
 ## Known Issues
 
 * A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.
+  * Fixed by moving movebase to a different launch file
