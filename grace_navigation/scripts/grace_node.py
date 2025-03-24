@@ -1,4 +1,3 @@
-#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
 from typing import Dict, Final, List, Union
 
 import actionlib
@@ -188,7 +187,7 @@ class GraceNode:
         )
         # goal pub
         self.goal_publisher = rospy.Publisher(
-            name=GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, queue_size=5
+            name=GraceNode.GOAL_TOPIC, data_class=RobotGoalMsg, queue_size=5, latch=True
         )
         # has_object pub
         self.has_object_publisher = rospy.Publisher(
@@ -362,8 +361,8 @@ class GraceNode:
             self.goal.place_location,
             self.goal.pick_object,
         )
-        if GraceNode.verbose:
-            rospy.loginfo(f"Successfully published goal! {self.goal}.")
+
+        rospy.loginfo(f"Successfully published goal! {self.goal}.")
 
         # Start exploring!
         self.state = RobotState.EXPLORING
@@ -392,10 +391,11 @@ if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     verbose = rospy.get_param("~verbose", False)
     assert type(verbose) is bool
-    rospy.sleep(5)
-    # rotate_360()
     grace = GraceNode(verbose=verbose)
     rospy.on_shutdown(grace.shutdown)
+    rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
+    rospy.sleep(5)
+    rotate_360()
     grace.state = RobotState.WAITING
     grace.goal = RobotGoal(place_location="dining table", pick_object="chair")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load

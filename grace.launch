@@ -7,24 +7,30 @@
     <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
     <!-- URDF path for xacro containing both turtlebot and grace arm -->
     <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
+    <!-- YOLO virtual env path-->
+    <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
 
     <!-- Load robot_description -->
     <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
 
+    <!-- If not in sim, make sure onboard.launch is run on the onboard computer -->
     <group if="$(arg sim)">
-        <!-- custom gazebo launch for mobile manipuaaltion base and arm -->
+        <!-- custom gazebo launch for mobile manipualtion base and arm -->
         <include file="$(find grace_description)/launch/gazebo.launch" >
             <arg name="paused" value="$(arg paused)"/>
             <arg name="gazebo_gui" value="$(eval not arg('headless'))"/>
             <arg name="urdf_path" value="$(arg urdf_path)"/>
             <arg name="world_file" value="$(find grace_description)../../aws-robomaker-small-house-world/worlds/small_house.world" />
         </include>
+
+        <!-- Launch the custom Gmapping w/ MoveBase-->
+        <include file="$(find grace_navigation)/launch/gmapping.launch"/>
     </group>
 
     <!-- joint state publisher for arm joints and mobile base on seperate topics -->
-    <!-- <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
         <rosparam param="source_list">[mobile_base/joint_states, grace/arm_joint_states]</rosparam>
-    </node> -->
+    </node>
 
     <!-- ARM CONTROL -->
     <!-- commenting arm_control for now, could be used in a sim demo maybe -->
@@ -44,16 +50,13 @@
     <!-- <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/> -->
 
     <!-- NAVIGATION -->
-    <!-- Launch the custom Gmapping -->
-    <!-- <include file="$(find grace_navigation)/launch/gmapping.launch"/> -->
-
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
     <include file="$(find grace_navigation)/launch/grace_navigation.launch">
         <arg name="verbose" value="$(arg verbose)" />
     </include>
 
     <!-- MASTER NODE for controlling state machine -->
-    <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen">
+    <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 

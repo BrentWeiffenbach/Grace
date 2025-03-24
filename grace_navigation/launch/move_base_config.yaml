@@ -4,3 +4,5 @@ local_costmap:
 
 DWAPlannerROS:
   xy_goal_tolerance: 0.15 # defaults to 0.15
+  yaw_goal_tolerance: 0.05
+  min_in_place_vel_theta: 0.8

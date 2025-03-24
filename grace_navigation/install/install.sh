@@ -43,66 +43,7 @@ if  [[ ! -d yolovenv && ! -d "../yolovenv" ]]; then
     echo "yolovenv created."
 fi
 
-#####################
-# Change the shebangs
-#####################
-# Get the full python path for the shebang here
-python_path="$grace_dir/yolovenv/bin/python"
-
-if [[ ! -f "$python_path" ]]; then
-    echo "Could not find python path."
-    exit 1
-fi
-
-$verbose && echo "Changing shebangs..."
-
-# Declare files that use relative shebangs here:
-python_files=("yolo_detect.py" "grace_node.py" "grace_navigation_node.py" "frontier_search.py")
-
-for python_file in "${python_files[@]}"; do
-    full_path="scripts/$python_file"
-    if [[ -f "$full_path" ]]; then
-        
-        # Check first line of the file
-        first_line=$(head -n 1 "$full_path")
-
-        # Ensure the first line starts with a shebang
-        if [[ "$first_line" =~ ^#! ]]; then
-            $verbose && echo "Changing shebang in $full_path..."
-
-            # Change the first line to be the path
-            # 1s is find the first line
-            # ^#!.*$ is a regex for the entire line if it starts with #!
-            # #!$python_path is the shebang to replace it with
-            sed -i "1s|^#!.*$|#!$python_path|" "$full_path"
-            $verbose && echo "Changed shebang in $full_path."
-        else
-            $verbose && echo "$full_path does not start with a shebang. Skipping..."
-        fi
-    else
-        $verbose && echo "$full_path does not exist. Skipping..."
-    fi
-done
-
-$verbose && echo "Done changing shebangs."
-
-##############################
-# Change other hardcoded paths
-##############################
-
-# Images in yaml
-yaml_paths=("my_map" "tutorial") # Must end in yaml
-
-$verbose && echo "Changing yaml file hardcoded paths..."
-for yaml_file in "${yaml_paths[@]}"; do
-    full_path="maps/$yaml_file.yaml"
-    
-    if [[ -f $full_path ]]; then
-        sed -i "s|image: .*|image: $grace_dir/maps/$yaml_file.pgm|" "$full_path"
-    else
-        $verbose && echo "$full_path not found. Skipping..."
-    fi
-done
+# python_files=("yolo_detect.py" "grace_node.py" "grace_navigation_node.py" "frontier_search.py")
 
 #################################
 # Disable verbose logging in YOLO

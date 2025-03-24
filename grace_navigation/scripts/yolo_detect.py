@@ -1,5 +1,3 @@
-#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
-
 import copy
 import os
 from typing import Dict, Final, List, Tuple, Union
@@ -83,7 +81,7 @@ class YoloDetect:
 
         # Subscribers
         self.rgb_image_sub = rospy.Subscriber(
-            name="/camera/rgb/image_color",
+            name="/camera/rgb/image_raw", # BUG: image_raw on sim, image_color irl
             data_class=Image,
             callback=self.rgb_image_callback,
         )
@@ -247,8 +245,6 @@ class YoloDetect:
         Returns:
             RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
         """
-        if YoloDetect.verbose:
-            rospy.loginfo(detection)
         # TODO: Currently, range_bearing.id is actually the obj_class. I don't think it is actually getting the tracked id's...
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
