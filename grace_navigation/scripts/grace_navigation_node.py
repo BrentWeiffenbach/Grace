@@ -1,4 +1,3 @@
-#!/home/brent/mqp_ws/src/Grace/grace_navigation/yolovenv/bin/python
 from math import atan2
 from typing import Dict, List, Tuple, Union
 
@@ -85,6 +84,7 @@ class GraceNavigation:
         )
 
         self.should_update_goal: bool = True
+        self.done_flag: bool = False
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         GraceNavigation.verbose_log("Starting move_base action server...")
@@ -124,17 +124,20 @@ class GraceNavigation:
 
             self.explore()
 
-    def done_cb(self, status: int, result: MoveBaseResult) -> None:
+    def done_cb(self, status: int, _: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
 
         Args:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
-            result (MoveBaseResult): The result of the move base.
+            _ (MoveBaseResult): The result of the move base. Ignored
         """
+        self.done_flag = False
         if goal_statuses[status] not in ["PREEMPTED"]:
             self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
             self.should_update_goal = True
+        if goal_statuses[status] in ["SUCCEEDED"]:
+            self.done_flag = True
 
     # region Publishers
     def publish_status(self, status: int) -> None:
@@ -258,6 +261,7 @@ class GraceNavigation:
         last_check_time: rospy.Time = rospy.Time.now()
         check_interval = rospy.Duration(1)
 
+        last_goal_status = None
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
             current_time: rospy.Time = rospy.Time.now()
             if current_time - start_time > exploration_timeout:
@@ -271,6 +275,7 @@ class GraceNavigation:
 
             if current_time - last_check_time > check_interval:
                 last_check_time = current_time
+                current_goal_status = self.move_base.get_state()
                 obj_point = self.find_object_in_semantic_map(target_obj_name)
 
                 if obj_point is not None:
@@ -296,29 +301,7 @@ class GraceNavigation:
                             yield_when_done=True,
                         )
 
-                        current_pose: Pose = self.get_current_pose()
-                        if GraceNavigation.are_points_equal(
-                            self.goal_pose.position, current_pose.position, epsilon=0.2
-                        ):
-                            GraceNavigation.verbose_log(
-                                "Successfully reached the object!"
-                            )
-                            return True
-
-                        distance = np.linalg.norm(
-                            [
-                                self.goal_pose.position.x - current_pose.position.x,
-                                self.goal_pose.position.y - current_pose.position.y,
-                            ]
-                        )
-                        if distance < 0.3:
-                            GraceNavigation.verbose_log("Close enough to the object!")
-                            if not GraceNavigation.are_orientations_equal(
-                                self.goal_pose.orientation,
-                                current_pose.orientation,
-                                epsilon=0.1,
-                            ):
-                                self.turn_towards_goal_pose()
+                        if self.done_flag:
                             return True
 
                         rospy.sleep(1)
@@ -365,6 +348,7 @@ class GraceNavigation:
         cmd_vel_pub.publish(twist)
         rospy.sleep(1)
         cmd_vel_pub.publish(Twist())  # Stop rotation
+        
 
     def goto(
         self, obj: Pose, yield_when_done: bool = True
@@ -376,6 +360,7 @@ class GraceNavigation:
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
         """
         # Go towards object
+        rospy.loginfo("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
         dest.target_pose.header.stamp = rospy.Time.now()
@@ -388,8 +373,8 @@ class GraceNavigation:
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         assert self.semantic_map.objects
-        reversed_objects = self.semantic_map.objects[::-1]
-        for map_obj in reversed_objects:
+        
+        for map_obj in reversed(self.semantic_map.objects):
             map_obj: Object2D
             if map_obj.cls == obj:
                 return Point(map_obj.x, map_obj.y, 0)
@@ -470,7 +455,7 @@ class GraceNavigation:
             scored_frontiers.append((frontier, score))
 
         # Sort by score (highest first)
-        scored_frontiers.sort(key=lambda x: x[1], reverse=True)
+        scored_frontiers.sort(key=lambda x: x[1], reverse=False)
 
         if scored_frontiers:
             return scored_frontiers[0][0]
@@ -517,23 +502,74 @@ class GraceNavigation:
     def calculate_offset(self, point: Point) -> Pose:
         # point is in map coordinates
         # get current pose is from /odom
-        offset_position = (
-            np.array([point.x, point.y]) * 0.72
-        )  # The lower, the farther away from the semantic position
+        resolution = self.frontier_search.map.info.resolution
+        origin = self.frontier_search.map.info.origin.position
 
+        grid = np.array(self.frontier_search.map.data).reshape(
+            (self.frontier_search.map.info.height, self.frontier_search.map.info.width)
+        )
+
+        current_pose = self.get_current_pose()
+        current_position = np.array([current_pose.position.x, current_pose.position.y])
+
+        target_position = np.array([point.x, point.y])
+        direction_vector = target_position - current_position
+        direction_vector /= np.linalg.norm(direction_vector)
+
+        safety_margin = 5  # Number of cells to keep away from obstacles
+        max_offset_distance = 2.0  # Maximum distance to offset in meters
+
+        for offset_distance in np.linspace(max_offset_distance, 0, num=20):
+            offset_position = target_position - direction_vector * offset_distance
+            grid_x = int((offset_position[0] - origin.x) / resolution)
+            grid_y = int((offset_position[1] - origin.y) / resolution)
+
+            if (
+                0 <= grid_x < grid.shape[1]
+                and 0 <= grid_y < grid.shape[0]
+                and grid[grid_y, grid_x] == 0
+            ):
+                # Check safety margin
+                is_safe = True
+                for dy in range(-safety_margin, safety_margin + 1):
+                    for dx in range(-safety_margin, safety_margin + 1):
+                        test_x = grid_x + dx
+                        test_y = grid_y + dy
+                        if (
+                            0 <= test_x < grid.shape[1]
+                            and 0 <= test_y < grid.shape[0]
+                            and grid[test_y, test_x] > 0
+                        ):
+                            is_safe = False
+                            break
+                    if not is_safe:
+                        break
+
+                if is_safe:
+                    new_pose = Pose()
+                    new_pose.position = Point(offset_position[0], offset_position[1], 0)
+                    new_pose.orientation = self.calculate_direction_towards_object(point)
+                    return new_pose
+
+        rospy.logwarn("Could not find a safe offset position, returning original point.")
         new_pose = Pose()
-        new_pose.position = Point(*offset_position, 0)
+        new_pose.position = Point(point.x, point.y, 0)
         new_pose.orientation = self.calculate_direction_towards_object(point)
-
         return new_pose
-
+    
     def calculate_direction_towards_object(self, point: Point) -> Quaternion:
         current_pose: Pose = self.get_current_pose()
-        obj_angle: float = atan2(
-            point.y - current_pose.position.y, point.x - current_pose.position.x
-        )
-        new_quaternion = Rotation.from_euler("xyz", [0, 0, obj_angle]).as_quat()
-        return Quaternion(*new_quaternion)
+    
+        # Calculate angle to point
+        dx = point.x - current_pose.position.x
+        dy = point.y - current_pose.position.y
+        target_angle = atan2(dy, dx)
+        
+        # Convert to quaternion
+        qz = np.sin(target_angle / 2)
+        qw = np.cos(target_angle / 2)
+        
+        return Quaternion(x=0, y=0, z=qz, w=qw)
 
     def create_navigable_goal(self, goal: Pose, safety_margin: int = 8) -> Pose:
         resolution = self.frontier_search.map.info.resolution
