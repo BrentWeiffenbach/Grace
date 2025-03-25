@@ -1,8 +1,16 @@
 local_costmap:
   inflation_layer:
     enabled: true # defaults to true
+    cost_scaling_factor:  5  # exponential rate at which the obstacle cost drops off (default: 10)
+    inflation_radius:     0.3  # max. distance from an obstacle at which costs are incurred for planning paths. (default: 0.5)
 
 DWAPlannerROS:
   xy_goal_tolerance: 0.15 # defaults to 0.15
   yaw_goal_tolerance: 0.05
   min_in_place_vel_theta: 0.8
+  occdist_scale: 0.2            # 0.5   - weighting for how much the controller should avoid obstacles
+
+obstacle_layer:
+  track_unknown_space: true
+
+robot_radius: 0.18 # Defaults to 0.20. Koboki is 0.18

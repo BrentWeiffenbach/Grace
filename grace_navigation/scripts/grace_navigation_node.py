@@ -124,21 +124,6 @@ class GraceNavigation:
 
             self.explore()
 
-    def done_cb(self, status: int, _: MoveBaseResult) -> None:
-        """The callback for when the robot has finished with it's goal
-
-        Args:
-            status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
-            _ (MoveBaseResult): The result of the move base. Ignored
-        """
-        self.done_flag = False
-        if goal_statuses[status] not in ["PREEMPTED"]:
-            self.publish_status(status)
-        if status == actionlib.GoalStatus.ABORTED:
-            self.should_update_goal = True
-        if goal_statuses[status] in ["SUCCEEDED"]:
-            self.done_flag = True
-
     # region Publishers
     def publish_status(self, status: int) -> None:
         """Publishes the current status to the status topic.
@@ -171,7 +156,7 @@ class GraceNavigation:
             marker.ns = namespace
             marker.id = marker_id
 
-            if namespace == "Object_Goal":
+            if namespace == "Object_Goal" or namespace == "Object_Goal_Offset":
                 marker.type = Marker.TEXT_VIEW_FACING
                 has_object = rospy.wait_for_message(
                     topic=GraceNode.HAS_OBJECT_TOPIC,
@@ -192,6 +177,43 @@ class GraceNavigation:
             marker.action = Marker.ADD
 
             marker.pose.position = k
+
+            marker.scale.x = 0.15
+            marker.scale.y = 0.15
+            marker.scale.z = 0.15
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1.0
+            marker.pose.orientation = Quaternion(0, 0, 0, 1)
+            marker.lifetime = rospy.Duration(0)
+
+            marker_array.markers.append(marker)
+            marker_id += 1
+        self.centroid_marker_pub.publish(marker_array)
+
+    def publish_labled_markers(
+        self,
+        keypoints: List[Tuple[Point, Union[np.floating, float]]],
+        namespace: str = "frontiers",
+        color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
+    ):
+        marker_array = MarkerArray()
+        marker_array.markers = []
+        marker_id = 0
+
+        for k in keypoints:
+            pos, score = k
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = namespace
+            marker.id = marker_id
+            marker.type = Marker.TEXT_VIEW_FACING
+            marker.text = f"Score: {round(score, 2)}"
+            marker.action = Marker.ADD
+
+            marker.pose.position = pos
 
             marker.scale.x = 0.15
             marker.scale.y = 0.15
@@ -259,9 +281,8 @@ class GraceNavigation:
 
         navigating_to_object = False
         last_check_time: rospy.Time = rospy.Time.now()
-        check_interval = rospy.Duration(1)
+        check_interval = rospy.Duration(5) # Affects how often the final goal object goto should occur/update
 
-        last_goal_status = None
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
             current_time: rospy.Time = rospy.Time.now()
             if current_time - start_time > exploration_timeout:
@@ -275,7 +296,6 @@ class GraceNavigation:
 
             if current_time - last_check_time > check_interval:
                 last_check_time = current_time
-                current_goal_status = self.move_base.get_state()
                 obj_point = self.find_object_in_semantic_map(target_obj_name)
 
                 if obj_point is not None:
@@ -283,10 +303,12 @@ class GraceNavigation:
                     GraceNavigation.verbose_log(
                         f"Found {target_obj_name} in semantic map"
                     )
-
+                    self.publish_markers(
+                        [obj_point], "Object_Goal", color=(0, 1, 0)
+                    )
                     self.goal_pose: Pose = self.calculate_offset(obj_point)
                     self.publish_markers(
-                        [self.goal_pose.position], "Object_Goal", color=(0, 0, 1)
+                        [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
                     )
 
                     # Goal is in occupancy grid
@@ -319,6 +341,7 @@ class GraceNavigation:
 
                 if frontier_pose is None:
                     GraceNavigation.verbose_log("No frontiers found, waiting...")
+                    # TODO: Add 360 rotation here
                     rospy.sleep(2)
                     continue
 
@@ -331,24 +354,11 @@ class GraceNavigation:
                         self.create_navigable_goal(frontier_pose),
                         yield_when_done=False,
                     )
-                    rospy.sleep(5)
+                    rospy.sleep(4) # Increase to increase time between updating which frontier should be navigated to
 
-            rospy.sleep(0.5)
+            rospy.sleep(1) # Originally 0.5
 
         return None
-
-    def turn_towards_goal_pose(self):
-        GraceNavigation.verbose_log("Turning to face final pose of object")
-        direction: Quaternion = self.calculate_direction_towards_object(
-            self.goal_pose.position
-        )
-        cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=10)
-        twist = Twist()
-        twist.angular.z = direction.z
-        cmd_vel_pub.publish(twist)
-        rospy.sleep(1)
-        cmd_vel_pub.publish(Twist())  # Stop rotation
-        
 
     def goto(
         self, obj: Pose, yield_when_done: bool = True
@@ -369,16 +379,33 @@ class GraceNavigation:
             goal=dest,
             done_cb=self.done_cb if yield_when_done else None,
         )
+        
+    def done_cb(self, status: int, _: MoveBaseResult) -> None:
+        """The callback for when the robot has finished with it's goal
+
+        Args:
+            status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
+            _ (MoveBaseResult): The result of the move base. Ignored
+        """
+        self.done_flag = False
+        if goal_statuses[status] not in ["PREEMPTED"]:
+            self.publish_status(status)
+        if status == actionlib.GoalStatus.ABORTED:
+            self.should_update_goal = True
+        if goal_statuses[status] in ["SUCCEEDED"]:
+            self.done_flag = True
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         assert self.semantic_map.objects
-        
-        for map_obj in reversed(self.semantic_map.objects):
-            map_obj: Object2D
-            if map_obj.cls == obj:
-                return Point(map_obj.x, map_obj.y, 0)
-        return None
+        cls_objects = [map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj]
+        if not cls_objects:
+            rospy.logwarn(f"No objects with class: {obj}")
+            return None
+        self.publish_markers(
+            [Point(obj.x, obj.y, 0) for obj in cls_objects], "Object_Goal", color=(0, 1, 1)
+        )
+        return Point(cls_objects[0].x, cls_objects[0].y, 0)
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
         """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
@@ -408,15 +435,15 @@ class GraceNavigation:
     # region Frontiers
     def score_frontiers(
         self, frontiers: List[Point], target_pose: Union[Pose, None] = None
-    ) -> Union[Point, None]:
+    ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
         if not frontiers:
             return None
 
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 2.0
-        MAX_DISTANCE = 10.0
+        MIN_DISTANCE = 0.5
+        MAX_DISTANCE = 4.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
@@ -455,10 +482,20 @@ class GraceNavigation:
             scored_frontiers.append((frontier, score))
 
         # Sort by score (highest first)
-        scored_frontiers.sort(key=lambda x: x[1], reverse=False)
+        scored_frontiers.sort(key=lambda x: x[1], reverse=True)
 
         if scored_frontiers:
-            return scored_frontiers[0][0]
+            best_frontier_position = scored_frontiers[0][0]
+            distance_from_current_pose = np.linalg.norm(
+                np.array([best_frontier_position.x, best_frontier_position.y]) -
+                np.array([current_position[0], current_position[1]])
+            )
+            rospy.loginfo(
+                f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}, {best_frontier_position.z:.2f}), "
+                f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
+                f"Score: {scored_frontiers[0][1]:.2f}"
+            )
+            return scored_frontiers
         return None
 
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
@@ -473,19 +510,20 @@ class GraceNavigation:
         if not keypoints:
             return None
 
-        best_frontier = self.score_frontiers(keypoints, heuristic_pose)
-        self.publish_markers(
-            keypoints=keypoints,
+        scored_frontiers = self.score_frontiers(keypoints, heuristic_pose)
+        if scored_frontiers is None:
+            return None
+        self.publish_labled_markers(
+            keypoints=scored_frontiers,
             namespace="frontiers",
             color=(0.5, 0.1, 0.1),
         )
-        if best_frontier is None:
-            return None
-        self.publish_markers(
-            keypoints=[best_frontier],
-            namespace="best frontier",
-            color=(0.0, 1.0, 0.0),
-        )
+        # self.publish_labled_markers(
+        #     keypoints=[scored_frontiers[0]],
+        #     namespace="best frontier",
+        #     color=(0.0, 1.0, 0.0),
+        # )
+        best_frontier = scored_frontiers[0][0]
         best_frontier_pose = Pose()
         best_frontier_pose.position = best_frontier
 
@@ -517,7 +555,7 @@ class GraceNavigation:
         direction_vector /= np.linalg.norm(direction_vector)
 
         safety_margin = 5  # Number of cells to keep away from obstacles
-        max_offset_distance = 2.0  # Maximum distance to offset in meters
+        max_offset_distance = 0.75  # Maximum distance to offset
 
         for offset_distance in np.linspace(max_offset_distance, 0, num=20):
             offset_position = target_position - direction_vector * offset_distance
@@ -654,43 +692,6 @@ class GraceNavigation:
     def dummy_done_with_task(self) -> None:
         """Used as a stub function for emulating that a task has finished."""
         self.publish_status(3)
-
-    @staticmethod
-    def are_points_equal(p1: Point, p2: Point, epsilon: float = 1e-6) -> bool:
-        """Compares if two points are equal based on their x, y, and z fields within a tolerence of epsilon.
-
-        Args:
-            p1 (Point): The first point.
-            p2 (Point): The second point.
-            epsilon (float, optional): The tolerance to compare the two points to. Defaults to 1e-6.
-
-        Returns:
-            bool: If the two points are equal within a tolerance.
-        """
-        # abs(a, b) < epsilon will compare if a, b are equal within a tolerence
-        return (
-            abs(p1.x - p2.x) < epsilon
-            and abs(p1.y - p2.y) < epsilon
-            and abs(p1.z - p2.z) < epsilon
-        )
-
-    @staticmethod
-    def are_orientations_equal(
-        o1: Quaternion, o2: Quaternion, epsilon: float = 1e-6
-    ) -> bool:
-        """Compares if two quaternion's are equal based off of their x, y, z, and w fields within a tolerence of epsilon.
-
-        Args:
-            o1 (Quaternion): The first quaternion.
-            o2 (Quaternion): The second quaternion.
-            epsilon (float, optional): The tolerance to compare the twwo quaternions to. Defaults to 1e-6.
-
-        Returns:
-            bool: If the two quaternions are equal within a tolerance.
-        """
-        dot_product: float = abs(o1.x * o2.x + o1.y * o2.y + o1.z * o2.z + o1.w * o2.w)
-
-        return abs(dot_product - 1.0) < epsilon
 
     # region Run Node
     def run(self) -> None:

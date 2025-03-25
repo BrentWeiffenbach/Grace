@@ -3,15 +3,15 @@
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
 
     <!-- YOLO detection node for sematic slam in Python 3-->
-    <node name="yolo_detect" pkg="grace_navigation" type="yolo_detect.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+    <node name="yolo_detect" pkg="grace_navigation" type="yolo_detect.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 
     <!-- Semantic Slam node for publishing the semantic map -->
-    <node name="semantic_slam" pkg="grace_navigation" type="semantic_slam.py" output="screen" />
+    <node name="semantic_slam" pkg="grace_navigation" type="semantic_slam.py" output="screen" required="true"/>
 
     <!-- Navigation node frontier exploration and interactions with semantic slam in python 3-->
-    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+    <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 

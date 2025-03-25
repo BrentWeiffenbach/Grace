@@ -23,8 +23,8 @@
             <arg name="world_file" value="$(find grace_description)../../aws-robomaker-small-house-world/worlds/small_house.world" />
         </include>
 
-        <!-- Launch the custom Gmapping w/ MoveBase-->
-        <include file="$(find grace_navigation)/launch/gmapping.launch"/>
+        <!-- Launch the custom Gmapping w/ MoveBase Uncommenting this will run everything in one terminal, reccommended to launch gmapping in a seperate terminal to reduce spam-->
+        <!-- <include file="$(find grace_navigation)/launch/gmapping.launch"/> -->
     </group>
 
     <!-- joint state publisher for arm joints and mobile base on seperate topics -->
@@ -56,7 +56,7 @@
     </include>
 
     <!-- MASTER NODE for controlling state machine -->
-    <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+    <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
     </node>
 
