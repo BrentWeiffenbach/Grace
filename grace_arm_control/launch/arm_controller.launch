@@ -1,7 +1,7 @@
 <launch>
     <!-- Launch the onboard Arduino node using rosserial -->
     <node name="arduino_node" pkg="rosserial_python" type="serial_node.py" output="screen">
-        <param name="port" value="/dev/ttyUSB1"/>
+        <param name="port" value="/dev/ttyUSB0"/>
         <param name="baud" value="250000"/>
     </node>
     <!-- top level controller -->

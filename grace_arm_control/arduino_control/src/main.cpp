@@ -171,6 +171,7 @@ void updateMotors() {
     }
   }
   if (allMotorsStopped && currentStatus == EXECUTING) {
+    nh.loginfo("All motors have stopped");
     currentStatus = COMPLETED;
     updateArmStatus();
   }
@@ -201,6 +202,9 @@ void goalStateCb(const sensor_msgs::JointState& msg) {
   const char* homingHeader = "Homing";
   if (strcmp(msg.header.frame_id, homingHeader) == 0) {
     nh.loginfo("Homing command received");
+    for (int i = 0; i < 6; i++) {
+      limitSwitchTriggered[i] = false;
+    }
     homing();
     return;
   }
@@ -258,13 +262,15 @@ volatile unsigned long lastDebounceTimeJ3 = 0;
 volatile unsigned long lastDebounceTimeJ4 = 0;
 volatile unsigned long lastDebounceTimeJ5 = 0;
 volatile unsigned long lastDebounceTimeJ6 = 0;
-const unsigned long debounceDelay = 200;  // 200 milliseconds debounce delay
+const unsigned long debounceDelay = 500;  // Default: 200 milliseconds debounce delay
 
 void limitSwitchJ1ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ1) > debounceDelay) {
     motors[0].currentPosition = -106.0;  // Set J1 position to -106 degrees
-    motors[0].moving = false;         // Stop motor J1
+    if (currentStatus == HOMING) {
+      motors[0].moving = false;         // Stop motor J1 only if in HOMING state
+    }
     lastDebounceTimeJ1 = currentTime;
     limitSwitchTriggered[0] = true;
   }
@@ -274,7 +280,9 @@ void limitSwitchJ2ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ2) > debounceDelay) {
     motors[1].currentPosition = -18.0;  // Set J2 position to -18 degrees
-    motors[1].moving = false;         // Stop motor J2
+    if (currentStatus == HOMING) {
+      motors[1].moving = false;         // Stop motor J2 only if in HOMING state
+    }
     lastDebounceTimeJ2 = currentTime;
     limitSwitchTriggered[1] = true;
   }
@@ -283,8 +291,10 @@ void limitSwitchJ2ISR() {
 void limitSwitchJ3ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ3) > debounceDelay) {
-    motors[2].currentPosition = -33.0;  // Set J3 position to -35 degrees
-    motors[2].moving = false;         // Stop motor J3
+    motors[2].currentPosition = -33.0;  // Set J3 position to -33 degrees
+    if (currentStatus == HOMING) {
+      motors[2].moving = false;         // Stop motor J3 only if in HOMING state
+    }
     lastDebounceTimeJ3 = currentTime;
     limitSwitchTriggered[2] = true;
   }
@@ -294,7 +304,9 @@ void limitSwitchJ4ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ4) > debounceDelay) {
     motors[3].currentPosition = -180.0;  // Set J4 position to -180 degrees
-    motors[3].moving = false;         // Stop motor J4
+    if (currentStatus == HOMING) {
+      motors[3].moving = false;         // Stop motor J4 only if in HOMING state
+    }
     lastDebounceTimeJ4 = currentTime;
     limitSwitchTriggered[3] = true;
   }
@@ -303,8 +315,10 @@ void limitSwitchJ4ISR() {
 void limitSwitchJ5ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ5) > debounceDelay) {
-    motors[4].currentPosition = -91.0;  // Set J5 position to -100 degrees
-    motors[4].moving = false;         // Stop motor J5
+    motors[4].currentPosition = -88.0;  // Set J5 position to -90 degrees
+    if (currentStatus == HOMING) {
+      motors[4].moving = false;         // Stop motor J5 only if in HOMING state
+    }
     lastDebounceTimeJ5 = currentTime;
     limitSwitchTriggered[4] = true;
   }
@@ -313,8 +327,10 @@ void limitSwitchJ5ISR() {
 void limitSwitchJ6ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ6) > debounceDelay) {
-    motors[5].currentPosition = 180.0;  // Set J6 position to 0
-    motors[5].moving = false;         // Stop motor J6
+    motors[5].currentPosition = -135.0;  // Set J6 position to -135 degrees
+    if (currentStatus == HOMING) {
+      motors[5].moving = false;         // Stop motor J6 only if in HOMING state
+    }
     lastDebounceTimeJ6 = currentTime;
     limitSwitchTriggered[5] = true;
   }

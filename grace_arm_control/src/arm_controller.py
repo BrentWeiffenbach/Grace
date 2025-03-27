@@ -114,7 +114,7 @@ class ArmController:
             rospy.loginfo("Sent joint state for trajectory point {}: {}".format(self.current_point_index, joint_state.position))
             self.current_point_index += 1
             if self.publish_timer is None:
-                self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point)
+                self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point) # type: ignore
         else:
             rospy.loginfo("All trajectory points have been sent")
             if self.zero_sent:
