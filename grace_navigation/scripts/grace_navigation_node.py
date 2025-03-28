@@ -121,6 +121,7 @@ class GraceNavigation:
         self.global_costmap_sub.unregister()
 
     def global_cb(self, msg: OccupancyGridUpdate) -> None:
+        # rospy.loginfo("updating costmap")
         self.frontier_search.global_map_cb(msg)
 
     def semantic_map_callback(self, msg: Object2DArray) -> None:
@@ -259,7 +260,7 @@ class GraceNavigation:
         # AttributeError: 'GraceNavigation' object has no attribute 'goal'
         # assert self.goal
 
-        EXPLORE_SECONDS = 180
+        EXPLORE_SECONDS = 360
         rospy.loginfo("Exploring")
         at_goal = self.explore_until_found(
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
@@ -471,8 +472,8 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 2
-        MAX_DISTANCE = 4.0
+        MIN_DISTANCE = 0.1 # TODO: Tune this
+        MAX_DISTANCE = 10.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 

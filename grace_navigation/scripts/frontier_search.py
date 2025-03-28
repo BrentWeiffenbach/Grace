@@ -1,4 +1,4 @@
-from typing import List, Sequence, Tuple
+from typing import List, Tuple
 
 import cv2
 import numpy as np
@@ -6,7 +6,7 @@ from geometry_msgs.msg import Point, Pose, Quaternion
 from map_msgs.msg import OccupancyGridUpdate
 from nav_msgs.msg import OccupancyGrid
 
-
+# TODO: 
 class FrontierSearch:
     def __init__(self) -> None:
         self._map: OccupancyGrid
@@ -71,11 +71,9 @@ class FrontierSearch:
         self.global_costmap = self._global_costmap
 
     def convert_to_img(self, occupancy_grid: OccupancyGrid) -> cv2.typing.MatLike:
-        grayscale_map = {-1: 0, 0: 128, 100: 255}
         grid_data = np.array(occupancy_grid.data).reshape(
             (occupancy_grid.info.height, occupancy_grid.info.width)
         )
-        # grayscale_image = np.vectorize(grayscale_map.get)(grid_data)
         grayscale_image = np.where(
             grid_data == -1,
             0,
@@ -83,56 +81,125 @@ class FrontierSearch:
         )
         grayscale_image = np.uint8(grayscale_image)
         return grayscale_image  # type: ignore
-
+    
     def compute_centroids(self) -> List[Point]:
-        # sift: cv2.SIFT = cv2.SIFT.create()
-        orb = cv2.ORB.create()
-
-        use_me = self.global_costmap_img if hasattr(self, 'global_costmap_img') else self.map_img
+        """Flag for viewing image pipeline in action. VERY computationally expensive."""
+        # Load the image
+        use_me = self.map_img
         image = use_me.copy()
-        # image = np.uint8(image)  # type: ignore
-        # image = cv2.Canny(image, 1.2, 0.5, None)
-        six_by_six = cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))
-        three_by_three = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        cv2.imwrite("a.png", image)
-        image = cv2.erode(image, six_by_six, iterations=2)
-        cv2.imwrite("b.png", image)
-        image = cv2.dilate(image, three_by_three, iterations=1)
-        cv2.imwrite("c.png", image)
-        kp: Sequence[cv2.KeyPoint]
-        kp, _ = orb.detectAndCompute(image, None, None, False)  # type: ignore
 
-        im3 = cv2.drawKeypoints(
-            image,
-            kp,
-            None,  # type: ignore
-            (0, 255, 0),
-            cv2.DRAW_MATCHES_FLAGS_DEFAULT,
-        )  # type: ignore
+        # Isolate explored area of map
+        _, binary_gray = cv2.threshold(image, 100, 255, cv2.THRESH_BINARY)
 
-        valid_kps = [k for k in kp if 128 >= image[int(k.pt[1]), int(k.pt[0])] > 0]
-        keypoints: List[Point] = [
-            Point(*self.convert_img_coords_to_map_coords((k.pt[0], k.pt[1])), 0.0)
-            for k in valid_kps
-        ]
+        # Do edge detectin to get frontier edges
+        edges = cv2.Canny(binary_gray, 50, 150)
 
-        # Group keypoints by proximity
-        clusters = []
-        for k in keypoints:
-            added = False
-            for cluster in clusters:
-                if any(np.linalg.norm((k.x - ck.x, k.y - ck.y)) < 10 for ck in cluster):
-                    cluster.append(k)
-                    added = True
-                    break
-            if not added:
-                clusters.append([k])
+        # Make an obstacle mask
+        obstacle_mask = cv2.inRange(image, np.array([255], dtype=image.dtype), np.array([255], dtype=image.dtype))
+        
+        # Dilate obstacle mask
+        obstacle_dilated = cv2.dilate(obstacle_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6)))
+        
+        # Merge the dilated mask back into the original image so it is easier to see non obstacle frontiers
+        dialated_image = cv2.bitwise_or(image, obstacle_dilated)
+        
+        # Get all the contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter only edges that are the border between gray and black pixels (frontiers that are not on obstacles)
+        valid_cnts = []
+        for cnt in contours:
+            for point in cnt:
+                x, y = point[0]
+                if dialated_image[y, x] == 128:  # Gray pixel
+                    # Check neighbors to see if any are black
+                    neighbors = [
+                        (x - 1, y),
+                        (x + 1, y),
+                        (x, y - 1),
+                        (x, y + 1),
+                    ]
+                    if any(
+                        0 <= nx < dialated_image.shape[1] and 0 <= ny < dialated_image.shape[0] and dialated_image[ny, nx] < 50
+                        for nx, ny in neighbors
+                    ):
+                        valid_cnts.append(cnt)
+                        break
+        
+        frontier_mask = np.zeros_like(dialated_image)
+        cv2.drawContours(frontier_mask, valid_cnts, -1, (255,), 1)
+        
+        # Invert the obstacle mask
+        inverted_obstacle_dilated = cv2.bitwise_not(obstacle_dilated)
+        
+        # Apply the inverted mask to the frontier borders
+        obstacle_frontier_mask = cv2.bitwise_and(frontier_mask, inverted_obstacle_dilated)
 
-        # Filter clusters with 3 or more keypoints
-        useful_kps = [k for cluster in clusters if len(cluster) >= 10 for k in cluster]
+        # Threshold the image to black and white
+        _, inflation_layer = cv2.threshold(self.global_costmap_img, 127, 255, cv2.THRESH_BINARY)
 
-        cv2.imwrite("5.png", im3)
-        return useful_kps
+        # Apply connected components analysis
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(inflation_layer, connectivity=8)
+       
+        # Find the largest white blob (excluding background)
+        largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])  # Skip the first background component
+        
+        # clean representation of inflation layer for largest area
+        clean_inflation_mask = (labels == largest_label).astype(np.uint8) * 255
+        
+        # Resize inflation layer to match the dimensions of valid frontiers
+        clean_inflation_mask = cv2.resize(clean_inflation_mask, (obstacle_frontier_mask.shape[1], obstacle_frontier_mask.shape[0]), interpolation=cv2.INTER_NEAREST)
+
+        # Remove impractical frontiers by removing parts of frontiers in the inflation layer
+        valid_frontier_mask = cv2.bitwise_and(obstacle_frontier_mask, clean_inflation_mask)
+        
+        # Dialate frontiers to make blob detection better
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        valid_frontier_mask = cv2.dilate(valid_frontier_mask, kernel, None)
+        
+        # TODO: Tune blob detection or change to connectedComponentsWithStats
+        params = cv2.SimpleBlobDetector().Params()
+        params.filterByArea = False
+        params.minArea = 0.1
+        params.maxArea = 5000
+        params.filterByCircularity = False
+        params.filterByConvexity = False
+        params.filterByInertia = False
+
+        # Detect frontier centroids
+        blob = cv2.SimpleBlobDetector().create(params)
+        kps = blob.detect(valid_frontier_mask)
+        centroids = []
+        for kp in kps:
+            centroid_x, centroid_y = int(kp.pt[0]), int(kp.pt[1])
+            map_coords = self.convert_img_coords_to_map_coords((centroid_x, centroid_y))
+            # Debug statement if needed
+            # print(f"Centroid detected at image coords: ({centroid_x}, {centroid_y}), map coords: {map_coords}")  # Debugging log
+            centroids.append(Point(*map_coords, 0.0))
+        else:
+            print("No blobs detected") # No kps found
+    
+        # Save the resulting images
+        save_imgs: bool = True
+        if save_imgs:
+            output = cv2.drawKeypoints(valid_frontier_mask, kps, None, color=(0, 255, 0), flags=cv2.DRAW_MATCHES_FLAGS_DEFAULT) # type: ignore
+            cv2.imwrite("1 map.png", self.map_img)
+            cv2.imwrite("2 explored.png", binary_gray)
+            cv2.imwrite("3 edges.png", edges)
+            cv2.imwrite("4 obstacle_dialated.png", obstacle_dilated)
+            cv2.imwrite("5 frontier_mask.png", frontier_mask)
+            cv2.imwrite("6 obstacle_frontier_mask.png", obstacle_frontier_mask)
+            cv2.imwrite("7 valid_frontier_mask.png", valid_frontier_mask)
+            cv2.imwrite("8 centroids.png", output)
+            
+            cv2.imwrite("9 inflation_layer.png", inflation_layer)
+            cv2.imwrite("10 clean_inflation_mask.png", clean_inflation_mask)
+            cv2.imwrite("11 global_costmap.png", self.global_costmap_img)
+            # cv2.imwrite("9 inverted_inflation_layer.png", inverted_inflation_layer)
+            # cv2.imwrite("10 largest_blob_mask.png", largest_blob_mask)
+            
+            # cv2.imwrite("6 mlp.png", cv2.bitwise_and(cv2.bitwise_not(cv2.dilate(clean_inflation_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))), None), obstacle_frontier_mask))
+        return centroids
 
     def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:
         img_coords = self.convert_map_coords_to_img_coords(
