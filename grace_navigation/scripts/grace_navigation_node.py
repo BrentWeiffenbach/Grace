@@ -306,7 +306,7 @@ class GraceNavigation:
         navigating_to_object = False
         last_check_time: rospy.Time = rospy.Time.now()
         check_interval = rospy.Duration(
-            5
+            6
         )  # Affects how often the final goal object goto should occur/update
 
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
@@ -320,6 +320,10 @@ class GraceNavigation:
                 self.move_base.cancel_all_goals()
                 return False
 
+            if self.done_flag:
+                self.done_flag = False
+                return True
+            
             if current_time - last_check_time > check_interval:
                 last_check_time = current_time
                 obj_point = self.find_object_in_semantic_map(target_obj_name)
@@ -348,9 +352,10 @@ class GraceNavigation:
                         )
 
                         if self.done_flag:
+                            self.done_flag = False
                             return True
 
-                        rospy.sleep(1)
+                        rospy.sleep(4.5)
                         continue
                     else:
                         GraceNavigation.verbose_log(
@@ -405,6 +410,8 @@ class GraceNavigation:
             goal=dest,
             done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
+        if yield_when_done:
+            rospy.sleep(2)
 
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
