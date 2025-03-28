@@ -81,7 +81,7 @@ class YoloDetect:
 
         # Subscribers
         self.rgb_image_sub = rospy.Subscriber(
-            name="/camera/rgb/image_raw", # BUG: image_raw on sim, image_color irl
+            name="/camera/rgb/image_raw",  # BUG: image_raw on sim, image_color irl
             data_class=Image,
             callback=self.rgb_image_callback,
         )
@@ -151,7 +151,7 @@ class YoloDetect:
         self.isUpdated = False
         self.latch = True  # Prevent callbacks from modifying any data
         image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
-        depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # Convert to numpy array
+        depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # type: ignore
 
         CONFIDENCE_SCORE: Final[float] = 0.5
         SHOW_DETECTION_BOXES: Final[bool] = False

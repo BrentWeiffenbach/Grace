@@ -162,6 +162,8 @@ class GraceNode:
     ARM_CONTROL_TOPIC: Final[str] = "/grace/arm_control_status"
     HAS_OBJECT_TOPIC: Final[str] = "/grace/has_object"
     
+    DEFAULT_STATE: Final[int] = RobotState.WAITING
+    
     nav_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
     """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
@@ -176,7 +178,7 @@ class GraceNode:
         GraceNode.verbose: bool = verbose
 
         # TODO: Add a user-friendly input to change the goal and display the state.
-        self._state = RobotState.WAITING
+        self._state = GraceNode.DEFAULT_STATE
         self._goal = None
 
         self.has_object: bool = False
@@ -396,8 +398,8 @@ if __name__ == "__main__":
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
     rospy.sleep(5)
     rotate_360()
-    grace.state = RobotState.WAITING
-    grace.goal = RobotGoal(place_location="dining table", pick_object="chair")
+    grace.state = GraceNode.DEFAULT_STATE
+    grace.goal = RobotGoal(place_location="dining table", pick_object="elephant")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

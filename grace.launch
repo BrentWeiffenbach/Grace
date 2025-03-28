@@ -7,6 +7,7 @@
     <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
     <!-- URDF path for xacro containing both turtlebot and grace arm -->
     <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
+    <!-- <arg name="urdf_path" default="$(find turtlebot_description)/robots/kobuki_hexagons_kinect.urdf.xacro" /> -->
     <!-- YOLO virtual env path-->
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
 

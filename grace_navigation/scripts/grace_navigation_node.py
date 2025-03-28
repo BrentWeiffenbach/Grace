@@ -5,18 +5,19 @@ import actionlib
 import numpy as np
 import rospy
 from frontier_search import FrontierSearch
-from geometry_msgs.msg import Point, Pose, Quaternion, Twist
-from grace_navigation.msg import Object2D, Object2DArray, RobotGoalMsg, RobotState
+from geometry_msgs.msg import Point, Pose, Quaternion
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg
+from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
     MoveBaseAction,
     MoveBaseGoal,
     MoveBaseResult,
 )
 from nav_msgs.msg import OccupancyGrid, Odometry
-from scipy.spatial.transform import Rotation
 from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker, MarkerArray
+
+from grace_navigation.msg import Object2DArray, RobotGoalMsg, RobotState
 
 goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
@@ -43,6 +44,9 @@ class GraceNavigation:
         self.goal_pose: Pose
         self.state: int
         self.semantic_map: Object2DArray
+        self.should_update_goal: bool = True
+        self.done_flag: bool = False
+        self.odom: Odometry = Odometry()  # Initialize to empty odom
 
         # init FrontierSearch class to keep track of frontiers and map properties
         self.frontier_search = FrontierSearch()
@@ -68,10 +72,21 @@ class GraceNavigation:
         self.odom_sub = rospy.Subscriber(
             name="/odom", data_class=Odometry, callback=self.odom_callback
         )
-        self.odom: Odometry = Odometry()
 
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_callback)
         self._map_size: float = 0.0
+        """The size of the map. Used for determining if the goal should be updated."""
+        self.global_costmap_sub = rospy.Subscriber(
+            "/move_base/global_costmap/costmap",
+            OccupancyGrid,
+            self.global_costmap_initial_cb,
+        )
+        self.global_sub = rospy.Subscriber(
+            "/move_base/global_costmap/costmap_updates",
+            OccupancyGridUpdate,
+            self.global_cb,
+            tcp_nodelay=True,
+        )
 
         self.centroid_marker_pub = rospy.Publisher(
             "/frontier/centroids", MarkerArray, queue_size=10
@@ -82,9 +97,6 @@ class GraceNavigation:
             data_class=actionlib.GoalStatus,
             queue_size=10,
         )
-
-        self.should_update_goal: bool = True
-        self.done_flag: bool = False
 
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         GraceNavigation.verbose_log("Starting move_base action server...")
@@ -98,6 +110,18 @@ class GraceNavigation:
         if self._map_size != new_size:
             self._map_size = self.frontier_search.map.info.resolution
             self.should_update_goal = True
+
+    def global_costmap_initial_cb(self, msg: OccupancyGrid) -> None:
+        rospy.loginfo(
+            f"Initial Global Costmap: width={msg.info.width}, height={msg.info.height}, "
+            f"resolution={msg.info.resolution}"
+        )
+        self.frontier_search._global_costmap = msg
+        # Unsubscribe immediately after receiving the first message
+        self.global_costmap_sub.unregister()
+
+    def global_cb(self, msg: OccupancyGridUpdate) -> None:
+        self.frontier_search.global_map_cb(msg)
 
     def semantic_map_callback(self, msg: Object2DArray) -> None:
         self.semantic_map = msg
@@ -257,7 +281,6 @@ class GraceNavigation:
         self,
         exploration_timeout: rospy.Duration = rospy.Duration(60),
     ) -> Union[bool, None]:
-
         # Give semantic map time to load
         is_semantic_map_loaded: bool = self.wait_for_semantic_map(sleep_time_s=10)
         if not is_semantic_map_loaded:
@@ -281,7 +304,9 @@ class GraceNavigation:
 
         navigating_to_object = False
         last_check_time: rospy.Time = rospy.Time.now()
-        check_interval = rospy.Duration(5) # Affects how often the final goal object goto should occur/update
+        check_interval = rospy.Duration(
+            5
+        )  # Affects how often the final goal object goto should occur/update
 
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
             current_time: rospy.Time = rospy.Time.now()
@@ -303,9 +328,7 @@ class GraceNavigation:
                     GraceNavigation.verbose_log(
                         f"Found {target_obj_name} in semantic map"
                     )
-                    self.publish_markers(
-                        [obj_point], "Object_Goal", color=(0, 1, 0)
-                    )
+                    self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                     self.goal_pose: Pose = self.calculate_offset(obj_point)
                     self.publish_markers(
                         [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
@@ -345,7 +368,9 @@ class GraceNavigation:
                     rospy.sleep(2)
                     continue
 
-                if self.should_update_goal or self.move_base.get_state() not in [actionlib.GoalStatus.PENDING]:
+                if self.should_update_goal or self.move_base.get_state() not in [
+                    actionlib.GoalStatus.PENDING
+                ]:
                     GraceNavigation.verbose_log(
                         "Navigating to a frontier for exploration"
                     )
@@ -354,15 +379,15 @@ class GraceNavigation:
                         self.create_navigable_goal(frontier_pose),
                         yield_when_done=False,
                     )
-                    rospy.sleep(4) # Increase to increase time between updating which frontier should be navigated to
+                    rospy.sleep(
+                        4
+                    )  # Increase to increase time between updating which frontier should be navigated to
 
-            rospy.sleep(1) # Originally 0.5
+            rospy.sleep(1)  # Originally 0.5
 
         return None
 
-    def goto(
-        self, obj: Pose, yield_when_done: bool = True
-    ) -> None:
+    def goto(self, obj: Pose, yield_when_done: bool = True) -> None:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
@@ -379,7 +404,7 @@ class GraceNavigation:
             goal=dest,
             done_cb=self.done_cb if yield_when_done else None,
         )
-        
+
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
 
@@ -398,12 +423,16 @@ class GraceNavigation:
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         assert self.semantic_map.objects
-        cls_objects = [map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj]
+        cls_objects = [
+            map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
+        ]
         if not cls_objects:
             rospy.logwarn(f"No objects with class: {obj}")
             return None
         self.publish_markers(
-            [Point(obj.x, obj.y, 0) for obj in cls_objects], "Object_Goal", color=(0, 1, 1)
+            [Point(obj.x, obj.y, 0) for obj in cls_objects],
+            "Object_Goal",
+            color=(0, 1, 1),
         )
         return Point(cls_objects[0].x, cls_objects[0].y, 0)
 
@@ -442,7 +471,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 0.5
+        MIN_DISTANCE = 2
         MAX_DISTANCE = 4.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -487,8 +516,8 @@ class GraceNavigation:
         if scored_frontiers:
             best_frontier_position = scored_frontiers[0][0]
             distance_from_current_pose = np.linalg.norm(
-                np.array([best_frontier_position.x, best_frontier_position.y]) -
-                np.array([current_position[0], current_position[1]])
+                np.array([best_frontier_position.x, best_frontier_position.y])
+                - np.array([current_position[0], current_position[1]])
             )
             rospy.loginfo(
                 f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}, {best_frontier_position.z:.2f}), "
@@ -500,13 +529,13 @@ class GraceNavigation:
 
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point] = self.frontier_search.compute_centroids()
-        
+
         # Only keep keypoints that are within the occupancy grid (safely)
-        keypoints = [
-            kp
-            for kp in keypoints
-            if self.frontier_search.is_point_in_occupancy_grid(kp)
-        ]
+        # keypoints = [
+        #     kp
+        #     for kp in keypoints
+        #     if self.frontier_search.is_point_in_occupancy_grid(kp)
+        # ]
         if not keypoints:
             return None
 
@@ -586,27 +615,31 @@ class GraceNavigation:
                 if is_safe:
                     new_pose = Pose()
                     new_pose.position = Point(offset_position[0], offset_position[1], 0)
-                    new_pose.orientation = self.calculate_direction_towards_object(point)
+                    new_pose.orientation = self.calculate_direction_towards_object(
+                        point
+                    )
                     return new_pose
 
-        rospy.logwarn("Could not find a safe offset position, returning original point.")
+        rospy.logwarn(
+            "Could not find a safe offset position, returning original point."
+        )
         new_pose = Pose()
         new_pose.position = Point(point.x, point.y, 0)
         new_pose.orientation = self.calculate_direction_towards_object(point)
         return new_pose
-    
+
     def calculate_direction_towards_object(self, point: Point) -> Quaternion:
         current_pose: Pose = self.get_current_pose()
-    
+
         # Calculate angle to point
         dx = point.x - current_pose.position.x
         dy = point.y - current_pose.position.y
         target_angle = atan2(dy, dx)
-        
+
         # Convert to quaternion
         qz = np.sin(target_angle / 2)
         qw = np.cos(target_angle / 2)
-        
+
         return Quaternion(x=0, y=0, z=qz, w=qw)
 
     def create_navigable_goal(self, goal: Pose, safety_margin: int = 8) -> Pose:
