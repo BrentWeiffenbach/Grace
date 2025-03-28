@@ -88,40 +88,17 @@ class FrontierSearch:
         # sift: cv2.SIFT = cv2.SIFT.create()
         orb = cv2.ORB.create()
 
-        use_me = (
-            self.global_costmap_img
-            if hasattr(self, "global_costmap_img")
-            else self.map_img
-        )
+        use_me = self.global_costmap_img if hasattr(self, 'global_costmap_img') else self.map_img
         image = use_me.copy()
         # image = np.uint8(image)  # type: ignore
         # image = cv2.Canny(image, 1.2, 0.5, None)
         six_by_six = cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))
-        # three_by_three = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        # cv2.imwrite("a.png", image)
-        # image = cv2.erode(image, six_by_six, iterations=2)
-        # image = cv2.dilate(image, three_by_three, iterations=1)
-        wall_mask = image == 255
-        # cv2.imwrite("b.png", wall_mask)
-
-        # 2. Dilate wall mask to create a wider buffer zone
-        wall_buffer = cv2.dilate(
-            wall_mask.astype(np.uint8) * 255, six_by_six, iterations=3
-        )
-        # cv2.imwrite("b.png", wall_buffer)
-
-        # 3. Create a mask for unexplored (dark) and free (gray) areas
-        frontier_mask = (image <= 128).astype(np.uint8) * 255
-        # cv2.imwrite("c.png", frontier_mask)
-        # 4. Combine masks to exclude wall-adjacent regions
-        valid_frontier_mask = cv2.bitwise_and(
-            frontier_mask, cv2.bitwise_not(wall_buffer)
-        )
-        # cv2.imwrite("d.png", valid_frontier_mask)
-        # Apply the mask to the original image
-        image = cv2.bitwise_and(image, image, mask=valid_frontier_mask)
-        # cv2.imwrite("e.png", image)
-
+        three_by_three = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        cv2.imwrite("a.png", image)
+        image = cv2.erode(image, six_by_six, iterations=2)
+        cv2.imwrite("b.png", image)
+        image = cv2.dilate(image, three_by_three, iterations=1)
+        cv2.imwrite("c.png", image)
         kp: Sequence[cv2.KeyPoint]
         kp, _ = orb.detectAndCompute(image, None, None, False)  # type: ignore
 
