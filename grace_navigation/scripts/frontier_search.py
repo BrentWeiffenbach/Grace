@@ -6,7 +6,6 @@ from geometry_msgs.msg import Point, Pose, Quaternion
 from map_msgs.msg import OccupancyGridUpdate
 from nav_msgs.msg import OccupancyGrid
 
-# TODO: 
 class FrontierSearch:
     def __init__(self) -> None:
         self._map: OccupancyGrid
@@ -88,10 +87,10 @@ class FrontierSearch:
         use_me = self.map_img
         image = use_me.copy()
 
-        # Isolate explored area of map
+        # Threshold the map
         _, binary_gray = cv2.threshold(image, 100, 255, cv2.THRESH_BINARY)
 
-        # Do edge detectin to get frontier edges
+        # Do edge detection to get frontier edges
         edges = cv2.Canny(binary_gray, 50, 150)
 
         # Make an obstacle mask
@@ -156,19 +155,20 @@ class FrontierSearch:
         # Dialate frontiers to make blob detection better
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
         valid_frontier_mask = cv2.dilate(valid_frontier_mask, kernel, None)
-        
-        # TODO: Tune blob detection or change to connectedComponentsWithStats
-        params = cv2.SimpleBlobDetector().Params()
-        params.filterByArea = False
-        params.minArea = 0.1
-        params.maxArea = 5000
-        params.filterByCircularity = False
-        params.filterByConvexity = False
-        params.filterByInertia = False
 
-        # Detect frontier centroids
-        blob = cv2.SimpleBlobDetector().create(params)
-        kps = blob.detect(valid_frontier_mask)
+        _, labels, stats, centroid_cv = cv2.connectedComponentsWithStats(valid_frontier_mask, connectivity=4)
+
+        # Sort components by area in descending order, excluding the background (label 0)
+        sorted_indices = np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1] + 1  # Add 1 to skip background
+        top_indices = sorted_indices[:5]  # Get the top 5 components
+
+        # Extract centroids of the top 5 components
+        kps = []
+        for idx in top_indices:
+            if idx < len(centroid_cv):
+                centroid_x, centroid_y = centroid_cv[idx]
+                kps.append(cv2.KeyPoint(centroid_x, centroid_y, 1))
+
         centroids = []
         for kp in kps:
             centroid_x, centroid_y = int(kp.pt[0]), int(kp.pt[1])
@@ -177,10 +177,10 @@ class FrontierSearch:
             # print(f"Centroid detected at image coords: ({centroid_x}, {centroid_y}), map coords: {map_coords}")  # Debugging log
             centroids.append(Point(*map_coords, 0.0))
         else:
-            print("No blobs detected") # No kps found
-    
+            print("No valid frontiers detected") # No kps found
+
         # Save the resulting images
-        save_imgs: bool = True
+        save_imgs: bool = False
         if save_imgs:
             output = cv2.drawKeypoints(valid_frontier_mask, kps, None, color=(0, 255, 0), flags=cv2.DRAW_MATCHES_FLAGS_DEFAULT) # type: ignore
             cv2.imwrite("1 map.png", self.map_img)
@@ -195,10 +195,6 @@ class FrontierSearch:
             cv2.imwrite("9 inflation_layer.png", inflation_layer)
             cv2.imwrite("10 clean_inflation_mask.png", clean_inflation_mask)
             cv2.imwrite("11 global_costmap.png", self.global_costmap_img)
-            # cv2.imwrite("9 inverted_inflation_layer.png", inverted_inflation_layer)
-            # cv2.imwrite("10 largest_blob_mask.png", largest_blob_mask)
-            
-            # cv2.imwrite("6 mlp.png", cv2.bitwise_and(cv2.bitwise_not(cv2.dilate(clean_inflation_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))), None), obstacle_frontier_mask))
         return centroids
 
     def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:

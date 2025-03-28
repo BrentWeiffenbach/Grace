@@ -6,7 +6,7 @@ import numpy as np
 import rospy
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion
-from grace_node import GraceNode, RobotGoal, get_constants_from_msg
+from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
     MoveBaseAction,
@@ -260,7 +260,7 @@ class GraceNavigation:
         # AttributeError: 'GraceNavigation' object has no attribute 'goal'
         # assert self.goal
 
-        EXPLORE_SECONDS = 360
+        EXPLORE_SECONDS = 12 * 60 # 12 minutes
         rospy.loginfo("Exploring")
         at_goal = self.explore_until_found(
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
@@ -365,7 +365,7 @@ class GraceNavigation:
 
                 if frontier_pose is None:
                     GraceNavigation.verbose_log("No frontiers found, waiting...")
-                    # TODO: Add 360 rotation here
+                    rotate_360()
                     rospy.sleep(2)
                     continue
 
@@ -403,7 +403,7 @@ class GraceNavigation:
         dest.target_pose.pose = obj
         self.move_base.send_goal(
             goal=dest,
-            done_cb=self.done_cb if yield_when_done else None,
+            done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
 
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
@@ -420,6 +420,10 @@ class GraceNavigation:
             self.should_update_goal = True
         if goal_statuses[status] in ["SUCCEEDED"]:
             self.done_flag = True
+            
+    def no_yield_done_cb(self, status: int, _: MoveBaseResult) -> None:
+        if goal_statuses[status] in ["SUCCEEDED"]:
+            self.should_update_goal = True
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
@@ -472,7 +476,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 0.1 # TODO: Tune this
+        MIN_DISTANCE = 0.7 # TODO: Tune this
         MAX_DISTANCE = 10.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -531,12 +535,6 @@ class GraceNavigation:
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point] = self.frontier_search.compute_centroids()
 
-        # Only keep keypoints that are within the occupancy grid (safely)
-        # keypoints = [
-        #     kp
-        #     for kp in keypoints
-        #     if self.frontier_search.is_point_in_occupancy_grid(kp)
-        # ]
         if not keypoints:
             return None
 
@@ -548,11 +546,7 @@ class GraceNavigation:
             namespace="frontiers",
             color=(0.5, 0.1, 0.1),
         )
-        # self.publish_labled_markers(
-        #     keypoints=[scored_frontiers[0]],
-        #     namespace="best frontier",
-        #     color=(0.0, 1.0, 0.0),
-        # )
+
         best_frontier = scored_frontiers[0][0]
         best_frontier_pose = Pose()
         best_frontier_pose.position = best_frontier
@@ -722,10 +716,6 @@ class GraceNavigation:
         assert self.odom
         pose: Pose = self.odom.pose.pose
         return pose
-
-    def dummy_done_with_task(self) -> None:
-        """Used as a stub function for emulating that a task has finished."""
-        self.publish_status(3)
 
     # region Run Node
     def run(self) -> None:

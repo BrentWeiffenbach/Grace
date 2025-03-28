@@ -399,7 +399,7 @@ if __name__ == "__main__":
     rospy.sleep(5)
     rotate_360()
     grace.state = GraceNode.DEFAULT_STATE
-    grace.goal = RobotGoal(place_location="dining table", pick_object="elephant")
+    grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
