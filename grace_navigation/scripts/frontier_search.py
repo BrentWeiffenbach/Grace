@@ -176,8 +176,8 @@ class FrontierSearch:
             # Debug statement if needed
             # print(f"Centroid detected at image coords: ({centroid_x}, {centroid_y}), map coords: {map_coords}")  # Debugging log
             centroids.append(Point(*map_coords, 0.0))
-        else:
-            print("No valid frontiers detected") # No kps found
+        # else:
+        #     print("No valid frontiers detected") # No kps found
 
         # Save the resulting images
         save_imgs: bool = False

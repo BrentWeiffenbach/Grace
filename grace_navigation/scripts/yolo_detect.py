@@ -57,7 +57,6 @@ class YoloDetect:
         Args:
             verbose (bool, optional): Whether verbose output should be enabled. Defaults to false.
         """
-        # ultralytics_patch.patch()
         YoloDetect.verbose: bool = verbose
 
         self.isUpdated: bool = False
@@ -81,12 +80,12 @@ class YoloDetect:
 
         # Subscribers
         self.rgb_image_sub = rospy.Subscriber(
-            name="/camera/rgb/image_raw",  # BUG: image_raw on sim, image_color irl
+            name="/camera/rgb/image_raw",
             data_class=Image,
             callback=self.rgb_image_callback,
         )
         self.depth_image_sub = rospy.Subscriber(
-            name="/camera/depth/image_raw",
+            name="/camera/depth_registered/image_raw", # BUG: Needs to be /camera/depth/image_raw on sim 
             data_class=Image,
             callback=self.depth_image_callback,
         )
@@ -103,7 +102,7 @@ class YoloDetect:
         self.latest_depth_image = None
         self.transformed_point = None
         self.camera_info: CameraInfo = rospy.wait_for_message(
-            topic="/camera/rgb/camera_info", topic_type=CameraInfo
+            topic="/camera/rgb/camera_info", topic_type=CameraInfo, timeout=rospy.Duration(20)
         )  # type: ignore
         # Timer to call the detection function at a fixed interval (4 times a second)
         self.timer = rospy.Timer(
@@ -116,13 +115,10 @@ class YoloDetect:
 
     def depth_image_callback(self, img: Image) -> None:
         if not self.latch:
-            # self.latest_depth_image = ros_numpy.numpify(msg=img)
-            # self.latest_depth_image = self.convert_Image_to_cv2(img)
             self.latest_depth_image = img
             self.isUpdated = True
 
     def rgb_image_callback(self, img: Image) -> None:
-        # self.latest_rgb_image = ros_numpy.numpify(msg=img)
         if not self.latch:
             self.latest_rgb_image = img
             self.isUpdated = True
@@ -130,6 +126,21 @@ class YoloDetect:
     def __call__(self) -> None:
         """Make it so that you can do `YoloDetect()` and it starts the class."""
         self.run()
+        
+    def swap_rgb_camera_topic(self) -> None:
+        """Used to switch between the rgb topic image_color vs image_raw. Gazebo provides the correct image
+        format for YOLO on image_raw, but using the Kinect v1, you need to change it to image_color.
+        This simply unsubscribes from the wrong topic and subscribes to the correct one."""
+        new_topic = "/camera/rgb/image_color"
+        if self.rgb_image_sub.name == "/camera/rgb/image_color":
+            new_topic = "/camera/rgb/image_raw"
+        
+        self.rgb_image_sub.unregister()
+        self.rgb_image_sub = rospy.Subscriber(
+            name=new_topic,
+            data_class=Image,
+            callback=self.rgb_image_callback,
+        )
 
     def convert_Image_to_cv2(self, img: Image) -> cv2.typing.MatLike:
         return imgmsg_to_cv2(img)
@@ -140,10 +151,12 @@ class YoloDetect:
         if (
             self.latest_rgb_image is None or self.latest_depth_image is None
         ):  # Extracted to reduce the level of indentation
+            if self.latest_rgb_image is None:
+                rospy.logwarn("YOLO rbg is not loaded")
+            else:
+                rospy.logwarn("YOLO depth is not loaded")
             return
-        # This was casuing bug where yolo view had to be open in rviz
-        # if not self.detection_image_pub.get_num_connections():
-        #     return
+
         if not self.isUpdated:
             return
 
@@ -155,7 +168,7 @@ class YoloDetect:
 
         CONFIDENCE_SCORE: Final[float] = 0.5
         SHOW_DETECTION_BOXES: Final[bool] = False
-        TRACKED_CLASSES: Final[list[int]] = [
+        TRACKED_CLASSES: Final[list[int]] = [  # noqa: F841
             32,
             41,
             56,
@@ -182,10 +195,20 @@ class YoloDetect:
             78,
             79,
         ]
-        result: List[Results] = self.model.track(
-            source=image_array, conf=CONFIDENCE_SCORE, persist=True
-        )  # get the results
-        # Use classes=TRACKED_CLASSES to add a filter onto the results
+        result: List[Results] = []
+        
+        # Get the results
+        # In a try-except to account for switching between sim and real camera
+        try:
+            result = self.model.track(
+                source=image_array, conf=CONFIDENCE_SCORE, persist=True
+            )  # get the results
+            # Use classes=TRACKED_CLASSES to add a filter onto the results
+        except ValueError:
+            rospy.logwarn("Incorrect subscription topic in yolo_detect. Changing now...")
+            self.swap_rgb_camera_topic()
+            return
+            
         det_annotated: cv2.typing.MatLike = result[0].plot(
             show=SHOW_DETECTION_BOXES
         )  # plot the annotations
@@ -194,9 +217,7 @@ class YoloDetect:
         range_bearings: list = []
         classes: dict[int, str] = result[0].names
         # Find the depths of each detection and display them
-        # print(result[0].summary())
-        # print(result[0].boxes)
-        for detection in result[0].boxes:
+        for detection in result[0].boxes: # type: ignore
             detection: Boxes  # Add typing for detection
             x1, y1, x2, y2 = map(int, detection.xyxy[0])
             det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
@@ -249,7 +270,7 @@ class YoloDetect:
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
         range_bearing.bearing = float(bearing.item())  # float
-        range_bearing.id = int(detection.id.item())  # int
+        range_bearing.id = int(detection.id.item())  # type: ignore # int
         range_bearing.obj_class = classes[int(detection.cls.item())]
         # range_bearing.probability = detection.Class_distribution
         # Create an array of all one's, except for the known probability
@@ -265,6 +286,10 @@ class YoloDetect:
         self, depth_array, x1: int, y1: int, x2: int, y2: int
     ) -> Tuple[float, Tensor]:
         depth_mask = depth_array[y1:y2, x1:x2]
+        
+        DEPTH_SCALE_FACTOR = 0.001  # 1mm = 0.001m BUG: Needs to only scale for IRL
+        depth_mask = depth_mask * DEPTH_SCALE_FACTOR
+
 
         z: np.floating = np.nanmean(depth_mask)
         obj_coords = np.nonzero(depth_mask)

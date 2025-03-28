@@ -5,8 +5,9 @@
     <!-- Launch the kinect -->
     <arg name="3d_sensor" default="$(env TURTLEBOT_3D_SENSOR)"/>  <!-- r200, kinect, asus_xtion_pro -->
     <include file="$(find turtlebot_bringup)/launch/3dsensor.launch">
+    <!-- BUG: Needs sim argument for depth_registration -->
         <arg name="rgb_processing" value="true" />
-        <arg name="depth_registration" value="false" />
+        <arg name="depth_registration" value="true" />
         <arg name="depth_processing" value="false" />
         
         <!-- We must specify an absolute topic name because if not it will be prefixed by "$(arg camera)".
@@ -16,5 +17,5 @@
 
     <include file="$(find grace_navigation)/launch/gmapping.launch"></include>
     <!-- Launch the arm controller -->
-    <include file="$(find grace_arm_control)/launch/arm_controller.launch"></include>
+    <!-- <include file="$(find grace_arm_control)/launch/arm_controller.launch"></include> -->
 </launch>

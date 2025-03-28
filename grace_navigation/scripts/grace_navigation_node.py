@@ -43,7 +43,7 @@ class GraceNavigation:
         self.goal: RobotGoal
         self.goal_pose: Pose
         self.state: int
-        self.semantic_map: Object2DArray
+        self.semantic_map: Object2DArray = Object2DArray()
         self.should_update_goal: bool = True
         self.done_flag: bool = False
         self.odom: Odometry = Odometry()  # Initialize to empty odom
@@ -163,7 +163,7 @@ class GraceNavigation:
     def publish_timeout(self) -> None:
         # Publish LOST as the state since it will never naturally be published
         self.publish_status(actionlib.GoalStatus.LOST)
-
+ 
     def publish_markers(
         self,
         keypoints: List[Point],
@@ -173,7 +173,17 @@ class GraceNavigation:
         marker_array = MarkerArray()
         marker_array.markers = []
         marker_id = 0
-
+        has_object = rospy.wait_for_message(
+                    topic=GraceNode.HAS_OBJECT_TOPIC,
+                    topic_type=Bool,
+                    timeout=rospy.Duration(10),
+                )
+        if has_object is None:
+            rospy.logwarn("Failed to receive message for has_object. Defaulting to False.")
+            has_object = False
+        else:
+            has_object = has_object.data
+        
         for k in keypoints:
             marker = Marker()
             marker.header.frame_id = "map"
@@ -182,15 +192,8 @@ class GraceNavigation:
             marker.id = marker_id
 
             if namespace == "Object_Goal" or namespace == "Object_Goal_Offset":
+                # rospy.loginfo("Publishing object goal")
                 marker.type = Marker.TEXT_VIEW_FACING
-                has_object = rospy.wait_for_message(
-                    topic=GraceNode.HAS_OBJECT_TOPIC,
-                    topic_type=Bool,
-                    timeout=rospy.Duration(10),
-                )
-
-                assert has_object
-                has_object = has_object.data
                 target_obj_name: str = (
                     self.goal.place_location if has_object else self.goal.pick_object
                 )
@@ -215,6 +218,7 @@ class GraceNavigation:
 
             marker_array.markers.append(marker)
             marker_id += 1
+            # rospy.loginfo(f"Namespace: {namespace}, Location: ({k.x}, {k.y}, {k.z})")
         self.centroid_marker_pub.publish(marker_array)
 
     def publish_labled_markers(
@@ -434,10 +438,16 @@ class GraceNavigation:
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
-        assert self.semantic_map.objects
+        if self.semantic_map.objects is None or len(self.semantic_map.objects) == 0:
+            rospy.loginfo("no objects returning none")
+            return None
+        
         cls_objects = [
             map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
         ]
+        for o in cls_objects:
+            rospy.loginfo(f"Found {obj} at: ({o.x}, {o.y})")
+
         if not cls_objects:
             rospy.logwarn(f"No objects with class: {obj}")
             return None
@@ -542,7 +552,7 @@ class GraceNavigation:
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point] = self.frontier_search.compute_centroids()
 
-        if not keypoints:
+        if not keypoints or len(keypoints) == 0:
             return None
 
         scored_frontiers = self.score_frontiers(keypoints, heuristic_pose)

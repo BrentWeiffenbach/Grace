@@ -331,9 +331,6 @@ class GraceNode:
                 self.state = RobotState.WAITING
 
     # endregion
-    # region Node Functions
-
-    # endregion
     def __call__(self) -> None:
         self.run()
 
