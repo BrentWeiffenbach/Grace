@@ -11,12 +11,12 @@ int32 PICKING = 2
 int32 PLACING = 3
 
 # The turtlebot is going to its zero location
-int32 HOMING = 4
+int32 ZEROING = 4
 
 # An int representing the class states of the turtlebot. Valid options are:
 # `RobotState.WAITING`
 # `RobotState.EXPLORING`
 # `RobotState.PICKING`
 # `RobotState.PLACING`
-# `RobotState.HOMING`
+# `RobotState.ZEROING`
 int32 state

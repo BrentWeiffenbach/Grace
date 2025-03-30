@@ -302,12 +302,12 @@ class GraceNode:
         """
         Callback function to control the state of the robot's arm.
         This function updates the robot's state based on the completion status of
-        arm movements such as picking, placing, and homing. The state transitions
+        arm movements such as picking, placing, and zeroing. The state transitions
         are as follows:
         - If the robot is in the WAITING or EXPLORING state, the function returns immediately.
-        - If the robot is in the PICKING state and the action is completed, the state changes to HOMING and the robot is marked as having an object.
-        - If the robot is in the PLACING state and the action is completed, the state changes to HOMING.
-        - If the robot is in the HOMING state:
+        - If the robot is in the PICKING state and the action is completed, the state changes to ZEROING and the robot is marked as having an object.
+        - If the robot is in the PLACING state and the action is completed, the state changes to ZEROING.
+        - If the robot is in the ZEROING state:
             - If the robot has an object and the action is completed, the object is released and the state changes to WAITING.
             - If the action is completed without having an object, the state changes to EXPLORING.
         Args:
@@ -318,14 +318,14 @@ class GraceNode:
         if self.state == RobotState.WAITING or self.state == RobotState.EXPLORING:
             return
         if self.state == RobotState.PICKING and is_completed.data:
-            self.state = RobotState.HOMING
+            self.state = RobotState.ZEROING
             self.has_object = True
             self.has_object_publisher.publish(self.has_object)
         elif self.state == RobotState.PLACING and is_completed.data:
             self.has_object = False
             self.has_object_publisher.publish(self.has_object)
-            self.state = RobotState.HOMING
-        elif self.state == RobotState.HOMING:
+            self.state = RobotState.ZEROING
+        elif self.state == RobotState.ZEROING:
             if self.has_object and is_completed.data:
                 self.state = RobotState.EXPLORING
             elif is_completed.data:
@@ -374,7 +374,7 @@ def rotate_360() -> None:
     rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
 
     # Rotate for the duration required to complete a full rotation
-    rotate_duration = rospy.Duration(2 * 3.14159 / abs(rotate_msg.angular.z))
+    rotate_duration = rospy.Duration(2 * 3.14159 / abs(rotate_msg.angular.z)) # type: ignore
     rotate_end_time = rospy.Time.now() + rotate_duration
 
     while rospy.Time.now() < rotate_end_time:
@@ -397,7 +397,7 @@ if __name__ == "__main__":
     rospy.sleep(5)
     rotate_360()
     grace.state = GraceNode.DEFAULT_STATE
-    grace.goal = RobotGoal(place_location="elephant", pick_object="tvmonitor")
+    grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

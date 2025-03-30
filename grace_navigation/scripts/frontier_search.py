@@ -34,10 +34,10 @@ class FrontierSearch:
         self._global_costmap = new_global_costmap
         if self._global_costmap is not None:
             self.global_costmap_img = self.convert_to_img(self._global_costmap)
-            kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-            self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate)
-            self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode)
+            # kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+            # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+            # self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate)
+            # self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode)
 
 
     def global_map_cb(self, msg: OccupancyGridUpdate) -> None:

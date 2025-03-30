@@ -6,6 +6,7 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import math
 from std_msgs.msg import Int32
+from grace_navigation.msg import RobotState
 
 class ArmController:
     def __init__(self):
@@ -21,19 +22,19 @@ class ArmController:
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
-        # TOOO: Implement with Grace Node state
         rospy.Subscriber('/grace/state', Int32, self.state_callback)
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
         self.gripper_pub = rospy.Publisher('/grace/gripper', String, queue_size=10)
+        self.arm_control_status_pub = rospy.Publisher('/grace/arm_control_status', Bool, queue_size=10)
 
         # Dummy topics for MoveIt! to recognize the controllers
         self.dummy_arm_controller_pub = rospy.Publisher('grace/arm_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
         self.dummy_gripper_controller_pub = rospy.Publisher('grace/gripper_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
 
     def state_callback(self, msg):
-        self.state = msg.data
+        self.state = msg.state
         rospy.loginfo("State is now {}".format(self.state))
-        if self.state == 0:
+        if self.state == RobotState.WAITING:
             self.homing()
     
     def move_group_result_callback(self, msg):
@@ -73,16 +74,18 @@ class ArmController:
                 self.publish_timer = None
             self.final_point_sent = True
         elif self.arm_status == "completed":
-            # TODO: Use GraceNode to check if picking or placing somehow, prolly shouldnt even be in this file 
-            if self.state == 2:
+            if self.state == RobotState.PICKING:
                 rospy.loginfo("State is Picking, closing the gripper")
                 self.gripper_pub.publish("close")
-            elif self.state == 3:
+                self.arm_control_status_pub.publish(True)
+            elif self.state == RobotState.PLACING:
                 rospy.loginfo("State is Placing, opening the gripper")
                 self.gripper_pub.publish("open")
-            elif self.state == 0:
+                self.arm_control_status_pub.publish(True)
+            elif self.state == RobotState.ZEROING:
                 rospy.loginfo("State is returning to zero pose")
                 self.state = -1
+                self.arm_control_status_pub.publish(True)
                 zero_trajectory_point = JointTrajectoryPoint()
                 zero_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
                 self.trajectory_points = [zero_trajectory_point, zero_trajectory_point]
