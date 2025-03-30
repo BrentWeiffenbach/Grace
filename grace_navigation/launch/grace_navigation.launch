@@ -1,10 +1,12 @@
 <launch>
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+    <arg name="sim" default="false" doc="set flags to indicate this turtle is run in simulation mode." />
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
 
     <!-- YOLO detection node for sematic slam in Python 3-->
     <node name="yolo_detect" pkg="grace_navigation" type="yolo_detect.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
+        <param name="sim" value="$(arg sim)" />
     </node>
 
     <!-- Semantic Slam node for publishing the semantic map -->

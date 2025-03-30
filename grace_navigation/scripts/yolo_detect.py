@@ -9,12 +9,12 @@ import ros_numpy
 import rospy
 from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
-from grace_navigation.msg import RangeBearing, RangeBearings
-from py3_cv_bridge import imgmsg_to_cv2  # type: ignore
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
 from ultralytics import YOLO
 from ultralytics.engine.results import Boxes, Results
+
+from grace_navigation.msg import RangeBearing, RangeBearings
 
 # Set the environment variable
 os.environ["YOLO_VERBOSE"] = "False"
@@ -129,38 +129,6 @@ class YoloDetect:
     def __call__(self) -> None:
         """Make it so that you can do `YoloDetect()` and it starts the class."""
         self.run()
-        
-    def _swap_rgb_camera_topic(self) -> None:
-        """Used to switch between the rgb topic image_color vs image_raw. Gazebo provides the correct image
-        format for YOLO on image_raw, but using the Kinect v1, you need to change it to image_color.
-        This simply unsubscribes from the wrong topic and subscribes to the correct one."""
-        new_topic = "/camera/rgb/image_color"
-        if self.rgb_image_sub.name == "/camera/rgb/image_color":
-            new_topic = "/camera/rgb/image_raw"
-        
-        self.rgb_image_sub.unregister()
-        self.rgb_image_sub = rospy.Subscriber(
-            name=new_topic,
-            data_class=Image,
-            callback=self.rgb_image_callback,
-        )
-    def _swap_depth_camera_topic(self) -> None:
-        """Used to switch between the depth topic /camera/depth_registered/image_raw vs /camera/depth/image_raw. Gazebo provides the correct image
-        data for Semantic SLAM on depth, but using the Kinect v1, you need to change it to depth_registered.
-        This simply unsubscribes from the wrong topic and subscribes to the correct one."""
-        new_topic = "/camera/depth/image_raw"
-        if self.depth_image_sub.name == "/camera/depth_registered/image_raw":
-            new_topic = "/camera/depth/image_raw"
-        
-        self.depth_image_sub.unregister()
-        self.depth_image_sub = rospy.Subscriber(
-            name=new_topic,
-            data_class=Image,
-            callback=self.depth_image_callback,
-        )
-
-    def convert_Image_to_cv2(self, img: Image) -> cv2.typing.MatLike:
-        return imgmsg_to_cv2(img)
 
     def detect_objects(self, event: rospy.timer.TimerEvent) -> None:
         """Callback function to detect objects on RGB image"""
@@ -186,33 +154,6 @@ class YoloDetect:
 
         CONFIDENCE_SCORE: Final[float] = 0.5
         SHOW_DETECTION_BOXES: Final[bool] = False
-        TRACKED_CLASSES: Final[list[int]] = [  # noqa: F841
-            32,
-            41,
-            56,
-            57,
-            58,
-            60,
-            61,
-            62,
-            63,
-            64,
-            65,
-            66,
-            67,
-            68,
-            69,
-            70,
-            71,
-            72,
-            73,
-            74,
-            75,
-            76,
-            77,
-            78,
-            79,
-        ]
         result: List[Results] = []
         
         # Get the results

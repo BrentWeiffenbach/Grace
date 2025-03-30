@@ -3,8 +3,9 @@ from typing import Dict, Final, List, Union
 import actionlib
 import rospy
 from geometry_msgs.msg import Twist
-from grace_navigation.msg import RobotGoalMsg, RobotState
 from std_msgs.msg import Bool
+
+from grace_navigation.msg import RobotGoalMsg, RobotState
 
 
 def get_constants_from_msg(msg: type) -> Dict[int, str]:

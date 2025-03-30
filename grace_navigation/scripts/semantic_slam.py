@@ -1,23 +1,19 @@
 #!/usr/bin/env python2.7
-import os
-import pickle
-
 import numpy as np
 import rospy
 import tf2_ros
-from geometry_msgs.msg import Point, PointStamped, Quaternion, Pose
 from nav_msgs.msg import Odometry
-from numpy.linalg import eig, inv, norm
-from grace_navigation.msg import Object2D, Object2DArray, RangeBearings
-from scipy.stats import dirichlet, entropy
+from numpy.linalg import inv, norm
+from scipy.stats import dirichlet
 from tf import transformations
 from tf2_ros import (
     ConnectivityException,  # type: ignore
     ExtrapolationException,  # type: ignore
     TransformException,  # type: ignore
 )
-from visualization_msgs.msg import Marker, MarkerArray
-from grace_navigation.msg import RobotState
+from visualization_msgs.msg import MarkerArray
+
+from grace_navigation.msg import Object2D, Object2DArray, RangeBearings, RobotState
 
 
 class MapObject:
@@ -89,25 +85,13 @@ class SemanticSLAM:
             "/range_bearing", RangeBearings, self.range_callback
         )
         self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10, latch=True)
-        self.point_pub = rospy.Publisher(
-            "/semantic_map/point", PointStamped, queue_size=10
-        )
-        self.marker_pub = rospy.Publisher(
-            "/semantic_map/marker", MarkerArray, queue_size=30
-        )
         self.t = 0  # type: int
         """Timestamp, in seconds"""
-        self.t_series = []
-        self.entropy_series = []
-        self.A_opt = []
-        self.D_opt = []
-        self.E_opt = []
 
         self.objects = {}  # type: dict[int, MapObject]
         self.max_obj_id = 0  # type: int
         self.marker_array = MarkerArray()
         self.marker_array.markers = []
-        # rospy.on_shutdown(self.save_data)
 
     def odom_callback(self, msg):
         # only takes the covariance, the pose is taken from tf transformation
@@ -261,20 +245,11 @@ class SemanticSLAM:
                 )
                 z = np.asarray([obj_range, bearing])
 
-                # print('robot pose is ', [x, y, self.ang])
-                # print('old object pose is ', obj.pos)
-                # print(np.arctan2(obj_y-y, obj_x-x))
                 # Difference between actual measurements and predicited measurements
                 dz = z - np.asarray([d, np.arctan2(obj_y - y, obj_x - x) - self.ang])
                 dz[1] = np.arctan2(
                     np.sin(dz[1]), np.cos(dz[1])
                 )  # Normalize to be within -pi to pi
-
-                # print('robot pose covariance is ', self.sigma_p)
-                # print('old object pose covariance is ', obj.pos_var)
-                #
-                # print('z is ', z)
-                # print('dz is ', dz)
 
                 psi_inv = (
                     np.matmul(np.matmul(K2.T, self.sigma_delta_inv), K2)
@@ -304,9 +279,6 @@ class SemanticSLAM:
                 # Calculate Kalman gain
                 K = np.matmul(np.matmul(updated_pos_var, K1.T), M1)
                 updated_pos = obj_pos + np.matmul(K, dz)
-
-                # print('updated pose is ', updated_pos)
-                # print('updated pose covariance is', updated_pos_var)
                 # endregion
 
                 for i in range(self.numberOfClasses):
@@ -341,23 +313,6 @@ class SemanticSLAM:
         semantic_map_msg.header = msg.header
         objects = self.create_objects()
 
-        # These cause a modulo 0 error and is not useful
-        # average_entropy, A_opt, D_opt, E_opt = (
-        #     self.write_and_calculate_avg_entropy_and_ade_opt(msg)
-        # )
-
-        # self.A_opt.append(A_opt)
-        # self.D_opt.append(D_opt)
-        # self.E_opt.append(E_opt)
-
-        self.t_series.append(self.t)
-
-        # Publish the found points???
-        # self.publish_objects(to_frame_rel)
-        # self.add_markers(to_frame_rel) # Enable markers (if you so desire)
-
-        # not used anymore:
-        # self.entropy_series.append(average_entropy)
         semantic_map_msg.objects = objects
         self.map_pub.publish(semantic_map_msg)
 
@@ -403,10 +358,6 @@ class SemanticSLAM:
             if old_len == len(used_ids):
                 continue
 
-            dist, matched_obj = self.get_closest_object(obj.obj_class, obj.pos[0], obj.pos[1])
-            if dist < 0.5 and matched_obj:
-                self.remove_marker(matched_obj.id)
-
             obj_msg.x = obj.pos[0]
             obj_msg.y = obj.pos[1]
 
@@ -418,161 +369,6 @@ class SemanticSLAM:
             # print(obj.obj_class, " ", obj_id, " ", obj.pos)
             objects.append(obj_msg)
         return objects
-
-    # TODO: Rewrite this to use yield and separate the deeply coupled logic
-    def write_and_calculate_avg_entropy_and_ade_opt(self, msg):
-        object_num = len(self.objects)
-        average_entropy = 0
-        A_opt = 0
-        D_opt = 0
-        E_opt = 0
-
-        file1 = open(
-            os.path.join(os.path.dirname(__file__), "../out/SLAM/")
-            + str(msg.seq)
-            + ".txt",
-            "w",
-        )
-        file1.write(str(self.t) + "\n")
-        for obj_id in self.objects:
-            obj = self.objects[obj_id]
-            average_entropy += entropy(obj.class_probs, base=2)
-            # average_entropy += entropy([1.0], base=2)
-
-            w, v = eig(obj.pos_var)
-
-            A_opt += w.sum()  # Add sum of eigenvalues
-            D_opt += w.prod()  # Add product of eigenvalues
-            E_opt += w.max()  # Add the max of the eigenvalues
-
-            line = str(obj_id) + " " + str(obj.pos[0]) + " " + str(obj.pos[1])
-            for conv in obj.pos_var.flatten():
-                line = line + " " + str(conv)
-
-            for prob in obj.class_probs:
-                # for prob in [1.0]:
-                line = line + " " + str(prob)
-
-            file1.write(line + " " + obj.obj_class + "\n")
-        file1.close()
-
-        A_opt /= object_num
-        D_opt /= object_num
-        E_opt /= object_num
-        average_entropy = average_entropy / object_num
-        return average_entropy, A_opt, D_opt, E_opt
-
-    def publish_objects(self, to_frame_rel):
-        for obj_id in self.objects:
-            obj = self.objects[obj_id]
-            _point = PointStamped()
-            _point.header.frame_id = to_frame_rel
-            _point.header.stamp = rospy.Time.now()
-            _point.point.x = obj.pos[0]
-            _point.point.y = obj.pos[1]
-            # self.point_pub.publish(_point)
-            yield obj
-
-    def add_markers(self, to_frame_rel):
-        if self.marker_array.markers is None:
-            self.marker_array.markers = []
-
-        for obj in self.publish_objects(to_frame_rel):
-            # Check if marker with the same id already exists
-            # if any(_marker.id == obj.id and _marker.ns == obj.obj_class for _marker in self.marker_array.markers):
-            #     continue
-
-            # Check if the object already exists
-            existing_marker = None  # type: Marker | None
-            for _marker in self.marker_array.markers:
-                if _marker.id == obj.id and _marker.ns == obj.obj_class:
-                    existing_marker = _marker
-                    break
-
-            if existing_marker:
-                self.edit_marker(existing_marker, obj)
-            else:
-                marker = self.create_new_marker(to_frame_rel, obj)  # type: Marker
-                self.marker_array.markers.append(marker)
-
-        self.marker_pub.publish(self.marker_array)
-
-    def edit_marker(self, marker, obj):
-        # type: (Marker, MapObject) -> Marker
-        """Edit an existing marker with obj's details
-
-        Args:
-            marker (Marker): The marker to edit
-            obj (MapObject): The details to transform Marker into
-
-        Returns:
-            Marker: The changed Marker object
-        """
-        marker.header.stamp = rospy.Time.now()
-        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
-
-        return marker
-
-    def create_new_marker(self, to_frame_rel, obj):
-        # type: (str, MapObject) -> Marker
-        """Creates a marker in `to_frame_rel` frame with `obj`'s attributes.
-
-        Args:
-            to_frame_rel (str): The frame to put the marker in
-            obj (MapObject): The MapObject containing the marker's information.
-
-        Returns:
-            Marker: A marker with the same position as `obj` and the text as `obj.obj_class [obj.id]`
-        """
-        marker = Marker()
-        marker.frame_locked = False
-        marker.header.frame_id = to_frame_rel
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = obj.obj_class
-        marker.id = obj.id
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.action = Marker.ADD
-        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
-
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-
-        marker.color.r = 1
-        marker.color.g = 0
-        marker.color.b = 0
-        marker.color.a = 1
-
-        marker.pose.orientation = Quaternion(0, 0, 0, 1)
-
-        return marker
-    
-    def remove_marker(self, marker_id):
-        assert self.marker_array.markers is not None
-        _markers = self.marker_array.markers # type: list[Marker]
-        for marker in _markers:
-            if marker.id == marker_id:
-                self.marker_array.markers.remove(marker)
-            
-
-    def save_data(self):
-        with open(
-            os.path.join(os.path.dirname(__file__), "../SLAM/new_log5.pkl"), "wb"
-        ) as fp:  # Pickling
-            pickle.dump([self.t_series, self.entropy_series], fp)
-
-        with open(
-            os.path.join(os.path.dirname(__file__), "../SLAM/new_log5.npy"), "wb"
-        ) as f:
-            np.save(f, self.t_series)
-            np.save(f, self.entropy_series)
-            np.save(f, self.A_opt)
-            np.save(f, self.D_opt)
-            np.save(f, self.E_opt)
-        # pass
-
 
 if __name__ == "__main__":
     rospy.init_node("semantic_slam")

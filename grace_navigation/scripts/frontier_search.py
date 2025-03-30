@@ -6,6 +6,7 @@ from geometry_msgs.msg import Point, Pose, Quaternion
 from map_msgs.msg import OccupancyGridUpdate
 from nav_msgs.msg import OccupancyGrid
 
+
 class FrontierSearch:
     def __init__(self) -> None:
         self._map: OccupancyGrid
@@ -70,6 +71,12 @@ class FrontierSearch:
         self.global_costmap = self._global_costmap
 
     def convert_to_img(self, occupancy_grid: OccupancyGrid) -> cv2.typing.MatLike:
+        """ Normalizes the occupancy grid provided and turns it into a cv2.typing.MatLike image.
+        
+        * (Unknown) -1 -> 0
+        * (Known) 1-127 -> 128
+        * (Occupied) 128->255 -> 255
+        """
         grid_data = np.array(occupancy_grid.data).reshape(
             (occupancy_grid.info.height, occupancy_grid.info.width)
         )
@@ -197,38 +204,33 @@ class FrontierSearch:
             cv2.imwrite("11 global_costmap.png", self.global_costmap_img)
         return centroids
 
-    def is_pose_in_occupancy_grid(self, pose: Pose) -> bool:
+    def is_pose_in_occupancy_grid(self, pose: Pose, use_inflation_layer: bool = False) -> bool:
+        """
+        Args:
+            pose (Pose): The pose to check in occupancy grid. In map coordinates. 
+        """
+        map_to_use = self.global_costmap_img if use_inflation_layer else self.map_img
+        
         img_coords = self.convert_map_coords_to_img_coords(
             (pose.position.x, pose.position.y)
         )
         x, y = img_coords
-        height, width = self.map_img.shape[:2]
+        height, width = map_to_use.shape[:2]
 
         if x < 0 or x >= width or y < 0 or y >= height:
+            # Most likely the wrong coordinate frame
             return False
+        return map_to_use[y, x] == 128
 
-        radius = 5  # px
-        for dx in range(-radius, radius + 1):
-            for dy in range(-radius, radius + 1):
-                # Skip points outside the circle
-                if dx * dx + dy * dy > radius * radius:
-                    continue
-
-                check_x, check_y = x + dx, y + dy
-                # Skip points outside the map
-                if check_x < 0 or check_x >= width or check_y < 0 or check_y >= height:
-                    continue
-
-                if self.map_img[check_y, check_x] == 255:
-                    return False
-
-        return self.map_img[y, x] == 128
-
-    def is_point_in_occupancy_grid(self, point: Point) -> bool:
+    def is_point_in_occupancy_grid(self, point: Point, use_inflation_layer: bool = False) -> bool:
+        """
+        Args:
+            point (Point): The point to check if in occupancy grid. In map coordinates.
+        """
         pose = Pose()
         pose.position = point
         pose.orientation = Quaternion(0, 0, 0, 1)
-        return self.is_pose_in_occupancy_grid(pose)
+        return self.is_pose_in_occupancy_grid(pose, use_inflation_layer)
 
     def convert_img_coords_to_map_coords(
         self, img_coords: Tuple[float, float]
