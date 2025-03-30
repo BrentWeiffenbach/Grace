@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-<!-- TODO make this more barebones -->
   <arg name="paused" default="false"/>
   <arg name="gazebo_gui" default="true"/>
   <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
@@ -47,5 +46,4 @@
     <remap from="image" to="/camera/depth/image_raw"/>
     <remap from="scan" to="/scan"/>
   </node>
-
 </launch>

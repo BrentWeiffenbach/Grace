@@ -1,4 +1,6 @@
 <launch>
+    <arg name="arm" default="true" doc="set to true if arm is plugged in, false otherwise" />
+
     <!-- Launch the turtlebot itself -->
     <include file="$(find turtlebot_bringup)/launch/minimal.launch"></include>
 
@@ -15,6 +17,9 @@
     </include>
 
     <include file="$(find grace_navigation)/launch/gmapping.launch"></include>
+    
     <!-- Launch the arm controller -->
-    <!-- <include file="$(find grace_arm_control)/launch/arm_controller.launch"></include> -->
+    <group if="$(arg arm)">
+        <include file="$(find grace_arm_control)/launch/arm_controller.launch"></include>
+    </group>
 </launch>

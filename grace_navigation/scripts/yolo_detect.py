@@ -51,13 +51,14 @@ def download_model(model_name: str) -> str:
 class YoloDetect:
     verbose = False
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, is_sim: bool = False) -> None:
         """Initialzier for YoloDetect.
 
         Args:
             verbose (bool, optional): Whether verbose output should be enabled. Defaults to false.
         """
         YoloDetect.verbose: bool = verbose
+        self.is_sim = is_sim
 
         self.isUpdated: bool = False
         """A flag representing if the detection has been updated."""
@@ -79,13 +80,15 @@ class YoloDetect:
         )
 
         # Subscribers
+        rgb_topic = "/camera/rgb/image_raw" if self.is_sim else "/camera/rgb/image_color"
         self.rgb_image_sub = rospy.Subscriber(
-            name="/camera/rgb/image_raw",
+            name=rgb_topic,
             data_class=Image,
             callback=self.rgb_image_callback,
         )
+        depth_topic = "/camera/depth/image_raw" if self.is_sim else "/camera/depth_registered/image_raw"
         self.depth_image_sub = rospy.Subscriber(
-            name="/camera/depth_registered/image_raw", 
+            name=depth_topic,
             data_class=Image,
             callback=self.depth_image_callback,
         )
@@ -127,7 +130,7 @@ class YoloDetect:
         """Make it so that you can do `YoloDetect()` and it starts the class."""
         self.run()
         
-    def swap_rgb_camera_topic(self) -> None:
+    def _swap_rgb_camera_topic(self) -> None:
         """Used to switch between the rgb topic image_color vs image_raw. Gazebo provides the correct image
         format for YOLO on image_raw, but using the Kinect v1, you need to change it to image_color.
         This simply unsubscribes from the wrong topic and subscribes to the correct one."""
@@ -141,7 +144,7 @@ class YoloDetect:
             data_class=Image,
             callback=self.rgb_image_callback,
         )
-    def swap_depth_camera_topic(self) -> None:
+    def _swap_depth_camera_topic(self) -> None:
         """Used to switch between the depth topic /camera/depth_registered/image_raw vs /camera/depth/image_raw. Gazebo provides the correct image
         data for Semantic SLAM on depth, but using the Kinect v1, you need to change it to depth_registered.
         This simply unsubscribes from the wrong topic and subscribes to the correct one."""
@@ -166,12 +169,10 @@ class YoloDetect:
             self.latest_rgb_image is None or self.latest_depth_image is None
         ):  # Extracted to reduce the level of indentation
             if self.latest_rgb_image is None:
-                rospy.logwarn("YOLO rbg is not loaded")
+                rospy.logwarn("YOLO rgb is not loaded")
             else:
                 rospy.logwarn("YOLO depth is not loaded")
-                rospy.logwarn("Incorrect depth subscription topic in yolo_detect. Changing now...")
-                self.swap_depth_camera_topic()
-            return
+                # self.swap_depth_camera_topic()
             return
 
         if not self.isUpdated:
@@ -304,7 +305,7 @@ class YoloDetect:
     ) -> Tuple[float, Tensor]:
         depth_mask = depth_array[y1:y2, x1:x2]
         
-        DEPTH_SCALE_FACTOR = 0.001 if self.depth_image_sub.name == "/camera/depth_registered/image_raw" else 1.0
+        DEPTH_SCALE_FACTOR = 1.0 if self.is_sim else 0.001
         depth_mask = depth_mask * DEPTH_SCALE_FACTOR
 
 
@@ -344,6 +345,8 @@ class YoloDetect:
 if __name__ == "__main__":
     rospy.init_node(name="yolo_detect")
     verbose = rospy.get_param("~verbose", False)
+    is_sim = rospy.get_param("~sim", False)
     assert type(verbose) is bool
-    yolo_detect = YoloDetect(verbose=verbose)
+    assert type(is_sim) is bool
+    yolo_detect = YoloDetect(verbose=verbose, is_sim=is_sim)
     yolo_detect.run()

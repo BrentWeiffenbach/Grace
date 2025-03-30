@@ -1,6 +1,3 @@
-#!/usr/bin/env python2.7
-# TODO: FIX BUGS then merge with systems integration and start doing arm work
-
 from typing import Dict, Final, List, Union
 
 import actionlib
@@ -375,8 +372,8 @@ def rotate_360() -> None:
     rotate_msg = Twist()
     rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
 
-    # Rotate for 2*pi seconds to complete a full rotation
-    rotate_duration = rospy.Duration(int(2 * 3.14159))
+    # Rotate for the duration required to complete a full rotation
+    rotate_duration = rospy.Duration(2 * 3.14159 / abs(rotate_msg.angular.z))
     rotate_end_time = rospy.Time.now() + rotate_duration
 
     while rospy.Time.now() < rotate_end_time:

@@ -2,15 +2,22 @@
     <arg name="sim" default="false" doc="set flags to indicate this turtle is run in simulation mode." />
     <arg name="headless" default="false" doc="set flags to indicate if the gazebo gui should be shown. Disabling improves performance on slower machines." />
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
-    <arg name="paused" default="false"/>
+    
+    <!-- Arm: True if arm is plugged in and false if arm is not -->
+    <arg name="arm" default="true" doc="set to true if arm is plugged in, false otherwise" />
+
+    <!-- Define the URDF paths -->
+    <arg name="grace_urdf" default="$(find grace_description)/urdf/grace.urdf.xacro" />
+    <arg name="turtlebot_urdf" default="$(find turtlebot_description)/robots/kobuki_hexagons_kinect.urdf.xacro" />
+    <!-- Conditionally set the URDF path based on arm argument -->
+    <arg name="urdf_path" default="$(arg turtlebot_urdf)" unless="$(arg arm)" />
+    <arg name="urdf_path" default="$(arg grace_urdf)" if="$(arg arm)" />
+    
+    <!-- Custom venv -->
+    <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
     <!-- rviz file default -->
     <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
-    <!-- URDF path for xacro containing both turtlebot and grace arm -->
-    <arg name="urdf_path" default="$(find grace_description)/urdf/grace.urdf.xacro"/>
-    <!-- <arg name="urdf_path" default="$(find turtlebot_description)/robots/kobuki_hexagons_kinect.urdf.xacro" /> -->
-    <!-- YOLO virtual env path-->
-    <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
-
+    
     <!-- Load robot_description -->
     <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
 
@@ -18,7 +25,7 @@
     <group if="$(arg sim)">
         <!-- custom gazebo launch for mobile manipualtion base and arm -->
         <include file="$(find grace_description)/launch/gazebo.launch" >
-            <arg name="paused" value="$(arg paused)"/>
+            <arg name="paused" value="false"/>
             <arg name="gazebo_gui" value="$(eval not arg('headless'))"/>
             <arg name="urdf_path" value="$(arg urdf_path)"/>
             <arg name="world_file" value="$(find grace_description)../../aws-robomaker-small-house-world/worlds/small_house.world" />
@@ -33,27 +40,32 @@
         <rosparam param="source_list">[mobile_base/joint_states, grace/arm_joint_states]</rosparam>
     </node>
 
-    <!-- ARM CONTROL -->
-    <!-- commenting arm_control for now, could be used in a sim demo maybe -->
-    <!-- <include file="$(find grace_arm_control)/launch/arm_controller.launch"/> -->
-   
-   <!-- launch moveit for ik and motion planning -->
-    <!-- <include file="$(find grace_description)/launch/move_group.launch">
-        <arg name="allow_trajectory_execution" value="true"/>
-        <arg name="fake_execution" value="false"/>
-        <arg name="info" value="true"/>
-        <arg name="pipeline" value="ompl"/>
-        <arg name="load_robot_description" value="$(eval not arg('sim'))"/>
-        <arg name="remap" value="false"/>
-    </include> -->
+    <group if="$(arg arm)">
+        <!-- ARM CONTROL -->
+        <group if="$(arg sim)">
+            <include file="$(find grace_arm_control)/launch/arm_controller.launch"/>
+        </group>
     
-    <!-- launch planar joint execution controller for moveit to control the turtlebot-->
-    <!-- <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/> -->
+        <!-- launch moveit for ik and motion planning -->
+        <include file="$(find grace_description)/launch/move_group.launch">
+            <arg name="allow_trajectory_execution" value="true"/>
+            <arg name="fake_execution" value="false"/>
+            <arg name="info" value="true"/>
+            <arg name="pipeline" value="ompl"/>
+            <arg name="load_robot_description" value="$(eval not arg('sim'))"/>
+            <arg name="remap" value="false"/>
+        </include>
+        
+        <!-- launch planar joint execution controller for moveit to control the turtlebot-->
+        <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/>
+    
+    </group>
 
     <!-- NAVIGATION -->
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
     <include file="$(find grace_navigation)/launch/grace_navigation.launch">
         <arg name="verbose" value="$(arg verbose)" />
+        <arg name="sim" value="$(arg sim)" />
     </include>
 
     <!-- MASTER NODE for controlling state machine -->
