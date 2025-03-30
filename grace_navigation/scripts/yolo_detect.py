@@ -85,7 +85,7 @@ class YoloDetect:
             callback=self.rgb_image_callback,
         )
         self.depth_image_sub = rospy.Subscriber(
-            name="/camera/depth_registered/image_raw", # BUG: Needs to be /camera/depth/image_raw on sim 
+            name="/camera/depth_registered/image_raw", 
             data_class=Image,
             callback=self.depth_image_callback,
         )
@@ -141,6 +141,20 @@ class YoloDetect:
             data_class=Image,
             callback=self.rgb_image_callback,
         )
+    def swap_depth_camera_topic(self) -> None:
+        """Used to switch between the depth topic /camera/depth_registered/image_raw vs /camera/depth/image_raw. Gazebo provides the correct image
+        data for Semantic SLAM on depth, but using the Kinect v1, you need to change it to depth_registered.
+        This simply unsubscribes from the wrong topic and subscribes to the correct one."""
+        new_topic = "/camera/depth/image_raw"
+        if self.depth_image_sub.name == "/camera/depth_registered/image_raw":
+            new_topic = "/camera/depth/image_raw"
+        
+        self.depth_image_sub.unregister()
+        self.depth_image_sub = rospy.Subscriber(
+            name=new_topic,
+            data_class=Image,
+            callback=self.depth_image_callback,
+        )
 
     def convert_Image_to_cv2(self, img: Image) -> cv2.typing.MatLike:
         return imgmsg_to_cv2(img)
@@ -155,6 +169,9 @@ class YoloDetect:
                 rospy.logwarn("YOLO rbg is not loaded")
             else:
                 rospy.logwarn("YOLO depth is not loaded")
+                rospy.logwarn("Incorrect depth subscription topic in yolo_detect. Changing now...")
+                self.swap_depth_camera_topic()
+            return
             return
 
         if not self.isUpdated:
@@ -205,7 +222,7 @@ class YoloDetect:
             )  # get the results
             # Use classes=TRACKED_CLASSES to add a filter onto the results
         except ValueError:
-            rospy.logwarn("Incorrect subscription topic in yolo_detect. Changing now...")
+            rospy.logwarn("Incorrect rgb subscription topic in yolo_detect. Changing now...")
             self.swap_rgb_camera_topic()
             return
             
@@ -287,7 +304,7 @@ class YoloDetect:
     ) -> Tuple[float, Tensor]:
         depth_mask = depth_array[y1:y2, x1:x2]
         
-        DEPTH_SCALE_FACTOR = 0.001  # 1mm = 0.001m BUG: Needs to only scale for IRL
+        DEPTH_SCALE_FACTOR = 0.001 if self.depth_image_sub.name == "/camera/depth_registered/image_raw" else 1.0
         depth_mask = depth_mask * DEPTH_SCALE_FACTOR
 
 
