@@ -42,7 +42,7 @@ class GraceNavigation:
     def __init__(self, verbose: bool = False) -> None:
         GraceNavigation.verbose = verbose
         self.goal: RobotGoal
-        self.goal_pose: Pose
+        self.goal_pose: Union[Pose, None] = None
         self.state: int
         self.semantic_map: Object2DArray = Object2DArray()
         self.should_update_goal: bool = True

@@ -34,6 +34,11 @@ class FrontierSearch:
         self._global_costmap = new_global_costmap
         if self._global_costmap is not None:
             self.global_costmap_img = self.convert_to_img(self._global_costmap)
+            kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+            self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate)
+            self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode)
+
 
     def global_map_cb(self, msg: OccupancyGridUpdate) -> None:
         # Dynamically resize the costmap if it changed
@@ -107,7 +112,7 @@ class FrontierSearch:
         obstacle_dilated = cv2.dilate(obstacle_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6)))
         
         # Merge the dilated mask back into the original image so it is easier to see non obstacle frontiers
-        dialated_image = cv2.bitwise_or(image, obstacle_dilated)
+        dilated_image = cv2.bitwise_or(image, obstacle_dilated)
         
         # Get all the contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -117,7 +122,7 @@ class FrontierSearch:
         for cnt in contours:
             for point in cnt:
                 x, y = point[0]
-                if dialated_image[y, x] == 128:  # Gray pixel
+                if dilated_image[y, x] == 128:  # Gray pixel
                     # Check neighbors to see if any are black
                     neighbors = [
                         (x - 1, y),
@@ -126,13 +131,13 @@ class FrontierSearch:
                         (x, y + 1),
                     ]
                     if any(
-                        0 <= nx < dialated_image.shape[1] and 0 <= ny < dialated_image.shape[0] and dialated_image[ny, nx] < 50
+                        0 <= nx < dilated_image.shape[1] and 0 <= ny < dilated_image.shape[0] and dilated_image[ny, nx] < 50
                         for nx, ny in neighbors
                     ):
                         valid_cnts.append(cnt)
                         break
         
-        frontier_mask = np.zeros_like(dialated_image)
+        frontier_mask = np.zeros_like(dilated_image)
         cv2.drawContours(frontier_mask, valid_cnts, -1, (255,), 1)
         
         # Invert the obstacle mask
@@ -180,12 +185,8 @@ class FrontierSearch:
         for kp in kps:
             centroid_x, centroid_y = int(kp.pt[0]), int(kp.pt[1])
             map_coords = self.convert_img_coords_to_map_coords((centroid_x, centroid_y))
-            # Debug statement if needed
-            # print(f"Centroid detected at image coords: ({centroid_x}, {centroid_y}), map coords: {map_coords}")  # Debugging log
             centroids.append(Point(*map_coords, 0.0))
-        # else:
-        #     print("No valid frontiers detected") # No kps found
-
+            
         # Save the resulting images
         save_imgs: bool = False
         if save_imgs:
