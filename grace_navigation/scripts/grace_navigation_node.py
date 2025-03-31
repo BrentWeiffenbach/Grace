@@ -104,6 +104,8 @@ class GraceNavigation:
         self.move_base.wait_for_server()  # Wait until move_base server starts
         GraceNavigation.verbose_log("move_base action server started!")
 
+        self.last_goal: Pose = self.get_current_pose()
+
     # region Callbacks
     def map_callback(self, msg: OccupancyGrid) -> None:
         self.frontier_search.map = msg
@@ -307,11 +309,7 @@ class GraceNavigation:
         )
 
         navigating_to_object = False
-        check_interval = rospy.Duration(
-            6
-        )  # Affects how often the final goal object goto should occur/update
-        last_check_time: rospy.Time = rospy.Time.now() - check_interval # Offset it to that it immediately checks
-
+        
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
             current_time: rospy.Time = rospy.Time.now()
             if current_time - start_time > exploration_timeout:
@@ -325,6 +323,7 @@ class GraceNavigation:
 
             if self.done_flag:
                 self.done_flag = False
+                self.goal_pose = None
                 return True
             
             obj_point = self.find_object_in_semantic_map(target_obj_name)
@@ -336,39 +335,34 @@ class GraceNavigation:
                 #     continue
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                 self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
-                    
-            
-            if current_time - last_check_time > check_interval or self.move_base.get_state() ==  actionlib.GoalStatus.SUCCEEDED or not navigating_to_object:
-                last_check_time = current_time
 
-                if self.goal_pose is not None:
-                    self.publish_markers([self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1))
-                    # Found object
-                    # Goal is in occupancy grid
-                    GraceNavigation.verbose_log(
-                        f"Goal for {target_obj_name} is accessible, navigating to it"
-                    )
-                    navigating_to_object = True
-                    
-                    if self.done_flag:
-                        self.done_flag = False
-                        return True
-
-                    self.goto(
-                        self.goal_pose,
-                        yield_when_done=True,
-                    )
-                    
+            if self.goal_pose is not None:
+                self.publish_markers([self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1))
+                # Found object
+                # Goal is in occupancy grid
+                GraceNavigation.verbose_log(
+                    f"Goal for {target_obj_name} is accessible, navigating to it"
+                )
+                navigating_to_object = True
+                
+                if self.done_flag:
+                    self.done_flag = False
                     self.goal_pose = None
-                    
+                    return True
 
-                    rospy.sleep(4.5)
-                    continue
-                else:
-                    GraceNavigation.verbose_log(
-                        f"Goal for {target_obj_name} is not accessible yet"
-                    )
-                    navigating_to_object = False
+                self.goto(
+                    self.goal_pose,
+                    yield_when_done=True,
+                )
+                
+                self.goal_pose = None
+                
+                continue
+            else:
+                GraceNavigation.verbose_log(
+                    f"Goal for {target_obj_name} is not accessible yet"
+                )
+                navigating_to_object = False
 
 
             if not navigating_to_object:
@@ -408,7 +402,27 @@ class GraceNavigation:
             obj (Pose): The pose move_base should attempt to go to.
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
         """
-        # Go towards object
+        # Get distacne from robot to goal
+        current_pose = self.get_current_pose()
+        pose_distance = np.linalg.norm(
+            np.array([current_pose.position.x, current_pose.position.y]) -
+            np.array([obj.position.x, obj.position.y])
+        )
+        # distance from last to current goal
+        last_goal_distance = np.linalg.norm(
+            np.array([self.last_goal.position.x, self.last_goal.position.y]) -
+            np.array([obj.position.x, obj.position.y])
+        )
+        # if either are too close, don't goto
+        # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
+        THRESHOLD = 0.5  # TODO: Tune this
+        if pose_distance <= THRESHOLD:
+            # rospy.logwarn("Robot is already within the threshold distance to the goal.")
+            return
+        if last_goal_distance <= THRESHOLD:
+            # rospy.logwarn("Robot tried to goto the same goal.")
+            return
+        
         rospy.loginfo("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
@@ -420,6 +434,8 @@ class GraceNavigation:
         )
         if yield_when_done:
             rospy.sleep(2)
+        # rememebr last goto goal
+        self.last_goal = obj
 
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
@@ -453,17 +469,11 @@ class GraceNavigation:
         cls_objects = [
             map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
         ]
-        for o in cls_objects:
-            rospy.loginfo(f"Found {obj} at: ({o.x}, {o.y})")
 
         if not cls_objects or len(cls_objects) == 0:
             rospy.logwarn(f"No objects with class: {obj}")
             return None
-        self.publish_markers(
-            [Point(obj.x, obj.y, 0) for obj in cls_objects],
-            "Object_Goal",
-            color=(0, 1, 1),
-        )
+        
         current_pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
         closest_obj = min(

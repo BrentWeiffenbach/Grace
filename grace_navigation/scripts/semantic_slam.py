@@ -373,7 +373,10 @@ class SemanticSLAM:
 if __name__ == "__main__":
     rospy.init_node("semantic_slam")
     rospy.loginfo("Press Ctrl + C to terminate")
-    rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
+    while True:
+        state_msg = rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
+        if state_msg.state == RobotState.EXPLORING: # type: ignore
+            break
     whatever = SemanticSLAM()
     try:
         rospy.spin()
