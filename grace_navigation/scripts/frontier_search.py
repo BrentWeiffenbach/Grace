@@ -34,10 +34,11 @@ class FrontierSearch:
         self._global_costmap = new_global_costmap
         if self._global_costmap is not None:
             self.global_costmap_img = self.convert_to_img(self._global_costmap)
-            # kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-            # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-            # self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate)
-            # self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode)
+        # if self.global_costmap_img is not None:
+            # kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+            # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+            # self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate, iterations=2)
+            # self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode, iterations=2)
 
 
     def global_map_cb(self, msg: OccupancyGridUpdate) -> None:
@@ -227,6 +228,7 @@ class FrontierSearch:
         """
         Args:
             point (Point): The point to check if in occupancy grid. In map coordinates.
+            use_inflation_layer (bool, optional): Whether to use the inflation layer for the check. Defaults to False.
         """
         pose = Pose()
         pose.position = point

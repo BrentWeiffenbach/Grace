@@ -156,6 +156,7 @@ class GraceNode:
     """
 
     verbose: bool = False
+    arm_enabled: bool = False
 
     STATE_TOPIC: Final[str] = "/grace/state"
     GOAL_TOPIC: Final[str] = "/grace/goal"
@@ -168,7 +169,7 @@ class GraceNode:
     nav_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
     """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, arm_enabled: bool = False) -> None:
         """Initializes the GraceNode.
 
         Args:
@@ -177,6 +178,7 @@ class GraceNode:
         self._state: int
         self._goal: Union[RobotGoal, None]
         GraceNode.verbose: bool = verbose
+        GraceNode.arm_enabled: bool = arm_enabled
 
         # TODO: Add a user-friendly input to change the goal and display the state.
         self._state = GraceNode.DEFAULT_STATE
@@ -390,17 +392,20 @@ def rotate_360() -> None:
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     verbose = rospy.get_param("~verbose", False)
+    arm_enabled = rospy.get_param("~arm", False)
     assert type(verbose) is bool
-    grace = GraceNode(verbose=verbose)
+    assert type(arm_enabled) is bool
+    grace = GraceNode(verbose=verbose, arm_enabled=arm_enabled)
     rospy.on_shutdown(grace.shutdown)
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
     grace.state = GraceNode.DEFAULT_STATE
-    rospy.wait_for_message("/grace/arm_control_status", Bool)
-    grace.state = RobotState.ZEROING
-    rospy.wait_for_message("/grace/arm_control_status", Bool)
+    if arm_enabled:
+        rospy.wait_for_message("/grace/arm_control_status", Bool)
+        grace.state = RobotState.ZEROING
+        rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location="cup", pick_object="chair")
+    grace.goal = RobotGoal(place_location="sports ball", pick_object="chair")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

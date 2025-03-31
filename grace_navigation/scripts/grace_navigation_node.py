@@ -329,8 +329,14 @@ class GraceNavigation:
             
             obj_point = self.find_object_in_semantic_map(target_obj_name)
             if obj_point is not None:
+                # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
+                # if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
+                #     # most likely a haclucination if not inside the inflation layer
+                #     # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
+                #     continue
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                 self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
+                    
             
             if current_time - last_check_time > check_interval or self.move_base.get_state() ==  actionlib.GoalStatus.SUCCEEDED or not navigating_to_object:
                 last_check_time = current_time
@@ -348,7 +354,9 @@ class GraceNavigation:
                         self.goal_pose,
                         yield_when_done=True,
                     )
-
+                    
+                    self.goal_pose = None
+                    
                     if self.done_flag:
                         self.done_flag = False
                         return True
@@ -432,6 +440,10 @@ class GraceNavigation:
             self.should_update_goal = True
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
+        """
+        Returns:
+            Union (Point, None): The object found's coordinates, or None if it was not found. In map coordinates.
+        """
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         if self.semantic_map.objects is None or len(self.semantic_map.objects) == 0:
             rospy.loginfo("self.semantic_map.object has no objects. Returning none")
@@ -451,7 +463,15 @@ class GraceNavigation:
             "Object_Goal",
             color=(0, 1, 1),
         )
-        return Point(cls_objects[-1].x, cls_objects[-1].y, 0)
+        current_pose = self.get_current_pose()
+        current_position = np.array([current_pose.position.x, current_pose.position.y])
+        closest_obj = min(
+            cls_objects,
+            key=lambda obj: np.linalg.norm(
+            np.array([obj.x, obj.y]) - current_position
+            ),
+        )
+        return Point(closest_obj.x, closest_obj.y, 0)
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
         """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
@@ -488,7 +508,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 0.7 # TODO: Tune this
+        MIN_DISTANCE = 1.0 
         MAX_DISTANCE = 10.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -583,6 +603,8 @@ class GraceNavigation:
         bfs_queue.put(img_point)
         
         depth: float = 0.0
+
+        best_poses = []
                 
         while not bfs_queue.empty():
             img_x, img_y = bfs_queue.get()
@@ -600,7 +622,17 @@ class GraceNavigation:
                 new_pose = Pose()
                 new_pose.position = Point(map_x, map_y, 0)
                 new_pose.orientation = self.calculate_direction_between_points(point, new_pose.position)
-                return new_pose
+                best_poses.append(new_pose)
+                if len(best_poses) >= 20:
+                    current_pose = self.get_current_pose()
+                    current_position = np.array([current_pose.position.x, current_pose.position.y])
+                    best_pose = min(
+                        best_poses,
+                        key=lambda pose: np.linalg.norm(
+                            np.array([pose.position.x, pose.position.y]) - current_position
+                        ),
+                    )
+                    return best_pose
             
             if depth >= max_offset_distance:
                 return None

@@ -140,7 +140,6 @@ class YoloDetect:
                 rospy.logwarn("YOLO rgb is not loaded")
             else:
                 rospy.logwarn("YOLO depth is not loaded")
-                # self.swap_depth_camera_topic()
             return
 
         if not self.isUpdated:
@@ -152,21 +151,14 @@ class YoloDetect:
         image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
         depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # type: ignore
 
-        CONFIDENCE_SCORE: Final[float] = 0.5
+        CONFIDENCE_SCORE: Final[float] = 0.65
         SHOW_DETECTION_BOXES: Final[bool] = False
         result: List[Results] = []
         
         # Get the results
-        # In a try-except to account for switching between sim and real camera
-        try:
-            result = self.model.track(
+        result = self.model.track(
                 source=image_array, conf=CONFIDENCE_SCORE, persist=True
             )  # get the results
-            # Use classes=TRACKED_CLASSES to add a filter onto the results
-        except ValueError:
-            rospy.logwarn("Incorrect rgb subscription topic in yolo_detect. Changing now...")
-            self.swap_rgb_camera_topic()
-            return
             
         det_annotated: cv2.typing.MatLike = result[0].plot(
             show=SHOW_DETECTION_BOXES
@@ -246,7 +238,7 @@ class YoloDetect:
     ) -> Tuple[float, Tensor]:
         depth_mask = depth_array[y1:y2, x1:x2]
         
-        DEPTH_SCALE_FACTOR = 1.0 if self.is_sim else 0.001
+        DEPTH_SCALE_FACTOR = 1.0 if self.is_sim else 0.001 # IRL Kinect is in mm instead of meters
         depth_mask = depth_mask * DEPTH_SCALE_FACTOR
 
 

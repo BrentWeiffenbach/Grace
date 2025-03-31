@@ -11,7 +11,7 @@ def do_stuff():
     def publish_goal():
         group.set_joint_value_target(joint_values)
 
-        robot = RobotCommander()
+        # robot = RobotCommander()
         # Get the corresponding Cartesian pose
         # pose = robot.get_current_state()
 

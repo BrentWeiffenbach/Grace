@@ -74,6 +74,7 @@
     <!-- MASTER NODE for controlling state machine -->
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
+        <param name="arm" value="$(arg arm)" />
     </node>
 
     <!-- Launch RViz for navigation and arm control visualizations--> 
