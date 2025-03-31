@@ -13,9 +13,9 @@ def do_stuff():
 
         robot = RobotCommander()
         # Get the corresponding Cartesian pose
-        pose = robot.get_current_state()
+        # pose = robot.get_current_state()
 
-        rospy.loginfo("Target Pose: {}".format(pose))
+        # rospy.loginfo("Target Pose: {}".format(pose))
 
         success, plan, _, _ = group.plan()
         # rospy.loginfo(success)
