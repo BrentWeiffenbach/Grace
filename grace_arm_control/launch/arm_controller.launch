@@ -9,4 +9,6 @@
     
     <!-- joint state converter -->
     <node name="grace_arm_joint_converter" pkg="grace_arm_control" type="arm_angles_converter.py" output="screen"/>
+
+    <node name="fake_moveit_goal" pkg="grace_arm_control" type="fake_moveit_goal.py" output="screen" /> 
 </launch>

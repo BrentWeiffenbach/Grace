@@ -314,7 +314,7 @@ class GraceNode:
             is_completed (Bool): A flag indicating whether the arm movement action is completed.
         """
 
-        # only update arm state from picking / placing / homeing
+        # only update arm state from picking / placing / zeroing
         if self.state == RobotState.WAITING or self.state == RobotState.EXPLORING:
             return
         if self.state == RobotState.PICKING and is_completed.data:
@@ -329,7 +329,7 @@ class GraceNode:
             if self.has_object and is_completed.data:
                 self.state = RobotState.EXPLORING
             elif is_completed.data:
-                self.state = RobotState.WAITING
+                pass
 
     # endregion
     def __call__(self) -> None:
@@ -394,9 +394,12 @@ if __name__ == "__main__":
     grace = GraceNode(verbose=verbose)
     rospy.on_shutdown(grace.shutdown)
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
+    grace.state = GraceNode.DEFAULT_STATE
+    rospy.wait_for_message("/grace/arm_control_status", Bool)
+    grace.state = RobotState.ZEROING
+    rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.state = GraceNode.DEFAULT_STATE
     grace.goal = RobotGoal(place_location="dining table", pick_object="cup")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()

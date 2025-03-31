@@ -98,16 +98,16 @@ StepperMotor motors[6] = {
 
 void moveMotor(int motorNumber) {
   StepperMotor &motor = motors[motorNumber];
-  char debugMsg[100];
-  snprintf(debugMsg, 100, "target position for motor %d: %f", motorNumber, static_cast<double>(motor.targetPosition.get(0)));
-  nh.loginfo(debugMsg);
+  // char debugMsg[100];
+  // snprintf(debugMsg, 100, "target position for motor %d: %f", motorNumber, static_cast<double>(motor.targetPosition.get(0)));
+  // nh.loginfo(debugMsg);
   float stepper_degrees = abs(motor.targetPosition.get(0) - motor.currentPosition) * motor.gearRatio;
   motor.stepsToMove = int(stepper_degrees / motor.stepsPerDeg);
   motor.currentStep = 0;
   motor.moving = true;
-  char logMsg[100];
-  snprintf(logMsg, 100, "Moving motor %d, steps to move: %d", motorNumber, motor.stepsToMove);
-  nh.loginfo(logMsg);
+  // char logMsg[100];
+  // snprintf(logMsg, 100, "Moving motor %d, steps to move: %d", motorNumber, motor.stepsToMove);
+  // nh.loginfo(logMsg);
 
   if (motor.targetPosition.get(0) < motor.currentPosition) {
       digitalWrite(motor.dirPin, LOW); // reverse
@@ -150,7 +150,7 @@ void updateMotors() {
         motor.currentStep++;
         motor.currentPosition += (motor.targetPosition.get(0) > motor.currentPosition) ? motor.stepsPerDeg / motor.gearRatio : -motor.stepsPerDeg / motor.gearRatio;
       } else {
-        nh.loginfo("Reached trajectory point, moving to next");
+        // nh.loginfo("Reached trajectory point, moving to next");
         motor.targetPosition.remove(0);
         motor.moving = false;
         bool allOtherMotorsStopped = true;
@@ -161,7 +161,7 @@ void updateMotors() {
           }
         }
         if (motor.targetPosition.size() == 0) {
-          nh.loginfo("Stopping motor, no more target positions");
+          // nh.loginfo("Stopping motor, no more target positions");
         } else if (allOtherMotorsStopped) {
           for (int k = 0; k < 6; k++) {
           moveMotor(k);
@@ -171,7 +171,7 @@ void updateMotors() {
     }
   }
   if (allMotorsStopped && currentStatus == EXECUTING) {
-    nh.loginfo("All motors have stopped");
+    // nh.loginfo("All motors have stopped");
     currentStatus = COMPLETED;
     updateArmStatus();
   }
@@ -183,7 +183,7 @@ void updateGripper(){
       gripperServo.detach();  // Stop the servo if it was opened
     }
     gripperActive = false;
-    nh.loginfo("Gripper stopped");
+    // nh.loginfo("Gripper stopped");
   }
 }
 
@@ -201,14 +201,14 @@ void homing() {
 void goalStateCb(const sensor_msgs::JointState& msg) {
   const char* homingHeader = "Homing";
   if (strcmp(msg.header.frame_id, homingHeader) == 0) {
-    nh.loginfo("Homing command received");
+    // nh.loginfo("Homing command received");
     for (int i = 0; i < 6; i++) {
       limitSwitchTriggered[i] = false;
     }
     homing();
     return;
   }
-  nh.loginfo(("Trajectory point received"));
+  // nh.loginfo(("Trajectory point received"));
   // add point to target position list
   for (int i = 0; i < static_cast<int>(msg.position_length); i++) {
     if (i < 6) {
@@ -219,11 +219,11 @@ void goalStateCb(const sensor_msgs::JointState& msg) {
   // check if it is final point in trajectory
   const char* header = msg.header.frame_id;
   const char* goal = "Goal";
-  char debugMsg[100];
-  snprintf(debugMsg, 100, "Received joint state: %f, header: %s, goal: %s", static_cast<double>(msg.position[0]), header, goal);
-  nh.loginfo(debugMsg);
+  // char debugMsg[100];
+  // snprintf(debugMsg, 100, "Received joint state: %f, header: %s, goal: %s", static_cast<double>(msg.position[0]), header, goal);
+  // nh.loginfo(debugMsg);
   if (strcmp(header, goal) == 0) {
-    nh.loginfo("Received the final point in the trajectory");
+    // nh.loginfo("Received the final point in the trajectory");
     currentStatus = EXECUTING;
     updateArmStatus();
     for (int j = 0; j < 6; j++) {
@@ -231,14 +231,14 @@ void goalStateCb(const sensor_msgs::JointState& msg) {
     }
   
   } else {
-    nh.loginfo("Point is not goal");
+    // nh.loginfo("Point is not goal");
     currentStatus = WAITING;
     updateArmStatus();
   }
 }
 
 void gripperCb(const std_msgs::String& msg) {
-  nh.loginfo("Gripper command received");
+  // nh.loginfo("Gripper command received");
   gripperServo.attach(4);
   if (strcmp(msg.data, "close") == 0) {
     gripperServo.write(0);  // Close the gripper
@@ -373,7 +373,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(LIMIT_SWITCH_J6), limitSwitchJ6ISR, RISING);
   
   // Initialize servo
-  gripperServo.attach(4);  // Attach the servo to pin 4
+  // gripperServo.attach(4);  // Attach the servo to pin 4
   
 
   jointStateMsg.position_length = 6;
@@ -409,7 +409,7 @@ void loop() {
       }
     }
     if (allLimitSwitchesTriggered) {
-      nh.loginfo("Homed successfully");
+      // nh.loginfo("Homed successfully");
       currentStatus = COMPLETED;
       for (int i = 0; i < 6; i++) {
         limitSwitchTriggered[i] = false;

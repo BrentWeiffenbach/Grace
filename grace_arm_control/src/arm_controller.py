@@ -5,7 +5,6 @@ from std_msgs.msg import String, Bool
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import math
-from std_msgs.msg import Int32
 from grace_navigation.msg import RobotState
 
 class ArmController:
@@ -22,7 +21,7 @@ class ArmController:
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
-        rospy.Subscriber('/grace/state', Int32, self.state_callback)
+        rospy.Subscriber('/grace/state', RobotState, self.state_callback)
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
         self.gripper_pub = rospy.Publisher('/grace/gripper', String, queue_size=10)
         self.arm_control_status_pub = rospy.Publisher('/grace/arm_control_status', Bool, queue_size=10)
@@ -36,6 +35,8 @@ class ArmController:
         rospy.loginfo("State is now {}".format(self.state))
         if self.state == RobotState.WAITING:
             self.homing()
+        if self.state == RobotState.ZEROING:
+            self.zeroing()
     
     def move_group_result_callback(self, msg):
         rospy.loginfo("Received move group result")
@@ -46,14 +47,14 @@ class ArmController:
         self.current_point_index = 0
         self.final_point_sent = False
         self.home_sent = False
-        rospy.loginfo("Number of points in the trajectory: {}".format(len(self.trajectory_points)))
-        for i, point in enumerate(self.trajectory_points):
-            rospy.loginfo("Trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
-                i, point.positions, [math.degrees(pos) for pos in point.positions]))
+        # rospy.loginfo("Number of points in the trajectory: {}".format(len(self.trajectory_points)))
+        # for i, point in enumerate(self.trajectory_points):
+            # rospy.loginfo("Trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
+                # i, point.positions, [math.degrees(pos) for pos in point.positions]))
         self.send_next_trajectory_point()
 
     def homing(self):
-        rospy.loginfo("Homing signal received, publishing blank trajectory point with header 'Homing'")
+        # rospy.loginfo("Homing signal received, publishing blank trajectory point with header 'Homing'")
         self.home_sent = True
         blank_trajectory_point = JointTrajectoryPoint()
         blank_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
@@ -61,10 +62,24 @@ class ArmController:
         self.current_point_index = 0
         self.final_point_sent = False
         self.send_next_trajectory_point()
+    
+    def zeroing(self):
+        # rospy.loginfo("State is returning to zero pose")
+        self.arm_control_status_pub.publish(Bool(False))
+        self.state = RobotState.EXPLORING
+        zero_trajectory_point = JointTrajectoryPoint()
+        zero_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
+        self.trajectory_points = [zero_trajectory_point, zero_trajectory_point]
+        self.current_point_index = 0
+        self.final_point_sent = False
+        self.home_sent = False
+        self.zero_sent = True
+        self.send_next_trajectory_point()
 
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
-        rospy.loginfo("Arm status: {}".format(self.arm_status))
+        if not self.arm_status == "waiting":
+             rospy.loginfo("Arm status: {}".format(self.arm_status))
         if self.arm_status == "waiting":
             self.send_next_trajectory_point()
         elif self.arm_status == "executing" or self.arm_status == "homing":
@@ -75,25 +90,19 @@ class ArmController:
             self.final_point_sent = True
         elif self.arm_status == "completed":
             if self.state == RobotState.PICKING:
-                rospy.loginfo("State is Picking, closing the gripper")
+                rospy.loginfo("State is PICKING. Closing the gripper.")
                 self.gripper_pub.publish("close")
-                self.arm_control_status_pub.publish(True)
+                self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.PLACING:
-                rospy.loginfo("State is Placing, opening the gripper")
+                rospy.loginfo("State is PLACING. Opening the gripper.")
                 self.gripper_pub.publish("open")
-                self.arm_control_status_pub.publish(True)
+                self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.ZEROING:
-                rospy.loginfo("State is returning to zero pose")
-                self.state = -1
-                self.arm_control_status_pub.publish(True)
-                zero_trajectory_point = JointTrajectoryPoint()
-                zero_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
-                self.trajectory_points = [zero_trajectory_point, zero_trajectory_point]
-                self.current_point_index = 0
-                self.final_point_sent = False
-                self.home_sent = False
-                self.zero_sent = True
-                self.send_next_trajectory_point()
+                self.zeroing()
+            elif self.state == RobotState.WAITING:
+                self.arm_control_status_pub.publish(Bool(True))
+            elif self.state == RobotState.EXPLORING:
+                self.arm_control_status_pub.publish(Bool(True))
             else:
                 rospy.loginfo("Unkown state: {}".format(self.state))
         elif self.arm_status == "lost_sync":
@@ -106,15 +115,15 @@ class ArmController:
             joint_state = JointState()
             joint_state.position = [math.degrees(pos) for pos in point.positions]
             if self.current_point_index == len(self.trajectory_points) - 1:
-                rospy.loginfo("Publishing final trajectory point")
+                # rospy.loginfo("Publishing final trajectory point")
                 joint_state.header.frame_id = "Goal"
                 if self.home_sent:
                     joint_state.header.frame_id = "Homing"
                 self.current_point_index -= 1
-            rospy.loginfo("Publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}, header = {}".format(
-                self.current_point_index, point.positions, joint_state.position, joint_state.header))
+            # rospy.loginfo("Publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}, header = {}".format(
+                # self.current_point_index, point.positions, joint_state.position, joint_state.header))
             self.arm_goal_pub.publish(joint_state)
-            rospy.loginfo("Sent joint state for trajectory point {}: {}".format(self.current_point_index, joint_state.position))
+            # rospy.loginfo("Sent joint state for trajectory point {}: {}".format(self.current_point_index, joint_state.position))
             self.current_point_index += 1
             if self.publish_timer is None:
                 self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point) # type: ignore
@@ -136,10 +145,10 @@ class ArmController:
                 joint_state.header.frame_id = "Goal"
                 if self.home_sent:
                     joint_state.header.frame_id = "Homing"
-            rospy.loginfo("Re-publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
-                self.current_point_index - 1, point.positions, joint_state.position))
+            # rospy.loginfo("Re-publishing joint state for trajectory point {}: positions (radians) = {}, positions (degrees) = {}".format(
+                # self.current_point_index - 1, point.positions, joint_state.position))
             self.arm_goal_pub.publish(joint_state)
-            rospy.loginfo("Re-sent joint state for trajectory point {}: {}".format(self.current_point_index - 1, joint_state.position))
+            # rospy.loginfo("Re-sent joint state for trajectory point {}: {}".format(self.current_point_index - 1, joint_state.position))
 
     def reconnect(self):
         # Reinitialize the necessary components
