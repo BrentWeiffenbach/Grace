@@ -349,6 +349,10 @@ class GraceNavigation:
                         f"Goal for {target_obj_name} is accessible, navigating to it"
                     )
                     navigating_to_object = True
+                    
+                    if self.done_flag:
+                        self.done_flag = False
+                        return True
 
                     self.goto(
                         self.goal_pose,
@@ -357,9 +361,6 @@ class GraceNavigation:
                     
                     self.goal_pose = None
                     
-                    if self.done_flag:
-                        self.done_flag = False
-                        return True
 
                     rospy.sleep(4.5)
                     continue
@@ -596,7 +597,7 @@ class GraceNavigation:
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (self.frontier_search.global_costmap.info.height, self.frontier_search.global_costmap.info.width)
         )        
-        max_offset_distance = 600.0  # Maximum depth for BFS
+        max_offset_distance = 400.0  # Maximum depth for BFS
         visited = set()
         bfs_queue = queue.Queue()
         img_point = self.frontier_search.convert_map_coords_to_img_coords((point.x, point.y))
@@ -614,8 +615,9 @@ class GraceNavigation:
 
             visited.add((map_x, map_y))
             depth += 1.0
-            
+            # uncomment to debug bfs
             # self.publish_markers([Point(map_x, map_y, 0)], "BFS", color=(1, 1, 0))
+            # rospy.sleep(0.1)
 
             # Check if the point is not in the occupancy grid
             if self.frontier_search.is_point_in_occupancy_grid(Point(map_x, map_y, 0), True):
@@ -623,7 +625,7 @@ class GraceNavigation:
                 new_pose.position = Point(map_x, map_y, 0)
                 new_pose.orientation = self.calculate_direction_between_points(point, new_pose.position)
                 best_poses.append(new_pose)
-                if len(best_poses) >= 20:
+                if (len(best_poses) >= 1 and depth >= 0.75 * max_offset_distance) or len(best_poses) >= 30: # Tune this
                     current_pose = self.get_current_pose()
                     current_position = np.array([current_pose.position.x, current_pose.position.y])
                     best_pose = min(
@@ -635,6 +637,7 @@ class GraceNavigation:
                     return best_pose
             
             if depth >= max_offset_distance:
+                rospy.logwarn("Could not find a valid offset point using BFS. Depth Limited")
                 return None
             
             # Add neighbors to the queue
