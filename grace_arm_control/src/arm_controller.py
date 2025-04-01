@@ -56,6 +56,7 @@ class ArmController:
 
     def homing(self):
         # rospy.loginfo("Homing signal received, publishing blank trajectory point with header 'Homing'")
+        self.gripper_pub.publish("open")
         self.home_sent = True
         blank_trajectory_point = JointTrajectoryPoint()
         blank_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
@@ -74,10 +75,6 @@ class ArmController:
         group.set_joint_value_target(joint_values)
         success, plan, _, _ = group.plan()
         self.state = RobotState.EXPLORING
-        self.current_point_index = 0
-        self.final_point_sent = False
-        self.home_sent = False
-        self.zero_sent = True
 
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
@@ -115,7 +112,7 @@ class ArmController:
             self.reconnect()
 
     def send_next_trajectory_point(self):
-        if self.trajectory_points and self.current_point_index < len(self.trajectory_points) or (self.arm_status == "waiting" and self.zero_sent):
+        if self.trajectory_points and self.current_point_index < len(self.trajectory_points) or self.arm_status == "waiting":
             point = self.trajectory_points[self.current_point_index]
             joint_state = JointState()
             joint_state.position = [math.degrees(pos) for pos in point.positions]
