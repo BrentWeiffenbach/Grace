@@ -598,7 +598,7 @@ class GraceNavigation:
             current_pose: Pose = self.get_current_pose()
             current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-            MIN_DISTANCE = 3.0  # TODO: Tune this
+            MIN_DISTANCE = 1.2  # TODO: Tune this
             MAX_DISTANCE = 30.0  # TODO: Tune this
             MIN_SIZE = sum(sizes) / len(sizes) if sizes else 20.0  # Use average of sizes or default to 20.0
             
