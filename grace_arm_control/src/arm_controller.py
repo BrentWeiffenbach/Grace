@@ -65,14 +65,14 @@ class ArmController:
         self.send_next_trajectory_point()
     
     def zeroing(self):
-        self.group = MoveGroupCommander("arm_group")  # Use your specific planning group name
+        group = MoveGroupCommander("arm_group")  # Use your specific planning group name
         # rospy.loginfo("State is returning to zero pose")
         self.arm_control_status_pub.publish(Bool(False))
-    
+        group.set_start_state_to_current_state()
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
-        self.group.set_joint_value_target(joint_values)
-        success, plan, _, _ = self.group.plan()
+        group.set_joint_value_target(joint_values)
+        success, plan, _, _ = group.plan()
         self.state = RobotState.EXPLORING
         self.current_point_index = 0
         self.final_point_sent = False
