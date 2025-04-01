@@ -330,15 +330,6 @@ class GraceNavigation:
                 return True
 
             obj_point = self.find_object_in_semantic_map(target_obj_name)
-            if obj_point is not None:
-                self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
-                self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
-                # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
-                if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
-                    # most likely a haclucination if not inside the inflation layer
-                    # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
-                    rospy.loginfo("DEBUG: In occupancy grid.")
-                    self.goal_pose = None
 
 
             if self.goal_pose is not None:
@@ -439,7 +430,7 @@ class GraceNavigation:
         if pose_distance <= THRESHOLD:
             rospy.logwarn_throttle(1, "Robot is already within the threshold distance to the goal.")
             return
-        if last_goal_distance <= THRESHOLD:
+        if last_goal_distance <= THRESHOLD and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED: # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
             rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
             return
         
@@ -563,11 +554,29 @@ class GraceNavigation:
 
         current_pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
-        closest_obj = min(
-            cls_objects,
-            key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
-        )
-        return Point(closest_obj.x, closest_obj.y, 0)
+        
+        closest_objects_copy = cls_objects.copy()
+        # loop through objs to check if they are closest and 'NOT navigable' / in occupancy grid
+        for obj in closest_objects_copy:
+            closest_obj = min(
+                cls_objects,
+                key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
+            )
+            obj_point = Point(closest_obj.x, closest_obj.y, 0)
+
+            self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
+            
+            # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
+            if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
+                # most likely a haclucination if not inside the inflation layer
+                # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
+                rospy.loginfo("DEBUG: This semantic object was in occupancy grid, most likely a hallucination.")
+                # remove object from cls_objects
+                cls_objects.remove(closest_obj)
+            else:
+                self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
+                return obj_point
+        return None
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
         """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
