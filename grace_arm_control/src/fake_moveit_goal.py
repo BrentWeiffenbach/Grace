@@ -9,7 +9,7 @@ def publish_goal():
 
     # Get the current joint values as the start state
     # current_joint_values = group.get_current_joint_values()
-    group.set_start_state_to_current_state()
+    # group.set_start_state_to_current_state()
 
     # Define the goal joint values
     goal_joint_values = [0.08059417813617288, 0.8414356555608558, -0.3932249476604554, 

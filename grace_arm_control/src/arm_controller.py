@@ -67,7 +67,7 @@ class ArmController:
         group = MoveGroupCommander("arm_group")  # Use your specific planning group name
         # rospy.loginfo("State is returning to zero pose")
         # self.arm_control_status_pub.publish(Bool(False)) # was causing state to be 1 before arm finishes zeroing
-        # group.set_start_state_to_current_state()
+        # group.set_start_state_to_current_state() # this causes a double motion... I dont know why
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
         group.set_joint_value_target(joint_values)
