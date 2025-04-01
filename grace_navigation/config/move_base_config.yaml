@@ -10,16 +10,16 @@ DWAPlannerROS:
   max_trans_vel: 0.4
   max_vel_x: 0.4
   max_vel_y: 0.0
-  min_rot_vel: 0.9 #0.4
+  min_rot_vel: 0.4 #0.4
   min_trans_vel: 0.15 # 0.1
-  min_vel_x: 0.02
-  min_vel_y: 0.02
+  min_vel_x: 0.02 # idk effects ability to turn
+  min_vel_y: 0.02 # idk effects ability to turn
   occdist_scale: 0.5
   oscillation_reset_dist: 0.05
   path_distance_bias: 64.0
   publish_cost_grid_pc: true
   publish_traj_pc: true
-  rot_stopped_vel: 0.9 # 0.4
+  rot_stopped_vel: 0.4 # 0.4
   scaling_speed: 0.25
   sim_time: 1.0
   stop_time_buffer: 0.2 # 0.1

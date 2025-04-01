@@ -88,7 +88,7 @@ class YoloDetect:
         )
 
         # Download the YOLO model to the grace folder
-        MODEL_NAME: Final = "yolo11s.pt"
+        MODEL_NAME: Final = "yolo11m.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model

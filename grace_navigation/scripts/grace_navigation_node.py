@@ -129,7 +129,7 @@ class GraceNavigation:
         self.frontier_search.global_map_cb(msg)
 
     def semantic_map_callback(self, msg: Object2DArray) -> None:
-        self.semantic_map = msg
+        self.semantic_map = msg    
 
     def odom_callback(self, msg: Odometry) -> None:
         self.odom = msg
@@ -549,6 +549,13 @@ class GraceNavigation:
         cls_objects = [
             map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
         ]
+        
+        # DEBUG:
+        self.publish_markers(
+            [Point(obj.x, obj.y, 0) for obj in cls_objects],
+            namespace="semantic_objects",
+            color=(0.0, 1.0, 0.7),
+        )
 
         if not cls_objects or len(cls_objects) == 0:
             rospy.logwarn(f"No objects with class: {obj}")
