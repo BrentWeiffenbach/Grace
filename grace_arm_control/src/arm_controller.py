@@ -19,7 +19,6 @@ class ArmController:
         self.final_point_sent = False
         self.home_sent = False
         self.zero_sent = False
-        self.group = MoveGroupCommander("arm_group")  # Use your specific planning group name
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
@@ -66,6 +65,7 @@ class ArmController:
         self.send_next_trajectory_point()
     
     def zeroing(self):
+        self.group = MoveGroupCommander("arm_group")  # Use your specific planning group name
         # rospy.loginfo("State is returning to zero pose")
         self.arm_control_status_pub.publish(Bool(False))
     
