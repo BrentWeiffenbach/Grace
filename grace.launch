@@ -33,12 +33,12 @@
 
         <!-- Launch the custom Gmapping w/ MoveBase Uncommenting this will run everything in one terminal, reccommended to launch gmapping in a seperate terminal to reduce spam-->
         <!-- <include file="$(find grace_navigation)/launch/gmapping.launch"/> -->
-    <!-- joint state publisher for arm joints and mobile base on seperate topics -->
-    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
-        <rosparam param="source_list">[mobile_base/joint_states, grace/arm_joint_states]</rosparam>
-    </node>
     </group>
 
+    <!-- joint state publisher for arm joints and mobile base on seperate topics -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+        <rosparam param="source_list">[/joint_states, grace/arm_joint_states]</rosparam>
+    </node>
 
     <group if="$(arg arm)">
         <!-- ARM CONTROL -->
