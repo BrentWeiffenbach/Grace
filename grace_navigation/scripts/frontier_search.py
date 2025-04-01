@@ -34,12 +34,6 @@ class FrontierSearch:
         self._global_costmap = new_global_costmap
         if self._global_costmap is not None:
             self.global_costmap_img = self.convert_to_img(self._global_costmap)
-        # if self.global_costmap_img is not None:
-            # kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-            # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-            # self.global_costmap_img = cv2.dilate(self.global_costmap_img, kernel_dilate, iterations=2)
-            # self.global_costmap_img = cv2.erode(self.global_costmap_img, kernel_erode, iterations=2)
-
 
     def global_map_cb(self, msg: OccupancyGridUpdate) -> None:
         # Dynamically resize the costmap if it changed
@@ -94,7 +88,7 @@ class FrontierSearch:
         grayscale_image = np.uint8(grayscale_image)
         return grayscale_image  # type: ignore
     
-    def compute_centroids(self) -> List[Point]:
+    def compute_centroids(self) -> Tuple[List[Point], List[float]]:
         """Flag for viewing image pipeline in action. VERY computationally expensive."""
         # Load the image
         use_me = self.map_img
@@ -173,25 +167,23 @@ class FrontierSearch:
 
         # Sort components by area in descending order, excluding the background (label 0)
         sorted_indices = np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1] + 1  # Add 1 to skip background
-        top_indices = sorted_indices[:5]  # Get the top 5 components
+        top_indices = sorted_indices[:3]  # Get the top 3 components
 
-        # Extract centroids of the top 5 components
-        kps = []
+        # store sizes of frontiers for scoring
+        centroids = []
+        sizes = []
         for idx in top_indices:
             if idx < len(centroid_cv):
                 centroid_x, centroid_y = centroid_cv[idx]
-                kps.append(cv2.KeyPoint(centroid_x, centroid_y, 1))
+                map_coords = self.convert_img_coords_to_map_coords((centroid_x, centroid_y))
+                centroids.append(Point(*map_coords, 0.0))
+                sizes.append(stats[idx, cv2.CC_STAT_AREA])  # Use the area of the component as its size
 
-        centroids = []
-        for kp in kps:
-            centroid_x, centroid_y = int(kp.pt[0]), int(kp.pt[1])
-            map_coords = self.convert_img_coords_to_map_coords((centroid_x, centroid_y))
-            centroids.append(Point(*map_coords, 0.0))
             
         # Save the resulting images
         save_imgs: bool = False
         if save_imgs:
-            output = cv2.drawKeypoints(valid_frontier_mask, kps, None, color=(0, 255, 0), flags=cv2.DRAW_MATCHES_FLAGS_DEFAULT) # type: ignore
+            # output = cv2.drawKeypoints(valid_frontier_mask, kps, None, color=(0, 255, 0), flags=cv2.DRAW_MATCHES_FLAGS_DEFAULT) # type: ignore
             cv2.imwrite("1 map.png", self.map_img)
             cv2.imwrite("2 explored.png", binary_gray)
             cv2.imwrite("3 edges.png", edges)
@@ -199,12 +191,12 @@ class FrontierSearch:
             cv2.imwrite("5 frontier_mask.png", frontier_mask)
             cv2.imwrite("6 obstacle_frontier_mask.png", obstacle_frontier_mask)
             cv2.imwrite("7 valid_frontier_mask.png", valid_frontier_mask)
-            cv2.imwrite("8 centroids.png", output)
+            # cv2.imwrite("8 centroids.png", output)
             
             cv2.imwrite("9 inflation_layer.png", inflation_layer)
             cv2.imwrite("10 clean_inflation_mask.png", clean_inflation_mask)
             cv2.imwrite("11 global_costmap.png", self.global_costmap_img)
-        return centroids
+        return centroids, sizes
 
     def is_pose_in_occupancy_grid(self, pose: Pose, use_inflation_layer: bool = False) -> bool:
         """

@@ -335,9 +335,11 @@ class GraceNavigation:
                 if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
                     # most likely a haclucination if not inside the inflation layer
                     # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
+                    rospy.loginfo("DEBUG: Continuing loop")
                     continue
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                 self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
+
 
             if self.goal_pose is not None:
                 self.publish_markers(
@@ -374,8 +376,7 @@ class GraceNavigation:
 
             if not navigating_to_object:
                 frontier_pose = self.compute_frontier_goal_pose(
-                    heuristic_pose=self.get_current_pose()
-                )
+                    heuristic_pose=self.goal_pose if self.goal_pose is not None else self.get_current_pose())
 
                 if frontier_pose is None:
                     GraceNavigation.verbose_log("No frontiers found, waiting...")
@@ -441,7 +442,8 @@ class GraceNavigation:
         if last_goal_distance <= THRESHOLD:
             rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
             return
-
+        
+        self.last_goal = obj
         rospy.loginfo("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
@@ -454,7 +456,6 @@ class GraceNavigation:
         if yield_when_done:
             rospy.sleep(2)
         # rememebr last goto goal
-        self.last_goal = obj
 
 
     def yolo_final_check(self) -> bool:
@@ -588,77 +589,84 @@ class GraceNavigation:
 
     # region Frontiers
     def score_frontiers(
-        self, frontiers: List[Point], target_pose: Union[Pose, None] = None
-    ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
-        if not frontiers:
-            return None
+            self, frontiers: List[Point], sizes: List[float], target_pose: Union[Pose, None] = None
+            ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
+            if not frontiers or not sizes or len(frontiers) != len(sizes):
+                rospy.logwarn("Frontiers and sizes must be non-empty and of the same length.")
+                return None
 
-        current_pose: Pose = self.get_current_pose()
-        current_position = np.array([current_pose.position.x, current_pose.position.y])
+            current_pose: Pose = self.get_current_pose()
+            current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 1.0
-        MAX_DISTANCE = 10.0
+            MIN_DISTANCE = 1.0  # TODO: Tune this
+            MAX_DISTANCE = 10.0  # TODO: Tune this
+            
 
-        scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
+            scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
-        for frontier in frontiers:
-            frontier_position = np.array([frontier.x, frontier.y])
-            distance: np.floating = np.linalg.norm(frontier_position - current_position)
+            for frontier, size in zip(frontiers, sizes):
+                frontier_position = np.array([frontier.x, frontier.y])
+                distance: np.floating = np.linalg.norm(frontier_position - current_position)
 
-            if distance < MIN_DISTANCE:
-                continue
+                if distance < MIN_DISTANCE:
+                    continue
 
-            if distance > MAX_DISTANCE:
-                continue
+                if distance > MAX_DISTANCE:
+                    continue
 
-            # Basic score is inverse distance
-            score: Union[np.floating, float] = 1 / max(distance, 0.1)
+                # Basic score is inverse distance
+                score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
-            if target_pose is not None:
-                target_position = np.array(
-                    [target_pose.position.x, target_pose.position.y]
-                )
-                frontier_to_target = frontier_position - target_position
-                frontier_to_position = frontier_position - current_position
+                # Adjust score based on size
+                score *= size 
 
-                if (
-                    np.linalg.norm(frontier_to_target) > 0
-                    and np.linalg.norm(frontier_to_position) > 0
-                ):
-                    cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
-                        np.linalg.norm(frontier_to_target)
-                        * np.linalg.norm(frontier_to_position)
+                if target_pose is not None:
+                    target_position = np.array(
+                        [target_pose.position.x, target_pose.position.y]
                     )
-                    # boost score if frontier is in direction of target object
-                    direction_factor = (cos_angle + 1) / 2
-                    score *= 1 + 3 * direction_factor
+                    frontier_to_target = frontier_position - target_position
+                    frontier_to_position = frontier_position - current_position
 
-            scored_frontiers.append((frontier, score))
+                    if (
+                        np.linalg.norm(frontier_to_target) > 0
+                        and np.linalg.norm(frontier_to_position) > 0
+                    ):
+                        cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
+                            np.linalg.norm(frontier_to_target)
+                            * np.linalg.norm(frontier_to_position)
+                        )
+                        # Boost score if frontier is in direction of target object
+                        direction_factor = (cos_angle + 1) / 2
+                        score *= 1 + 3 * direction_factor
 
-        # Sort by score (highest first)
-        scored_frontiers.sort(key=lambda x: x[1], reverse=True)
+                scored_frontiers.append((frontier, score))
 
-        if scored_frontiers:
-            best_frontier_position = scored_frontiers[0][0]
-            distance_from_current_pose = np.linalg.norm(
-                np.array([best_frontier_position.x, best_frontier_position.y])
-                - np.array([current_position[0], current_position[1]])
-            )
-            rospy.loginfo(
-                f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}, {best_frontier_position.z:.2f}), "
-                f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
-                f"Score: {scored_frontiers[0][1]:.2f}"
-            )
-            return scored_frontiers
-        return None
+            # Sort by score (highest first)
+            scored_frontiers.sort(key=lambda x: x[1], reverse=True)
 
+            if scored_frontiers:
+                best_frontier_position = scored_frontiers[0][0]
+                distance_from_current_pose = np.linalg.norm(
+                    np.array([best_frontier_position.x, best_frontier_position.y])
+                    - np.array([current_position[0], current_position[1]])
+                )
+                rospy.loginfo(
+                    f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}, {best_frontier_position.z:.2f}), "
+                    f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
+                    f"Score: {scored_frontiers[0][1]:.2f}"
+                )
+                return scored_frontiers
+            return None
+    
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
-        keypoints: List[Point] = self.frontier_search.compute_centroids()
+        keypoints: List[Point]
+        sizes: List[float]
+        keypoints, sizes = self.frontier_search.compute_centroids()
 
         if not keypoints or len(keypoints) == 0:
             return None
 
-        scored_frontiers = self.score_frontiers(keypoints, heuristic_pose)
+        scored_frontiers = self.score_frontiers(keypoints, sizes, heuristic_pose)
         if scored_frontiers is None:
             return None
         self.publish_labled_markers(

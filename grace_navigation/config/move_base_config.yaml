@@ -1,40 +1,152 @@
-local_costmap:
-  inflation_layer:
-    enabled: true # defaults to true
-    cost_scaling_factor:  5  # exponential rate at which the obstacle cost drops off (default: 10)
-    inflation_radius:     0.3  # max. distance from an obstacle at which costs are incurred for planning paths. (default: 0.5)
-
 DWAPlannerROS:
-  xy_goal_tolerance: 0.15 # defaults to 0.15
-  yaw_goal_tolerance: 0.3
-  min_in_place_vel_theta: 0.8
-  occdist_scale: 0.2            # 0.5   - weighting for how much the controller should avoid obstacles
-
-  # Robot Configuration Parameters - Kobuki
-  max_vel_x: 0.5  # 0.55
-  min_vel_x: 0.0 
-
-  max_vel_y: 0.0  # diff drive robot
-  min_vel_y: 0.0  # diff drive robot
-
-  max_trans_vel: 0.5 # choose slightly less than the base's capability
-  min_trans_vel: 0.1  # this is the min trans velocity when there is negligible rotational velocity
+  acc_lim_theta: 5.0
+  acc_lim_x: 1.0
+  acc_lim_y: 0.0
+  forward_point_distance: 0.325
+  global_frame_id: odom
+  goal_distance_bias: 24.0
+  max_rot_vel: 6.0
+  max_scaling_factor: 0.3
+  max_trans_vel: 0.4
+  max_vel_x: 0.4
+  max_vel_y: 0.0
+  min_rot_vel: 0.9 #0.4
+  min_trans_vel: 0.1
+  min_vel_x: 0.05
+  min_vel_y: 0.05
+  occdist_scale: 0.5
+  oscillation_reset_dist: 0.05
+  path_distance_bias: 64.0
+  publish_cost_grid_pc: true
+  publish_traj_pc: true
+  rot_stopped_vel: 0.9 # 0.4
+  scaling_speed: 0.25
+  sim_time: 1.0
+  stop_time_buffer: 0.1
   trans_stopped_vel: 0.1
+  vtheta_samples: 40
+  vx_samples: 6
+  vy_samples: 1
+  xy_goal_tolerance: 0.3
+  yaw_goal_tolerance: 0.2
+  holonomic_robot: false  # Ensure true diff-drive behavior
+  min_turning_radius: 0.1  # Ensures valid turning
 
-  # Warning!
-  #   do not set min_trans_vel to 0.0 otherwise dwa will always think translational velocities
-  #   are non-negligible and small in place rotational velocities will be created.
+GlobalPlanner:
+  allow_unknown: true
+  cost_factor: 3.0
+  default_tolerance: 0.2
+  lethal_cost: 253
+  neutral_cost: 50
+  old_navfn_behavior: false
+  planner_costmap_publish_frequency: 0.0
+  planner_window_x: 0.0
+  planner_window_y: 0.0
+  publish_potential: true
+  publish_scale: 100
+  use_dijkstra: true
+  use_grid_path: true
+  use_quadratic: true
 
-  max_rot_vel: 5.0  # choose slightly less than the base's capability
-  min_rot_vel: 0.4  # this is the min angular velocity when there is negligible translational velocity
-  rot_stopped_vel: 0.4
-  
-  acc_lim_x: 1.0 # maximum is theoretically 2.0, but we 
-  acc_lim_theta: 2.0
-  acc_lim_y: 0.0      # diff drive robot
+NavfnROS:
+  allow_unknown: false
+  default_tolerance: 0.0
+  planner_window_x: 0.0
+  planner_window_y: 0.0
+  visualize_potential: false
 
+base_global_planner: navfn/NavfnROS
+base_local_planner: dwa_local_planner/DWAPlannerROS
+controller_frequency: 5.0
+controller_patience: 2.0
+planner_frequency: 1.0
+planner_patience: 5.0
+shutdown_costmaps: false
+oscillation_distance: 0.2
+oscillation_timeout: 10.0
 
-obstacle_layer:
-  track_unknown_space: true
+global_costmap:
+  global_frame: map
+  inflation_layer:
+    cost_scaling_factor: 4.0
+    enabled: true
+    inflation_radius: 0.5
+  map_type: voxel
+  max_obstacle_height: 0.6
+  obstacle_layer:
+    enabled: true
+    combination_method: 1
+    observation_sources: scan bump
+    obstacle_range: 2.5
+    raytrace_range: 3.0
+    scan:
+      clearing: true
+      data_type: LaserScan
+      marking: true
+      max_obstacle_height: 0.35
+      min_obstacle_height: 0.25
+      topic: scan
+    bump:
+      clearing: false
+      data_type: PointCloud2
+      marking: true
+      max_obstacle_height: 0.15
+      min_obstacle_height: 0.0
+      topic: mobile_base/sensor
+    track_unknown_space: true
+    unknown_threshold: 15
+    z_resolution: 0.2
+    z_voxels: 2
+  publish_frequency: 1.0
+  robot_base_frame: base_footprint
+  robot_radius: 0.2
+  static_layer:
+    enabled: true
+  static_map: true
+  transform_tolerance: 0.5
+  update_frequency: 1.0
 
-robot_radius: 0.18 # Defaults to 0.20. Koboki is 0.18
+local_costmap:
+  global_frame: odom
+  height: 4.0
+  inflation_layer:
+    cost_scaling_factor: 5.0
+    enabled: true
+    inflation_radius: 0.4
+  map_type: voxel
+  max_obstacle_height: 0.6
+  obstacle_layer:
+    enabled: true
+    combination_method: 1
+    observation_sources: scan bump
+    obstacle_range: 2.5
+    raytrace_range: 3.0
+    scan:
+      clearing: true
+      data_type: LaserScan
+      marking: true
+      max_obstacle_height: 0.35
+      min_obstacle_height: 0.25
+      topic: scan
+    bump:
+      clearing: false
+      data_type: PointCloud2
+      marking: true
+      max_obstacle_height: 0.15
+      min_obstacle_height: 0.0
+      topic: mobile_base/sensor
+    track_unknown_space: true
+    unknown_threshold: 15
+    z_resolution: 0.2
+    z_voxels: 2
+  publish_frequency: 2.0
+  resolution: 0.05
+  robot_base_frame: base_footprint
+  robot_radius: 0.2
+  rolling_window: true
+  static_layer:
+    enabled: true
+  static_map: false
+  transform_tolerance: 0.5
+  update_frequency: 5.0
+  width: 4.0
