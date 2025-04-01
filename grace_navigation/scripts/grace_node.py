@@ -376,7 +376,7 @@ def rotate_360() -> None:
     rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
 
     # Rotate for the duration required to complete a full rotation
-    rotate_duration = rospy.Duration(2 * 3.14159 / abs(rotate_msg.angular.z)) # type: ignore
+    rotate_duration = rospy.Duration(2 * 2 * 3.14159 / abs(rotate_msg.angular.z)) # type: ignore
     rotate_end_time = rospy.Time.now() + rotate_duration
 
     while rospy.Time.now() < rotate_end_time:
@@ -405,7 +405,7 @@ if __name__ == "__main__":
         rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location="dining table", pick_object="chair")
+    grace.goal = RobotGoal(place_location="elephant", pick_object="dining table")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

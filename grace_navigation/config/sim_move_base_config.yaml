@@ -1,0 +1,3 @@
+DWAPlannerROS:
+  xy_goal_tolerance: 0.3 # defaults to 0.15
+  yaw_goal_tolerance: 0.3

@@ -11,7 +11,6 @@ from tf2_ros import (
     ExtrapolationException,  # type: ignore
     TransformException,  # type: ignore
 )
-from visualization_msgs.msg import MarkerArray
 
 from grace_navigation.msg import Object2D, Object2DArray, RangeBearings, RobotState
 
@@ -90,8 +89,6 @@ class SemanticSLAM:
 
         self.objects = {}  # type: dict[int, MapObject]
         self.max_obj_id = 0  # type: int
-        self.marker_array = MarkerArray()
-        self.marker_array.markers = []
 
     def odom_callback(self, msg):
         # only takes the covariance, the pose is taken from tf transformation

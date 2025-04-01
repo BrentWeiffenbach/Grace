@@ -7,7 +7,6 @@ import numpy as np
 import requests
 import ros_numpy
 import rospy
-from geometry_msgs.msg import PointStamped
 from numpy.typing import NDArray
 from sensor_msgs.msg import CameraInfo, Image
 from torch import Tensor
@@ -68,11 +67,6 @@ class YoloDetect:
         # Publisher
         self.detection_image_pub: rospy.Publisher = rospy.Publisher(
             name="/yolo_detect/detections/image", data_class=Image, queue_size=5
-        )
-        self.semantic_objects_pub: rospy.Publisher = rospy.Publisher(
-            name="/yolo_detect/detections/objects",
-            data_class=PointStamped,
-            queue_size=5,
         )
 
         self.range_pub = rospy.Publisher(

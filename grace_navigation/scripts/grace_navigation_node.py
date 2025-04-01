@@ -1,12 +1,13 @@
 import queue
 from math import atan2
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Callable
 
 import actionlib
 import numpy as np
 import rospy
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion
+from grace_navigation.msg import RangeBearing, RangeBearings
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
@@ -166,28 +167,30 @@ class GraceNavigation:
     def publish_timeout(self) -> None:
         # Publish LOST as the state since it will never naturally be published
         self.publish_status(actionlib.GoalStatus.LOST)
- 
+
     def publish_markers(
         self,
         keypoints: List[Point],
         namespace: str = "frontiers",
         color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
-        scale: Tuple[float, float, float] = (0.15, 0.15, 0.15)
+        scale: Tuple[float, float, float] = (0.15, 0.15, 0.15),
     ):
         marker_array = MarkerArray()
         marker_array.markers = []
         marker_id = 0
         has_object = rospy.wait_for_message(
-                    topic=GraceNode.HAS_OBJECT_TOPIC,
-                    topic_type=Bool,
-                    timeout=rospy.Duration(10),
-                )
+            topic=GraceNode.HAS_OBJECT_TOPIC,
+            topic_type=Bool,
+            timeout=rospy.Duration(10),
+        )
         if has_object is None:
-            rospy.logwarn("Failed to receive message for has_object. Defaulting to False.")
+            rospy.logwarn(
+                "Failed to receive message for has_object. Defaulting to False."
+            )
             has_object = False
         else:
             has_object = has_object.data
-        
+
         for k in keypoints:
             marker = Marker()
             marker.header.frame_id = "map"
@@ -265,7 +268,7 @@ class GraceNavigation:
     def explore(self) -> None:
         # BUG (?): self.goal can possibly be undefined. It is difficult to reproduce how it happened.
 
-        EXPLORE_SECONDS = 12 * 60 # 12 minutes
+        EXPLORE_SECONDS = 12 * 60  # 12 minutes
         rospy.loginfo("Exploring")
         at_goal = self.explore_until_found(
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
@@ -309,7 +312,7 @@ class GraceNavigation:
         )
 
         navigating_to_object = False
-        
+
         while not rospy.is_shutdown() and self.state == RobotState.EXPLORING:
             current_time: rospy.Time = rospy.Time.now()
             if current_time - start_time > exploration_timeout:
@@ -325,45 +328,49 @@ class GraceNavigation:
                 self.done_flag = False
                 self.goal_pose = None
                 return True
-            
+
             obj_point = self.find_object_in_semantic_map(target_obj_name)
             if obj_point is not None:
                 # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
-                # if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
-                #     # most likely a haclucination if not inside the inflation layer
-                #     # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
-                #     continue
+                if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
+                    # most likely a haclucination if not inside the inflation layer
+                    # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
+                    continue
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                 self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
 
             if self.goal_pose is not None:
-                self.publish_markers([self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1))
+                self.publish_markers(
+                    [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
+                )
                 # Found object
                 # Goal is in occupancy grid
-                GraceNavigation.verbose_log(
-                    f"Goal for {target_obj_name} is accessible, navigating to it"
-                )
                 navigating_to_object = True
-                
+
                 if self.done_flag:
                     self.done_flag = False
                     self.goal_pose = None
                     return True
+                
+
+                if self.last_goal != self.goal_pose:
+                    rospy.loginfo_throttle(1,
+                    f"Goal for {target_obj_name} is accessible, navigating to it"
+                )
 
                 self.goto(
                     self.goal_pose,
                     yield_when_done=True,
                 )
-                
+
                 self.goal_pose = None
-                
+
                 continue
             else:
                 GraceNavigation.verbose_log(
                     f"Goal for {target_obj_name} is not accessible yet"
                 )
                 navigating_to_object = False
-
 
             if not navigating_to_object:
                 frontier_pose = self.compute_frontier_goal_pose(
@@ -383,12 +390,24 @@ class GraceNavigation:
                         "Navigating to a frontier for exploration"
                     )
                     self.should_update_goal = False
+                    def navigable_heuristic(poses_list, current_position, original_goal):
+                        # return min(
+                        #     poses_list,
+                        #     key=lambda pose: np.linalg.norm(
+                        #         np.array([pose.position.x, pose.position.y]) - current_position
+                        #     ),
+                        # )
+                        return poses_list[0]
+                    offset_pose = self.calculate_offset(frontier_pose.position, navigable_heuristic)
+                    rospy.loginfo(f"Using {'offset_pose' if offset_pose is not None else 'frontier_pose'}")
+                    if offset_pose is not None:
+                        offset_pose.orientation = self.calculate_direction_towards_object(offset_pose.position)
                     self.goto(
-                        self.create_navigable_goal(frontier_pose),
+                        offset_pose if offset_pose is not None else frontier_pose,
                         yield_when_done=False,
                     )
                     rospy.sleep(
-                        4
+                        3
                     )  # Increase to increase time between updating which frontier should be navigated to
 
             rospy.sleep(1)  # Originally 0.5
@@ -405,24 +424,24 @@ class GraceNavigation:
         # Get distacne from robot to goal
         current_pose = self.get_current_pose()
         pose_distance = np.linalg.norm(
-            np.array([current_pose.position.x, current_pose.position.y]) -
-            np.array([obj.position.x, obj.position.y])
+            np.array([current_pose.position.x, current_pose.position.y])
+            - np.array([obj.position.x, obj.position.y])
         )
         # distance from last to current goal
         last_goal_distance = np.linalg.norm(
-            np.array([self.last_goal.position.x, self.last_goal.position.y]) -
-            np.array([obj.position.x, obj.position.y])
+            np.array([self.last_goal.position.x, self.last_goal.position.y])
+            - np.array([obj.position.x, obj.position.y])
         )
         # if either are too close, don't goto
         # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
-        THRESHOLD = 0.5  # TODO: Tune this
+        THRESHOLD = 0.3  # TODO: Tune this
         if pose_distance <= THRESHOLD:
-            # rospy.logwarn("Robot is already within the threshold distance to the goal.")
+            rospy.logwarn_throttle(1, "Robot is already within the threshold distance to the goal.")
             return
         if last_goal_distance <= THRESHOLD:
-            # rospy.logwarn("Robot tried to goto the same goal.")
+            rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
             return
-        
+
         rospy.loginfo("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
@@ -437,6 +456,62 @@ class GraceNavigation:
         # rememebr last goto goal
         self.last_goal = obj
 
+
+    def yolo_final_check(self) -> bool:
+        # Only be done if the yolo object is visible at the goal
+        # Subscribe to /range_bearing
+        try:
+            detections = rospy.wait_for_message(
+                "/range_bearing", RangeBearings, timeout=3
+            )
+        except rospy.ROSException:
+            rospy.logwarn("Timeout waiting for YOLO detections in done_cb")
+            self.should_update_goal = True
+            self.done_flag = False
+            self.last_goal = self.get_current_pose()
+            return False
+
+        has_object = rospy.wait_for_message(
+            topic=GraceNode.HAS_OBJECT_TOPIC,
+            topic_type=Bool,
+            timeout=rospy.Duration(10),
+        )
+        if has_object is None:
+            rospy.logwarn(
+                "Failed to receive message for has_object. Defaulting to False."
+            )
+            has_object = False
+        else:
+            has_object = has_object.data
+
+        target_obj_name: str = (
+            self.goal.place_location if has_object else self.goal.pick_object
+        )
+        
+        assert isinstance(detections, RangeBearings)  # type: ignore
+        
+        # check if any detections are the target class
+        if detections.range_bearings is None:
+            rospy.logwarn("No detections received in done_cb.")
+            # self.should_update_goal = True
+            # self.done_flag = False
+            # self.last_goal = self.get_current_pose()
+            return False
+        
+        for detection in detections.range_bearings:
+            detection: RangeBearing
+            if detection.obj_class == target_obj_name:
+                rospy.loginfo("YOLO final check worked!")
+                return True
+            else:
+                rospy.logwarn("No detections with goal class at goal.")
+                # self.should_update_goal = True
+                # self.done_flag = False
+                # self.last_goal = self.get_current_pose()
+                # self.semantic_failure = True
+                return False
+        return False
+
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
         """The callback for when the robot has finished with it's goal
 
@@ -444,15 +519,19 @@ class GraceNavigation:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
             _ (MoveBaseResult): The result of the move base. Ignored
         """
+        # TODO: If final check fails, do something to not be here anymore
+        # self.yolo_final_check()
         self.done_flag = False
+        self.goal_pose = None
         if goal_statuses[status] not in ["PREEMPTED"]:
             self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
             self.should_update_goal = True
         if goal_statuses[status] in ["SUCCEEDED"]:
             self.done_flag = True
-            
+
     def no_yield_done_cb(self, status: int, _: MoveBaseResult) -> None:
+        self.goal_pose = None
         if goal_statuses[status] in ["SUCCEEDED"]:
             self.should_update_goal = True
 
@@ -465,7 +544,7 @@ class GraceNavigation:
         if self.semantic_map.objects is None or len(self.semantic_map.objects) == 0:
             rospy.loginfo("self.semantic_map.object has no objects. Returning none")
             return None
-        
+
         cls_objects = [
             map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
         ]
@@ -473,14 +552,12 @@ class GraceNavigation:
         if not cls_objects or len(cls_objects) == 0:
             rospy.logwarn(f"No objects with class: {obj}")
             return None
-        
+
         current_pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
         closest_obj = min(
             cls_objects,
-            key=lambda obj: np.linalg.norm(
-            np.array([obj.x, obj.y]) - current_position
-            ),
+            key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
         )
         return Point(closest_obj.x, closest_obj.y, 0)
 
@@ -519,7 +596,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 1.0 
+        MIN_DISTANCE = 1.0
         MAX_DISTANCE = 10.0
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -601,25 +678,57 @@ class GraceNavigation:
         best_frontier_pose.orientation = direction_to_object
 
         return best_frontier_pose
+
     # region Calculations
-    def calculate_offset(self, point: Point) -> Union[Pose, None]:
+    def calculate_offset(
+        self, point: Point, heuristic_func: Union[Callable, None] = None
+    ) -> Union[Pose, None]:
+        """
+        Calculate an offset point using BFS with a customizable heuristic function.
+
+        Args:
+            point (Point): A goal in map coordinates
+            heuristic_func (Callable, optional): A function that takes (pose, current_position, original_goal) and returns a score
+                (lower is better). If None, uses distance from current position as the default. Defaults to None.
+
+        Returns:
+            A valid Pose or None if no valid offset could be found
+        """
+        if heuristic_func is None:
+            def default_heuristic_func(poses_list, current_position, original_goal):
+                return min(
+                    poses_list,
+                    key=lambda pose: np.linalg.norm(
+                        np.array([pose.position.x, pose.position.y]) - current_position
+                    ),
+                )
+
+            heuristic_func = default_heuristic_func
+
         # point is a goal in map coordinates
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
-            (self.frontier_search.global_costmap.info.height, self.frontier_search.global_costmap.info.width)
-        )        
+            (
+                self.frontier_search.global_costmap.info.height,
+                self.frontier_search.global_costmap.info.width,
+            )
+        )
         max_offset_distance = 400.0  # Maximum depth for BFS
         visited = set()
         bfs_queue = queue.Queue()
-        img_point = self.frontier_search.convert_map_coords_to_img_coords((point.x, point.y))
+        img_point = self.frontier_search.convert_map_coords_to_img_coords(
+            (point.x, point.y)
+        )
         bfs_queue.put(img_point)
-        
+
         depth: float = 0.0
 
         best_poses = []
-                
+
         while not bfs_queue.empty():
             img_x, img_y = bfs_queue.get()
-            map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords((img_x, img_y))
+            map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
+                (img_x, img_y)
+            )
             if (map_x, map_y) in visited:
                 continue
 
@@ -630,40 +739,52 @@ class GraceNavigation:
             # rospy.sleep(0.1)
 
             # Check if the point is not in the occupancy grid
-            if self.frontier_search.is_point_in_occupancy_grid(Point(map_x, map_y, 0), True):
+            if self.frontier_search.is_point_in_occupancy_grid(
+                Point(map_x, map_y, 0), True
+            ):
                 new_pose = Pose()
                 new_pose.position = Point(map_x, map_y, 0)
-                new_pose.orientation = self.calculate_direction_between_points(point, new_pose.position)
+                new_pose.orientation = self.calculate_direction_between_points(
+                    point, new_pose.position
+                )
                 best_poses.append(new_pose)
-                if (len(best_poses) >= 1 and depth >= 0.75 * max_offset_distance) or len(best_poses) >= 30: # Tune this
+                if (
+                    len(best_poses) >= 1 and depth >= 0.75 * max_offset_distance
+                ) or len(best_poses) >= 30:  # Tune this
                     current_pose = self.get_current_pose()
-                    current_position = np.array([current_pose.position.x, current_pose.position.y])
-                    best_pose = min(
-                        best_poses,
-                        key=lambda pose: np.linalg.norm(
-                            np.array([pose.position.x, pose.position.y]) - current_position
-                        ),
+                    current_position = np.array(
+                        [current_pose.position.x, current_pose.position.y]
                     )
+                    best_pose = heuristic_func(best_poses, current_position, point)
                     return best_pose
-            
+
             if depth >= max_offset_distance:
-                rospy.logwarn("Could not find a valid offset point using BFS. Depth Limited")
+                rospy.logwarn(
+                    "Could not find a valid offset point using BFS. Depth Limited"
+                )
                 return None
-            
+
             # Add neighbors to the queue
             for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
                 nx, ny = img_x + dx, img_y + dy
-                if 0 <= nx < map_image.shape[1] and 0 <= ny < map_image.shape[0] and (nx, ny) not in visited:
+                if (
+                    0 <= nx < map_image.shape[1]
+                    and 0 <= ny < map_image.shape[0]
+                    and (nx, ny) not in visited
+                ):
                     bfs_queue.put((nx, ny))
 
         rospy.logwarn("Could not find a valid offset point using BFS.")
         return None
 
-
     def calculate_direction_towards_object(self, point: Point) -> Quaternion:
-        return self.calculate_direction_between_points(point, self.get_current_pose().position)
-    
-    def calculate_direction_between_points(self, point: Point, point2: Point) -> Quaternion:
+        return self.calculate_direction_between_points(
+            point, self.get_current_pose().position
+        )
+
+    def calculate_direction_between_points(
+        self, point: Point, point2: Point
+    ) -> Quaternion:
         # Calculate angle to point
         dx = point.x - point2.x
         dy = point.y - point2.y
@@ -762,6 +883,7 @@ class GraceNavigation:
     def shutdown(self) -> None:
         GraceNavigation.verbose_log("Shutting down GraceNavigation.")
         self.move_base.cancel_all_goals()
+
 
 if __name__ == "__main__":
     rospy.init_node("grace_navigation")
