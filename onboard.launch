@@ -23,5 +23,10 @@
     <!-- Launch the arm controller -->
     <group if="$(arg arm)">
         <include file="$(find grace_arm_control)/launch/arm_controller.launch"></include>
+        <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+            <rosparam param="source_list">[mobile_base/joint_states, grace/arm_joint_states]</rosparam>
+        </node>
     </group>
+
+
 </launch>

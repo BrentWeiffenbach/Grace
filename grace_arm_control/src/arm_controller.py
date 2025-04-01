@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 import rospy
 from moveit_msgs.msg import MoveGroupActionResult
 from std_msgs.msg import String, Bool
@@ -6,6 +6,7 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import math
 from grace_navigation.msg import RobotState
+from moveit_commander import MoveGroupCommander # type: ignore
 
 class ArmController:
     def __init__(self):
@@ -66,15 +67,15 @@ class ArmController:
     def zeroing(self):
         # rospy.loginfo("State is returning to zero pose")
         self.arm_control_status_pub.publish(Bool(False))
+        group = MoveGroupCommander("arm_group")  # Use your specific planning group name
+        joint_values = [0.08059417813617288, 0.8414356555608558, -0.3932249476604554, 
+                    0.18421584162174223, 0.45491917923620506, 0.16590019448519736]
+        group.set_joint_value_target(joint_values)
         self.state = RobotState.EXPLORING
-        zero_trajectory_point = JointTrajectoryPoint()
-        zero_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
-        self.trajectory_points = [zero_trajectory_point, zero_trajectory_point]
         self.current_point_index = 0
         self.final_point_sent = False
         self.home_sent = False
         self.zero_sent = True
-        self.send_next_trajectory_point()
 
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
@@ -92,10 +93,12 @@ class ArmController:
             if self.state == RobotState.PICKING:
                 rospy.loginfo("State is PICKING. Closing the gripper.")
                 self.gripper_pub.publish("close")
+                rospy.sleep(1)
                 self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.PLACING:
                 rospy.loginfo("State is PLACING. Opening the gripper.")
                 self.gripper_pub.publish("open")
+                rospy.sleep(1)
                 self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.ZEROING:
                 self.zeroing()
