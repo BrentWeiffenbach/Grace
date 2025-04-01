@@ -453,8 +453,8 @@ class GraceNavigation:
             goal=dest,
             done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
-        if yield_when_done:
-            rospy.sleep(2)
+        # if yield_when_done:
+        rospy.sleep(2)
         # rememebr last goto goal
 
 
@@ -605,7 +605,7 @@ class GraceNavigation:
             current_pose: Pose = self.get_current_pose()
             current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-            MIN_DISTANCE = 1.2  # TODO: Tune this
+            MIN_DISTANCE = 1.5  # TODO: Tune this
             MAX_DISTANCE = 30.0  # TODO: Tune this
             MIN_SIZE = sum(sizes) / len(sizes) if sizes else 20.0  # Use average of sizes or default to 20.0
             
