@@ -17,11 +17,8 @@
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
     <!-- rviz file default -->
     <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
-    
-    <!-- Load robot_description -->
-    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
-        <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
-    </node>
+
+    <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
 
     <!-- If not in sim, make sure onboard.launch is run on the onboard computer -->
     <group if="$(arg sim)">
@@ -41,6 +38,9 @@
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
         <rosparam param="source_list">[mobile_base/joint_states, grace/arm_joint_states]</rosparam>
     </node>
+        
+    <!-- Load robot_description -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
 
     <group if="$(arg arm)">
         <!-- ARM CONTROL -->

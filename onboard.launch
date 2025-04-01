@@ -4,7 +4,7 @@
     <!-- Launch the turtlebot itself -->
     <group>
         <remap from="joint_states" to="mobile_base/joint_states"/>
-        <include file="$(find turtlebot_bringup)/launch/minimal.launch"/>
+        <include file="$(find grace_navigation)/launch/minimal.launch"/>
     </group>
 
     <!-- Launch the kinect -->
