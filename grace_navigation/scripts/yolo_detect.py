@@ -88,7 +88,7 @@ class YoloDetect:
         )
 
         # Download the YOLO model to the grace folder
-        MODEL_NAME: Final = "yolo11m.pt"
+        MODEL_NAME: Final = "yolo11n.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model
@@ -165,8 +165,6 @@ class YoloDetect:
         for detection in result[0].boxes: # type: ignore
             detection: Boxes  # Add typing for detection
             x1, y1, x2, y2 = map(int, detection.xyxy[0])
-            det_annotated = cv2.circle(det_annotated, (x1, y1), 5, (0, 255, 0), -1)
-            det_annotated = cv2.circle(det_annotated, (x2, y2), 5, (0, 255, 0), -1)
             # Prevent taking the mean of an empty slice
             if depth_array is None or np.all(np.isnan(depth_array[y1:y2, x1:x2])):
                 continue
