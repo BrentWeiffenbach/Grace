@@ -19,7 +19,9 @@
     <arg name="rviz_file" default="$(dirname)/grace.rviz" doc="Path to the RViz configuration file." />
     
     <!-- Load robot_description -->
-    <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+        <param name="robot_description" command="$(find xacro)/xacro $(arg urdf_path)" />
+    </node>
 
     <!-- If not in sim, make sure onboard.launch is run on the onboard computer -->
     <group if="$(arg sim)">
