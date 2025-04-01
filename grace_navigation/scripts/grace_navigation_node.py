@@ -555,14 +555,14 @@ class GraceNavigation:
         current_pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
         
-        closest_objects_copy = cls_objects.copy()
+        # closest_objects_copy = cls_objects.copy()
         # loop through objs to check if they are closest and 'NOT navigable' / in occupancy grid
-        for obj in closest_objects_copy:
-            closest_obj = min(
-                cls_objects,
-                key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
-            )
-            obj_point = Point(closest_obj.x, closest_obj.y, 0)
+        for obj in cls_objects:
+            # closest_obj = min(
+            #     cls_objects,
+            #     key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
+            # )
+            obj_point = Point(obj.x, obj.y, 0) # type: ignore
 
             self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
             
@@ -572,7 +572,7 @@ class GraceNavigation:
                 # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
                 rospy.loginfo("DEBUG: This semantic object was in occupancy grid, most likely a hallucination.")
                 # remove object from cls_objects
-                cls_objects.remove(closest_obj)
+                cls_objects.remove(obj)
             else:
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
                 return obj_point

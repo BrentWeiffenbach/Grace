@@ -18,6 +18,7 @@ class ArmController:
         self.publish_timer = None
         self.final_point_sent = False
         self.home_sent = False
+        self.zero_sent = False
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
@@ -66,14 +67,17 @@ class ArmController:
     def zeroing(self):
         group = MoveGroupCommander("arm_group")  # Use your specific planning group name
         # rospy.loginfo("State is returning to zero pose")
-        # self.arm_control_status_pub.publish(Bool(False)) # was causing state to be 1 before arm finishes zeroing
-        # group.set_start_state_to_current_state() # this causes a double motion... I dont know why
+        # self.arm_control_status_pub.publish(Bool(False))
+        # group.set_start_state_to_current_state()
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
         group.set_joint_value_target(joint_values)
         success, plan, _, _ = group.plan()
         self.state = RobotState.EXPLORING
+        self.current_point_index = 0
+        self.final_point_sent = False
         self.home_sent = False
+        self.zero_sent = True
 
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
@@ -111,7 +115,7 @@ class ArmController:
             self.reconnect()
 
     def send_next_trajectory_point(self):
-        if self.trajectory_points and self.current_point_index < len(self.trajectory_points) or self.arm_status == "waiting":
+        if self.trajectory_points and self.current_point_index < len(self.trajectory_points) or (self.arm_status == "waiting" and self.zero_sent):
             point = self.trajectory_points[self.current_point_index]
             joint_state = JointState()
             joint_state.position = [math.degrees(pos) for pos in point.positions]
@@ -130,6 +134,8 @@ class ArmController:
                 self.publish_timer = rospy.Timer(rospy.Duration(0.1), self.republish_current_point) # type: ignore
         else:
             rospy.loginfo("All trajectory points have been sent")
+            if self.zero_sent:
+                self.zero_sent = False
             if self.publish_timer is not None:
                 self.publish_timer.shutdown()
                 self.publish_timer = None

@@ -33,13 +33,13 @@ ros::NodeHandle nh;
 #define DIR_J4 48   // Z-axis direction pin
 #define EN_J4 62    // Z-axis enable pin
 
-#define STEP_J5 36  // E0 step pin
-#define DIR_J5 34   // E0 direction pin
-#define EN_J5 30    // E0 enable pin
+#define STEP_J5 36  // E1 step pin
+#define DIR_J5 34   // E1 direction pin
+#define EN_J5 30    // E1 enable pin
 
-#define STEP_J6 26  // E1 step pin
-#define DIR_J6 28   // E1 direction pin
-#define EN_J6 24    // E1 enable pin
+#define STEP_J6 26  // E0 step pin
+#define DIR_J6 28   // E0 direction pin
+#define EN_J6 24    // E0 enable pin
 
 #define LIMIT_SWITCH_J1 3  // Limit switch pin for X-
 #define LIMIT_SWITCH_J2 2  // Limit switch pin for X+

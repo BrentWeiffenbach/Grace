@@ -405,7 +405,7 @@ if __name__ == "__main__":
         rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location="couch", pick_object="backpack")
+    grace.goal = RobotGoal(place_location="chair", pick_object="backpack")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
