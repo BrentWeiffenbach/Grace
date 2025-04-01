@@ -268,7 +268,7 @@ class GraceNavigation:
     def explore(self) -> None:
         # BUG (?): self.goal can possibly be undefined. It is difficult to reproduce how it happened.
 
-        EXPLORE_SECONDS = 12 * 60  # 12 minutes
+        EXPLORE_SECONDS = 20 * 60  # 20 minutes
         rospy.loginfo("Exploring")
         at_goal = self.explore_until_found(
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
@@ -331,14 +331,14 @@ class GraceNavigation:
 
             obj_point = self.find_object_in_semantic_map(target_obj_name)
             if obj_point is not None:
+                self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
+                self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
                 # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
                 if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
                     # most likely a haclucination if not inside the inflation layer
                     # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
-                    rospy.loginfo("DEBUG: Continuing loop")
-                    continue
-                self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
-                self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
+                    rospy.loginfo("DEBUG: In occupancy grid.")
+                    self.goal_pose = None
 
 
             if self.goal_pose is not None:
@@ -598,8 +598,9 @@ class GraceNavigation:
             current_pose: Pose = self.get_current_pose()
             current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-            MIN_DISTANCE = 1.0  # TODO: Tune this
-            MAX_DISTANCE = 10.0  # TODO: Tune this
+            MIN_DISTANCE = 3.0  # TODO: Tune this
+            MAX_DISTANCE = 30.0  # TODO: Tune this
+            MIN_SIZE = sum(sizes) / len(sizes) if sizes else 20.0  # Use average of sizes or default to 20.0
             
 
             scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -607,6 +608,9 @@ class GraceNavigation:
             for frontier, size in zip(frontiers, sizes):
                 frontier_position = np.array([frontier.x, frontier.y])
                 distance: np.floating = np.linalg.norm(frontier_position - current_position)
+
+                if size <= MIN_SIZE:
+                    continue
 
                 if distance < MIN_DISTANCE:
                     continue

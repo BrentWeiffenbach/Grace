@@ -177,7 +177,9 @@ class FrontierSearch:
                 centroid_x, centroid_y = centroid_cv[idx]
                 map_coords = self.convert_img_coords_to_map_coords((centroid_x, centroid_y))
                 centroids.append(Point(*map_coords, 0.0))
+
                 sizes.append(stats[idx, cv2.CC_STAT_AREA])  # Use the area of the component as its size
+                # print(f"Debug: Adding frontier of size: {stats[idx, cv2.CC_STAT_AREA]}")
 
             
         # Save the resulting images
