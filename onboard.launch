@@ -2,8 +2,10 @@
     <arg name="arm" default="true" doc="set to true if arm is plugged in, false otherwise" />
 
     <!-- Launch the turtlebot itself -->
-    <include file="$(find turtlebot_bringup)/launch/minimal.launch"></include>
-    <remap from="joint_states" to="mobile_base/joint_states"/>
+    <include file="$(find turtlebot_bringup)/launch/minimal.launch">
+        <remap from="joint_states" to="mobile_base/joint_states"/>
+    </include>
+
 
     <!-- Launch the kinect -->
     <arg name="3d_sensor" default="$(env TURTLEBOT_3D_SENSOR)"/>  <!-- r200, kinect, asus_xtion_pro -->
