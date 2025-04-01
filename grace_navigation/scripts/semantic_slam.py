@@ -25,13 +25,19 @@ class MapObject:
         """A 2D Position with [x, y]
         """
         self.pos_var = pos_var
+        self.pos_var_inv = None
+        self._update_inverse()
         self.class_probs = class_probs
         self.obj_class = obj_class  # type: str
+
+    def _update_inverse(self):
+        self.pos_var_inv = inv(self.pos_var)
 
     def update(self, pos, pos_var, class_probs, obj_class):
         # type: (np.ndarray, np.ndarray, np.ndarray, str) -> None
         self.pos = pos
         self.pos_var = pos_var
+        self._update_inverse()
         self.class_probs = class_probs
         self.obj_class = obj_class
 
@@ -63,8 +69,6 @@ class SemanticSLAM:
         self.sigma_p = None
         self.sigma_p_inv = None
 
-        self.ALPHA_CONSTANT = 1.05
-
         self.classes = ["person","bicycle","car","motorcycle","airplane","bus","train",
                          "truck","boat","traffic light","fire hydrant","stop sign",
                          "parking meter","bench","bird","cat","dog","horse","sheep",
@@ -78,12 +82,22 @@ class SemanticSLAM:
                          "microwave","oven","toaster","sink","refrigerator","book","clock",
                          "vase","scissors","teddy bear","hair drier","toothbrush"]  # fmt: skip
 
+        self.ALPHA_CONSTANT = 1.05
+
+        self.all_alphas = []
         self.numberOfClasses = len(self.classes)
+        for i in range(self.numberOfClasses):
+            alpha = np.ones(self.numberOfClasses)
+            alpha[i] = self.ALPHA_CONSTANT
+            self.all_alphas.append(alpha)
+
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
         self.range_sub = rospy.Subscriber(
             "/range_bearing", RangeBearings, self.range_callback
         )
-        self.map_pub = rospy.Publisher("/semantic_map", Object2DArray, queue_size=10, latch=True)
+        self.map_pub = rospy.Publisher(
+            "/semantic_map", Object2DArray, queue_size=10, latch=True
+        )
         self.t = 0  # type: int
         """Timestamp, in seconds"""
 
@@ -97,7 +111,7 @@ class SemanticSLAM:
         self.sigma_p = np.diag([self.pos_var, self.pos_var, self.ang_var])
         self.sigma_p_inv = inv(self.sigma_p)
         self.t = msg.header.stamp.to_sec()
-    
+
     def range_callback(self, msg):
         if self.pos_var is None:
             rospy.loginfo("robot pose covariance is not set")
@@ -180,16 +194,11 @@ class SemanticSLAM:
                 object_pos = np.asarray([mx, my])
                 object_pos_var = np.diag([x_var, y_var])
 
-                class_probs = []
+                class_probs = np.zeros(self.numberOfClasses)
                 for i in range(self.numberOfClasses):
-                    alpha = np.ones(self.numberOfClasses)
-                    alpha[i] = self.ALPHA_CONSTANT
-                    class_probs.append(dirichlet.pdf(probability, alpha))
+                    class_probs[i] = dirichlet.pdf(probability, self.all_alphas[i])
 
-                class_probs = np.asarray(class_probs)
-                class_probs = np.asarray(class_probs) / np.sum(
-                    class_probs
-                )  # Normalize class_probs
+                class_probs = class_probs / np.sum(class_probs)  # Normalize class_probs
 
                 self.objects[self.max_obj_id] = MapObject(
                     obj_id, object_pos, object_pos_var, class_probs, obj_class
@@ -218,7 +227,7 @@ class SemanticSLAM:
 
                 # region Kalman Filter
                 sigma_m = matched_obj.pos_var  # Position Variance
-                sigma_m_inv = inv(sigma_m)  # Inverse of position variance
+                sigma_m_inv = matched_obj.pos_var_inv
 
                 x = self.pos[0]
                 y = self.pos[1]
@@ -226,24 +235,30 @@ class SemanticSLAM:
                 # Distance between robot and object
                 d = norm(np.asarray([x, y]) - obj_pos)
 
+                # Reduce duplicate computations
+                x_diff = obj_x - x
+                y_diff = obj_y - y
+                inv_d = 1.0 / d
+                inv_d_squared = inv_d * inv_d
+
                 # Jacobian matrixes
                 K1 = np.asarray(
                     [
-                        [(obj_x - x) / d, (obj_y - y) / d],
-                        [(y - obj_y) / (d**2), (obj_x - x) / (d**2)],
+                        [x_diff * inv_d, y_diff * inv_d],
+                        [(-y_diff) * inv_d_squared, x_diff * inv_d_squared],
                     ]
                 )
 
                 K2 = np.asarray(
                     [
-                        [(x - obj_x) / d, (y - obj_y) / d, 0],
-                        [(obj_y - y) / (d**2), (x - obj_x) / (d**2), -1],
+                        [(-x_diff) * inv_d, (-y_diff) * inv_d, 0],
+                        [y_diff * inv_d_squared, (-x_diff) * inv_d_squared, -1],
                     ]
                 )
                 z = np.asarray([obj_range, bearing])
 
                 # Difference between actual measurements and predicited measurements
-                dz = z - np.asarray([d, np.arctan2(obj_y - y, obj_x - x) - self.ang])
+                dz = z - np.asarray([d, np.arctan2(y_diff, x_diff) - self.ang])
                 dz[1] = np.arctan2(
                     np.sin(dz[1]), np.cos(dz[1])
                 )  # Normalize to be within -pi to pi
@@ -342,19 +357,16 @@ class SemanticSLAM:
             list[Object2D]: A list of the objects in msg form.
         """
         objects = []  # type: list[Object2D]
-        # print('current robot position ', self.pos)
-        # print('current angle is ', self.ang)
         used_ids = set()
         for obj_id in self.objects:
-            obj_msg = Object2D()
             obj = self.objects[obj_id]
 
-            # This doesn't really change anything but whatever
-            old_len = len(used_ids)
-            used_ids.add(obj.id)
-            if old_len == len(used_ids):
+            if obj.id in used_ids:
                 continue
 
+            used_ids.add(obj.id)
+
+            obj_msg = Object2D()
             obj_msg.x = obj.pos[0]
             obj_msg.y = obj.pos[1]
 
@@ -363,16 +375,16 @@ class SemanticSLAM:
             obj_msg.probability = obj.class_probs.tolist()
             obj_msg.cls = obj.obj_class
 
-            # print(obj.obj_class, " ", obj_id, " ", obj.pos)
             objects.append(obj_msg)
         return objects
+
 
 if __name__ == "__main__":
     rospy.init_node("semantic_slam")
     rospy.loginfo("Press Ctrl + C to terminate")
     while True:
         state_msg = rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
-        if state_msg.state == RobotState.EXPLORING: # type: ignore
+        if state_msg.state == RobotState.EXPLORING:  # type: ignore
             break
     whatever = SemanticSLAM()
     try:

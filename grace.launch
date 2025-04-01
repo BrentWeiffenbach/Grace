@@ -40,7 +40,9 @@
     </node>
         
     <!-- Load robot_description -->
-    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+    <group unless="$(arg sim)">
+        <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+    </group>
 
     <group if="$(arg arm)">
         <!-- ARM CONTROL -->

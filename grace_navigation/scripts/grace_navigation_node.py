@@ -7,7 +7,7 @@ import numpy as np
 import rospy
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion
-from grace_navigation.msg import RangeBearing, RangeBearings
+from grace_navigation.msg import RangeBearing, RangeBearings, Object2D
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
@@ -125,11 +125,10 @@ class GraceNavigation:
         self.global_costmap_sub.unregister()
 
     def global_cb(self, msg: OccupancyGridUpdate) -> None:
-        # rospy.loginfo("updating costmap")
         self.frontier_search.global_map_cb(msg)
 
     def semantic_map_callback(self, msg: Object2DArray) -> None:
-        self.semantic_map = msg    
+        self.semantic_map = msg
 
     def odom_callback(self, msg: Odometry) -> None:
         self.odom = msg
@@ -184,9 +183,10 @@ class GraceNavigation:
             timeout=rospy.Duration(10),
         )
         if has_object is None:
-            rospy.logwarn(
-                "Failed to receive message for has_object. Defaulting to False."
-            )
+            if GraceNavigation.verbose:
+                rospy.logwarn(
+                    "Failed to receive message for has_object. Defaulting to False."
+                )
             has_object = False
         else:
             has_object = has_object.data
@@ -199,7 +199,6 @@ class GraceNavigation:
             marker.id = marker_id
 
             if namespace == "Object_Goal" or namespace == "Object_Goal_Offset":
-                # rospy.loginfo("Publishing object goal")
                 marker.type = Marker.TEXT_VIEW_FACING
                 target_obj_name: str = (
                     self.goal.place_location if has_object else self.goal.pick_object
@@ -330,7 +329,8 @@ class GraceNavigation:
                 return True
 
             obj_point = self.find_object_in_semantic_map(target_obj_name)
-
+            if obj_point is not None:
+                self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
 
             if self.goal_pose is not None:
                 self.publish_markers(
@@ -344,12 +344,13 @@ class GraceNavigation:
                     self.done_flag = False
                     self.goal_pose = None
                     return True
-                
 
                 if self.last_goal != self.goal_pose:
-                    rospy.loginfo_throttle(1,
-                    f"Goal for {target_obj_name} is accessible, navigating to it"
-                )
+                    if GraceNavigation.verbose:
+                        rospy.loginfo_throttle(
+                            1,
+                            f"Goal for {target_obj_name} is accessible, navigating to it",
+                        )
 
                 self.goto(
                     self.goal_pose,
@@ -360,14 +361,16 @@ class GraceNavigation:
 
                 continue
             else:
-                GraceNavigation.verbose_log(
-                    f"Goal for {target_obj_name} is not accessible yet"
-                )
+                GraceNavigation.verbose_log("Goal pose is none!")
                 navigating_to_object = False
 
             if not navigating_to_object:
+                # Go to frontier
                 frontier_pose = self.compute_frontier_goal_pose(
-                    heuristic_pose=self.goal_pose if self.goal_pose is not None else self.get_current_pose())
+                    heuristic_pose=self.goal_pose
+                    if self.goal_pose is not None
+                    else self.get_current_pose()
+                )
 
                 if frontier_pose is None:
                     GraceNavigation.verbose_log("No frontiers found, waiting...")
@@ -382,7 +385,10 @@ class GraceNavigation:
                         "Navigating to a frontier for exploration"
                     )
                     self.should_update_goal = False
-                    def navigable_heuristic(poses_list, current_position, original_goal):
+
+                    def navigable_heuristic(
+                        poses_list, current_position, original_goal
+                    ):
                         # return min(
                         #     poses_list,
                         #     key=lambda pose: np.linalg.norm(
@@ -390,17 +396,24 @@ class GraceNavigation:
                         #     ),
                         # )
                         return poses_list[0]
-                    offset_pose = self.calculate_offset(frontier_pose.position, navigable_heuristic)
-                    rospy.loginfo(f"Using {'offset_pose' if offset_pose is not None else 'frontier_pose'}")
+
+                    offset_pose = self.calculate_offset(
+                        frontier_pose.position, navigable_heuristic
+                    )
                     if offset_pose is not None:
-                        offset_pose.orientation = self.calculate_direction_towards_object(offset_pose.position)
+                        offset_pose.orientation = (
+                            self.calculate_direction_towards_object(
+                                offset_pose.position
+                            )
+                        )
                     self.goto(
                         offset_pose if offset_pose is not None else frontier_pose,
                         yield_when_done=False,
                     )
-                    rospy.sleep(
-                        3
-                    )  # Increase to increase time between updating which frontier should be navigated to
+                    # Commented because in sim it does not go to the object immediately but instead continues going to a frontier
+                    # rospy.sleep(
+                    #     3
+                    # )  # Increase to increase time between updating which frontier should be navigated to
 
             rospy.sleep(1)  # Originally 0.5
 
@@ -428,14 +441,21 @@ class GraceNavigation:
         # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
         THRESHOLD = 0.3  # TODO: Tune this
         if pose_distance <= THRESHOLD:
-            rospy.logwarn_throttle(1, "Robot is already within the threshold distance to the goal.")
+            if GraceNavigation.verbose:
+                rospy.logwarn_throttle(
+                    1, "Robot is already within the threshold distance to the goal."
+                )
             return
-        if last_goal_distance <= THRESHOLD and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED: # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
-            rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
+        if (
+            last_goal_distance <= THRESHOLD
+            and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED
+        ):  # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
+            if GraceNavigation.verbose:
+                rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
             return
-        
+
         self.last_goal = obj
-        rospy.loginfo("Publishing goal to MoveBase")
+        GraceNavigation.verbose_log("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
         dest.target_pose.header.stamp = rospy.Time.now()
@@ -447,7 +467,6 @@ class GraceNavigation:
         # if yield_when_done:
         rospy.sleep(2)
         # rememebr last goto goal
-
 
     def yolo_final_check(self) -> bool:
         # Only be done if the yolo object is visible at the goal
@@ -479,9 +498,9 @@ class GraceNavigation:
         target_obj_name: str = (
             self.goal.place_location if has_object else self.goal.pick_object
         )
-        
+
         assert isinstance(detections, RangeBearings)  # type: ignore
-        
+
         # check if any detections are the target class
         if detections.range_bearings is None:
             rospy.logwarn("No detections received in done_cb.")
@@ -489,7 +508,7 @@ class GraceNavigation:
             # self.done_flag = False
             # self.last_goal = self.get_current_pose()
             return False
-        
+
         for detection in detections.range_bearings:
             detection: RangeBearing
             if detection.obj_class == target_obj_name:
@@ -534,48 +553,61 @@ class GraceNavigation:
         """
         assert self.semantic_map  # I do not want to deal with this not being initialized # fmt: skip
         if self.semantic_map.objects is None or len(self.semantic_map.objects) == 0:
-            rospy.loginfo("self.semantic_map.object has no objects. Returning none")
+            GraceNavigation.verbose_log(
+                "self.semantic_map.object has no objects. Returning none"
+            )
             return None
 
-        cls_objects = [
+        cls_objects: List[Object2D] = [
             map_obj for map_obj in self.semantic_map.objects if map_obj.cls == obj
         ]
-        
+
         # DEBUG:
         self.publish_markers(
-            [Point(obj.x, obj.y, 0) for obj in cls_objects],
+            [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
             namespace="semantic_objects",
             color=(0.0, 1.0, 0.7),
         )
 
         if not cls_objects or len(cls_objects) == 0:
-            rospy.logwarn(f"No objects with class: {obj}")
+            if GraceNavigation.verbose:
+                rospy.logwarn(f"No objects with class: {obj}")
             return None
 
-        current_pose = self.get_current_pose()
-        current_position = np.array([current_pose.position.x, current_pose.position.y])
-        
-        # closest_objects_copy = cls_objects.copy()
+        in_occupancy_grid_objects = []
+        # too_close_objects # Too close to object could potentially continuially remove the goal pose when approaching making it impossible to actually arrive
+
         # loop through objs to check if they are closest and 'NOT navigable' / in occupancy grid
-        for obj in cls_objects:
+        for class_obj in cls_objects:
             # closest_obj = min(
             #     cls_objects,
             #     key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
             # )
-            obj_point = Point(obj.x, obj.y, 0) # type: ignore
-
-            self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
+            obj_point = Point(class_obj.x, class_obj.y, 0)  # type: ignore
+            # YOU COULD maybe approximate the closest object location after seeing it is in occupancy grid, to effectivly calculate_offset inversely to find a good semantic location
+            # What two back-to-back all nighters does to a guy ^ 
             
             # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
             if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
                 # most likely a haclucination if not inside the inflation layer
                 # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
-                rospy.loginfo("DEBUG: This semantic object was in occupancy grid, most likely a hallucination.")
+                GraceNavigation.verbose_log(
+                    "DEBUG: This semantic object was in occupancy grid, most likely a hallucination."
+                )
                 # remove object from cls_objects
-                cls_objects.remove(obj)
+                cls_objects.remove(class_obj)
+                in_occupancy_grid_objects.append(obj_point)
+                continue
             else:
+                # self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
                 self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
+                if len(in_occupancy_grid_objects) > 0:
+                    self.publish_markers(
+                        in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1)
+                    )
                 return obj_point
+        if len(in_occupancy_grid_objects) > 0:
+            self.publish_markers(in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1))
         return None
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
@@ -605,79 +637,86 @@ class GraceNavigation:
 
     # region Frontiers
     def score_frontiers(
-            self, frontiers: List[Point], sizes: List[float], target_pose: Union[Pose, None] = None
-            ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
-            if not frontiers or not sizes or len(frontiers) != len(sizes):
-                rospy.logwarn("Frontiers and sizes must be non-empty and of the same length.")
-                return None
+        self,
+        frontiers: List[Point],
+        sizes: List[float],
+        target_pose: Union[Pose, None] = None,
+    ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
+        if not frontiers or not sizes or len(frontiers) != len(sizes):
+            rospy.logwarn(
+                "Frontiers and sizes must be non-empty and of the same length."
+            )
+            return None
 
-            current_pose: Pose = self.get_current_pose()
-            current_position = np.array([current_pose.position.x, current_pose.position.y])
+        current_pose: Pose = self.get_current_pose()
+        current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-            MIN_DISTANCE = 1.5  # TODO: Tune this
-            MAX_DISTANCE = 30.0  # TODO: Tune this
-            MIN_SIZE = sum(sizes) / len(sizes) if sizes else 20.0  # Use average of sizes or default to 20.0
-            
+        MIN_DISTANCE = 1.5  # TODO: Tune this
+        MAX_DISTANCE = 30.0  # TODO: Tune this
+        MIN_SIZE = (
+            sum(sizes) / len(sizes) if sizes else 20.0
+        )  # Use average of sizes or default to 20.0
 
-            scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
+        scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
-            for frontier, size in zip(frontiers, sizes):
-                frontier_position = np.array([frontier.x, frontier.y])
-                distance: np.floating = np.linalg.norm(frontier_position - current_position)
+        for frontier, size in zip(frontiers, sizes):
+            frontier_position = np.array([frontier.x, frontier.y])
+            distance: np.floating = np.linalg.norm(frontier_position - current_position)
 
-                if size <= MIN_SIZE:
-                    continue
+            if size <= MIN_SIZE:
+                continue
 
-                if distance < MIN_DISTANCE:
-                    continue
+            if distance < MIN_DISTANCE:
+                continue
 
-                if distance > MAX_DISTANCE:
-                    continue
+            if distance > MAX_DISTANCE:
+                continue
 
-                # Basic score is inverse distance
-                score: Union[np.floating, float] = 1 / max(distance, 0.1)
+            # Basic score is inverse distance
+            score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
-                # Adjust score based on size
-                score *= size 
+            # Adjust score based on size
+            score *= size
 
-                if target_pose is not None:
-                    target_position = np.array(
-                        [target_pose.position.x, target_pose.position.y]
-                    )
-                    frontier_to_target = frontier_position - target_position
-                    frontier_to_position = frontier_position - current_position
-
-                    if (
-                        np.linalg.norm(frontier_to_target) > 0
-                        and np.linalg.norm(frontier_to_position) > 0
-                    ):
-                        cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
-                            np.linalg.norm(frontier_to_target)
-                            * np.linalg.norm(frontier_to_position)
-                        )
-                        # Boost score if frontier is in direction of target object
-                        direction_factor = (cos_angle + 1) / 2
-                        score *= 1 + 3 * direction_factor
-
-                scored_frontiers.append((frontier, score))
-
-            # Sort by score (highest first)
-            scored_frontiers.sort(key=lambda x: x[1], reverse=True)
-
-            if scored_frontiers:
-                best_frontier_position = scored_frontiers[0][0]
-                distance_from_current_pose = np.linalg.norm(
-                    np.array([best_frontier_position.x, best_frontier_position.y])
-                    - np.array([current_position[0], current_position[1]])
+            if target_pose is not None:
+                target_position = np.array(
+                    [target_pose.position.x, target_pose.position.y]
                 )
+                frontier_to_target = frontier_position - target_position
+                frontier_to_position = frontier_position - current_position
+
+                if (
+                    np.linalg.norm(frontier_to_target) > 0
+                    and np.linalg.norm(frontier_to_position) > 0
+                ):
+                    cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
+                        np.linalg.norm(frontier_to_target)
+                        * np.linalg.norm(frontier_to_position)
+                    )
+                    # Boost score if frontier is in direction of target object
+                    direction_factor = (cos_angle + 1) / 2
+                    score *= 1 + 3 * direction_factor
+
+            scored_frontiers.append((frontier, score))
+
+        # Sort by score (highest first)
+        scored_frontiers.sort(key=lambda x: x[1], reverse=True)
+
+        if scored_frontiers:
+            best_frontier_position = scored_frontiers[0][0]
+            distance_from_current_pose = np.linalg.norm(
+                np.array([best_frontier_position.x, best_frontier_position.y])
+                - np.array([current_position[0], current_position[1]])
+            )
+            if GraceNavigation.verbose:
                 rospy.loginfo(
                     f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}, {best_frontier_position.z:.2f}), "
                     f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
                     f"Score: {scored_frontiers[0][1]:.2f}"
                 )
-                return scored_frontiers
-            return None
-    
+            return scored_frontiers
+        return None
+
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point]
         sizes: List[float]
@@ -723,6 +762,7 @@ class GraceNavigation:
             A valid Pose or None if no valid offset could be found
         """
         if heuristic_func is None:
+
             def default_heuristic_func(poses_list, current_position, original_goal):
                 return min(
                     poses_list,
@@ -778,7 +818,7 @@ class GraceNavigation:
                 best_poses.append(new_pose)
                 if (
                     len(best_poses) >= 1 and depth >= 0.75 * max_offset_distance
-                ) or len(best_poses) >= 30:  # Tune this
+                ) or len(best_poses) >= 30:  # TODO: Tune this
                     current_pose = self.get_current_pose()
                     current_position = np.array(
                         [current_pose.position.x, current_pose.position.y]
@@ -787,9 +827,10 @@ class GraceNavigation:
                     return best_pose
 
             if depth >= max_offset_distance:
-                rospy.logwarn(
-                    "Could not find a valid offset point using BFS. Depth Limited"
-                )
+                if GraceNavigation.verbose:
+                    rospy.logwarn(
+                        "Could not find a valid offset point using BFS. Depth Limited"
+                    )
                 return None
 
             # Add neighbors to the queue
@@ -802,7 +843,8 @@ class GraceNavigation:
                 ):
                     bfs_queue.put((nx, ny))
 
-        rospy.logwarn("Could not find a valid offset point using BFS.")
+        if GraceNavigation.verbose:
+            rospy.logwarn("Could not find a valid offset point using BFS.")
         return None
 
     def calculate_direction_towards_object(self, point: Point) -> Quaternion:
@@ -823,75 +865,6 @@ class GraceNavigation:
         qw = np.cos(target_angle / 2)
 
         return Quaternion(x=0, y=0, z=qz, w=qw)
-
-    def create_navigable_goal(self, goal: Pose, safety_margin: int = 8) -> Pose:
-        resolution = self.frontier_search.map.info.resolution
-        origin = self.frontier_search.map.info.origin.position
-
-        grid = np.array(self.frontier_search.map.data).reshape(
-            (self.frontier_search.map.info.height, self.frontier_search.map.info.width)
-        )
-
-        goal_x = int((goal.position.x - origin.x) / resolution)
-        goal_y = int((goal.position.y - origin.y) / resolution)
-
-        local_size = safety_margin * 2 + 1
-        local_map = np.ones((local_size, local_size)) * 100
-
-        # Fill in the local map from the global map
-        for dy in range(-safety_margin, safety_margin + 1):
-            for dx in range(-safety_margin, safety_margin + 1):
-                map_x = goal_x + dx
-                map_y = goal_y + dy
-
-                if 0 <= map_x < grid.shape[1] and 0 <= map_y < grid.shape[0]:
-                    local_map[dy + safety_margin, dx + safety_margin] = grid[
-                        map_y, map_x
-                    ]
-
-        best_cost = float("inf")
-        best_point = (goal_x, goal_y)
-
-        for dy in range(-safety_margin, safety_margin + 1):
-            for dx in range(-safety_margin, safety_margin + 1):
-                map_x: int = goal_x + dx
-                map_y: int = goal_y + dy
-
-                if 0 <= map_x < grid.shape[1] and 0 <= map_y < grid.shape[0]:
-                    # Check if there's free space
-                    if grid[map_y, map_x] == 0:
-                        # Calculate distance from original goal
-                        cost: int = dx * dx + dy * dy
-
-                        # Check if it's safe
-                        is_safe = True
-                        for sy in range(-2, 3):
-                            for sx in range(-2, 3):
-                                test_x: int = map_x + sx
-                                test_y: int = map_y + sy
-                                if (
-                                    0 <= test_x < grid.shape[1]
-                                    and 0 <= test_y < grid.shape[0]
-                                ):
-                                    if grid[test_y, test_x] > 0:
-                                        is_safe = False
-                                        break
-                            if not is_safe:
-                                break
-
-                        if is_safe and cost < best_cost:
-                            best_cost = cost
-                            best_point = (map_x, map_y)
-
-        # Create the adjusted goal
-        adjusted_goal = Pose()
-        adjusted_goal.position.x = best_point[0] * resolution + origin.x
-        adjusted_goal.position.y = best_point[1] * resolution + origin.y
-        adjusted_goal.position.z = goal.position.z
-        adjusted_goal.orientation = goal.orientation
-
-        self.publish_markers([adjusted_goal.position], "adjusted", (0, 1, 0))
-        return adjusted_goal
 
     def get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.
