@@ -352,10 +352,10 @@ class GraceNavigation:
                             f"Goal for {target_obj_name} is accessible, navigating to it",
                         )
 
-                self.goto(
-                    self.goal_pose,
-                    yield_when_done=True,
-                )
+                # self.goto(
+                #     self.goal_pose,
+                #     yield_when_done=True,
+                # )
 
                 self.goal_pose = None
 
