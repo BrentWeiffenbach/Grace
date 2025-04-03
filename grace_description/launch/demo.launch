@@ -60,6 +60,10 @@
     <arg name="debug" value="$(arg debug)"/>
   </include>
 
+  <!-- TOOD: Replace with visual grasping node -->
+  <node name="fake_moveit_goal" pkg="grace_arm_control" type="fake_moveit_goal.py" output="screen" /> 
+
+
   <!-- If database loading was enabled, start mongodb as well -->
   <include file="$(find grace_arm_config)/launch/default_warehouse_db.launch" if="$(arg db)">
     <arg name="moveit_warehouse_database_path" value="$(arg db_path)"/>

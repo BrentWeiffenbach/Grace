@@ -401,8 +401,6 @@ if __name__ == "__main__":
     grace.state = GraceNode.DEFAULT_STATE
     if arm_enabled:
         rospy.wait_for_message("/grace/arm_control_status", Bool)
-        grace.state = RobotState.ZEROING
-        rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
     grace.goal = RobotGoal(place_location="chair", pick_object="suitcase")

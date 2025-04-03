@@ -88,12 +88,12 @@ ArmStatus currentStatus = WAITING;
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
 // TODO TUNE DELAY
 StepperMotor motors[6] = {
-  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 4000, 0, 0, false, LinkedList<float>(), 0.0},  // J1
+  {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},  // J1
   {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0}, // J2
-  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 4000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
-  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 4000, 0, 0, false, LinkedList<float>(), 0.0},   // J4
-  {STEP_J5, DIR_J5, EN_J5, 1.8, 40.0 / 16.0, 6000, 0, 0, false, LinkedList<float>(), 0.0},           // J5
-  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 4000, 0, 0, false, LinkedList<float>(), 0.0}            // J6
+  {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
+  {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},   // J4
+  {STEP_J5, DIR_J5, EN_J5, 1.8, 40.0 / 16.0, 200, 0, 0, false, LinkedList<float>(), 0.0},           // J5
+  {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 3000, 0, 0, false, LinkedList<float>(), 0.0}            // J6
 };
 
 void moveMotor(int motorNumber) {
@@ -187,7 +187,24 @@ void updateGripper(){
   }
 }
 
+void moveMotorsOffSwitches(const int stepsToMove[6]) {
+  for (int i = 0; i < 6; i++) {
+    StepperMotor &motor = motors[i];
+    digitalWrite(motor.dirPin, HIGH); // Set direction to forward
+    for (int step = 0; step < stepsToMove[i]; step++) {
+      digitalWrite(motor.stepPin, HIGH);
+      delayMicroseconds(motor.delayBetweenSteps);
+      digitalWrite(motor.stepPin, LOW);
+      delayMicroseconds(motor.delayBetweenSteps);
+    }
+  }
+}
+
 void homing() {
+  // move motors off their limit switches
+  const int stepsToMove[6] = {30, 200, 20, 30, 30, 10}; // Example values for each joint
+  moveMotorsOffSwitches(stepsToMove);
+
   currentStatus = HOMING;
   updateArmStatus();
   for (int i = 0; i < 6; i++) {
@@ -291,7 +308,7 @@ void limitSwitchJ2ISR() {
 void limitSwitchJ3ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ3) > debounceDelay) {
-    motors[2].currentPosition = -33.0;  // Set J3 position to -33 degrees
+    motors[2].currentPosition = -35.0;  // Set J3 position to -33 degrees
     if (currentStatus == HOMING) {
       motors[2].moving = false;         // Stop motor J3 only if in HOMING state
     }
@@ -303,7 +320,7 @@ void limitSwitchJ3ISR() {
 void limitSwitchJ4ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ4) > debounceDelay) {
-    motors[3].currentPosition = -180.0;  // Set J4 position to -180 degrees
+    motors[3].currentPosition = -182.0;  // Set J4 position to -180 degrees
     if (currentStatus == HOMING) {
       motors[3].moving = false;         // Stop motor J4 only if in HOMING state
     }
@@ -315,7 +332,7 @@ void limitSwitchJ4ISR() {
 void limitSwitchJ5ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ5) > debounceDelay) {
-    motors[4].currentPosition = -88.0;  // Set J5 position to -90 degrees
+    motors[4].currentPosition = -95.0;  // Set J5 position to -90 degrees
     if (currentStatus == HOMING) {
       motors[4].moving = false;         // Stop motor J5 only if in HOMING state
     }
@@ -327,7 +344,7 @@ void limitSwitchJ5ISR() {
 void limitSwitchJ6ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ6) > debounceDelay) {
-    motors[5].currentPosition = -135.0;  // Set J6 position to -135 degrees
+    motors[5].currentPosition = -133.0;  // Set J6 position to -135 degrees
     if (currentStatus == HOMING) {
       motors[5].moving = false;         // Stop motor J6 only if in HOMING state
     }
@@ -414,7 +431,10 @@ void loop() {
       for (int i = 0; i < 6; i++) {
         limitSwitchTriggered[i] = false;
       }
-      updateArmStatus();
+      for (int i = 0; i < 6; i++) {
+        motors[i].targetPosition.add(0.0);  // Set target position to zero for all motors
+        moveMotor(i);
+      }
     }
   }
 
