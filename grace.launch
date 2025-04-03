@@ -70,6 +70,10 @@
 
     <!-- NAVIGATION -->
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
+    <!-- <include file="$(find grace_navigation)/launch/grace_navigation.launch">
+        <arg name="verbose" value="$(arg verbose)" />
+        <arg name="sim" value="$(arg sim)" />
+    </include> -->
 
     <!-- MASTER NODE for controlling state machine -->
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
