@@ -234,7 +234,7 @@ class YoloDetect:
         depth_mask = depth_mask * DEPTH_SCALE_FACTOR
 
 
-        z: np.floating = np.nanmean(depth_mask)
+        z: np.floating = np.nanmedian(depth_mask)
         obj_coords = np.nonzero(depth_mask)
         obj_coords = np.asarray(obj_coords).T
 
