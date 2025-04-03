@@ -65,9 +65,9 @@ class YoloDetect:
         """A flag that prohibits new callback information from being recieved while True"""
 
         # Publisher
-        self.detection_image_pub: rospy.Publisher = rospy.Publisher(
-            name="/yolo_detect/detections/image", data_class=Image, queue_size=5
-        )
+        # self.detection_image_pub: rospy.Publisher = rospy.Publisher(
+        #     name="/yolo_detect/detections/image", data_class=Image, queue_size=5
+        # )
 
         self.range_pub = rospy.Publisher(
             name="/range_bearing", data_class=RangeBearings, queue_size=10
@@ -189,9 +189,9 @@ class YoloDetect:
             )  # This should be self.img.header, but there is no header on the np array??
             range_msg.range_bearings = range_bearings
             self.range_pub.publish(range_msg)
-        self.detection_image_pub.publish(
-            ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
-        )
+        # self.detection_image_pub.publish(
+        #     ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
+        # )
         self.latch = False
 
     @staticmethod
