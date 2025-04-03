@@ -364,7 +364,7 @@ class GraceNavigation:
                 GraceNavigation.verbose_log("Goal pose is none!")
                 navigating_to_object = False
 
-            if not navigating_to_object:
+            if not navigating_to_object and False:
                 # Go to frontier
                 frontier_pose = self.compute_frontier_goal_pose(
                     heuristic_pose=self.goal_pose
