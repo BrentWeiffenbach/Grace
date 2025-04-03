@@ -251,9 +251,9 @@ class YoloDetect:
         x: NDArray[np.float64] = (ux - cx) * z / fx
         y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        x_mean: np.floating = np.nanmean(x)  # float64
-        y_mean: np.floating = np.nanmean(y)  # float64
-        z_mean: np.floating = np.nanmean(z)  # float32
+        x_mean: np.floating = np.nanmedian(x)  # float64
+        y_mean: np.floating = np.nanmedian(y)  # float64
+        z_mean: np.floating = np.nanmedian(z)  # float32
 
         Oc: list[np.floating] = [x_mean, y_mean, z_mean]
 
