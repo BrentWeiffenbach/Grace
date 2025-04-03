@@ -22,11 +22,6 @@
     <include file="$(find grace_navigation)/launch/gmapping.launch">
         <arg name="custom_param_file" value="$(find grace_navigation)/config/move_base_config.yaml" />
     </include>
-
-    <include file="$(find grace_navigation)/launch/grace_navigation.launch">
-        <arg name="verbose" value="true" />
-        <arg name="sim" value="false" />
-    </include>
     
     <!-- Launch the arm controller -->
     <group if="$(arg arm)">
