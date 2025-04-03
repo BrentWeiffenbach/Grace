@@ -24,7 +24,7 @@
     </include>
 
     <include file="$(find grace_navigation)/launch/grace_navigation.launch">
-        <arg name="verbose" value="$(arg verbose)" />
+        <arg name="verbose" value="true" />
         <arg name="sim" value="false" />
     </include>
     
