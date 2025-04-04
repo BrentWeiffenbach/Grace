@@ -352,10 +352,10 @@ class GraceNavigation:
                             f"Goal for {target_obj_name} is accessible, navigating to it",
                         )
 
-                # self.goto(
-                #     self.goal_pose,
-                #     yield_when_done=True,
-                # )
+                self.goto(
+                    self.goal_pose,
+                    yield_when_done=True,
+                )
 
                 self.goal_pose = None
 
@@ -364,7 +364,7 @@ class GraceNavigation:
                 GraceNavigation.verbose_log("Goal pose is none!")
                 navigating_to_object = False
 
-            if not navigating_to_object and False:
+            if not navigating_to_object:
                 # Go to frontier
                 frontier_pose = self.compute_frontier_goal_pose(
                     heuristic_pose=self.goal_pose
@@ -412,7 +412,7 @@ class GraceNavigation:
                     )
                     # Commented because in sim it does not go to the object immediately but instead continues going to a frontier
                     # rospy.sleep(
-                    #     3
+                    #     2
                     # )  # Increase to increase time between updating which frontier should be navigated to
 
             rospy.sleep(1)  # Originally 0.5
@@ -651,11 +651,9 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 2.0  # TODO: Tune this
+        MIN_DISTANCE = 0.72  # TODO: Tune this
         MAX_DISTANCE = 30.0  # TODO: Tune this
-        MIN_SIZE = (
-            sum(sizes) / len(sizes) if sizes else 20.0
-        )  # Use average of sizes or default to 20.0
+        MIN_SIZE = max(40.0, sum(sizes) / len(sizes)) # TODO: Tune this
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
@@ -676,7 +674,7 @@ class GraceNavigation:
             score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
             # Adjust score based on size
-            score *= size
+            score *= size / 10
 
             if target_pose is not None:
                 target_position = np.array(
@@ -697,6 +695,8 @@ class GraceNavigation:
                     direction_factor = (cos_angle + 1) / 2
                     score *= 1 + 3 * direction_factor
 
+
+            score = size
             scored_frontiers.append((frontier, score))
 
         # Sort by score (highest first)
@@ -817,8 +817,8 @@ class GraceNavigation:
                 )
                 best_poses.append(new_pose)
                 if (
-                    len(best_poses) >= 1 and depth >= 0.75 * max_offset_distance
-                ) or len(best_poses) >= 30:  # TODO: Tune this
+                    len(best_poses) >= 20 and depth >= 0.8 * max_offset_distance
+                ) or len(best_poses) >= 100:  # TODO: Tune this
                     current_pose = self.get_current_pose()
                     current_position = np.array(
                         [current_pose.position.x, current_pose.position.y]

@@ -9,6 +9,7 @@ import ros_numpy
 import rospy
 from numpy.typing import NDArray
 from sensor_msgs.msg import CameraInfo, Image
+import torch
 from torch import Tensor
 from ultralytics import YOLO
 from ultralytics.engine.results import Boxes, Results
@@ -17,7 +18,7 @@ from grace_navigation.msg import RangeBearing, RangeBearings
 
 # Set the environment variable
 os.environ["YOLO_VERBOSE"] = "False"
-DETECTION_INTERVAL: Final[Union[int, float]] = 0.25
+DETECTION_INTERVAL: Final[Union[int, float]] = 0.1
 """The interval (in seconds) between detections. 0.25 is 4 times per second. 1 is 1 time per second.
 """
 
@@ -65,22 +66,29 @@ class YoloDetect:
         """A flag that prohibits new callback information from being recieved while True"""
 
         # Publisher
-        self.detection_image_pub: rospy.Publisher = rospy.Publisher(
-            name="/yolo_detect/detections/image", data_class=Image, queue_size=5
-        )
+        if YoloDetect.verbose:
+            self.detection_image_pub: rospy.Publisher = rospy.Publisher(
+                name="/yolo_detect/detections/image", data_class=Image, queue_size=5
+            )
 
         self.range_pub = rospy.Publisher(
             name="/range_bearing", data_class=RangeBearings, queue_size=10
         )
 
         # Subscribers
-        rgb_topic = "/camera/rgb/image_raw" if self.is_sim else "/camera/rgb/image_color"
+        rgb_topic = (
+            "/camera/rgb/image_raw" if self.is_sim else "/camera/rgb/image_color"
+        )
         self.rgb_image_sub = rospy.Subscriber(
             name=rgb_topic,
             data_class=Image,
             callback=self.rgb_image_callback,
         )
-        depth_topic = "/camera/depth/image_raw" if self.is_sim else "/camera/depth_registered/image_raw"
+        depth_topic = (
+            "/camera/depth/image_raw"
+            if self.is_sim
+            else "/camera/depth_registered/image_raw"
+        )
         self.depth_image_sub = rospy.Subscriber(
             name=depth_topic,
             data_class=Image,
@@ -88,7 +96,7 @@ class YoloDetect:
         )
 
         # Download the YOLO model to the grace folder
-        MODEL_NAME: Final = "yolo11s.pt"
+        MODEL_NAME: Final = "yolo11s-seg.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model
@@ -99,7 +107,9 @@ class YoloDetect:
         self.latest_depth_image = None
         self.transformed_point = None
         self.camera_info: CameraInfo = rospy.wait_for_message(
-            topic="/camera/rgb/camera_info", topic_type=CameraInfo, timeout=rospy.Duration(20)
+            topic="/camera/rgb/camera_info",
+            topic_type=CameraInfo,
+            timeout=rospy.Duration(20),
         )  # type: ignore
         # Timer to call the detection function at a fixed interval (4 times a second)
         self.timer = rospy.Timer(
@@ -146,33 +156,49 @@ class YoloDetect:
         depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # type: ignore
 
         CONFIDENCE_SCORE: Final[float] = 0.65
-        SHOW_DETECTION_BOXES: Final[bool] = False
         result: List[Results] = []
-        
+
         # Get the results
         result = self.model.track(
-                source=image_array, conf=CONFIDENCE_SCORE, persist=True
-            )  # get the results
-            
-        det_annotated: cv2.typing.MatLike = result[0].plot(
-            show=SHOW_DETECTION_BOXES
-        )  # plot the annotations
+            source=image_array, conf=CONFIDENCE_SCORE, persist=True
+        )  # get the results
+        if YoloDetect.verbose:
+            SHOW_DETECTION_BOXES: Final[bool] = False
+            det_annotated: cv2.typing.MatLike = result[0].plot(
+                show=SHOW_DETECTION_BOXES
+            )  # plot the annotations
+            self.detection_image_pub.publish(
+                ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
+            )
 
         range_msg = RangeBearings()
         range_bearings: list = []
         classes: dict[int, str] = result[0].names
         # Find the depths of each detection and display them
-        for detection in result[0].boxes: # type: ignore
+        if result[0].masks is None:
+            # rospy.logwarn("No masks found in the detection results.")
+            self.latch = False
+            return
+        for detection, mask in zip(result[0].boxes, result[0].masks.data):  # type: ignore
             detection: Boxes  # Add typing for detection
-            x1, y1, x2, y2 = map(int, detection.xyxy[0])
+            # mask: np.ndarray  # Segmentation mask for the detection
+            mask = mask.cpu().numpy().astype(bool)
+
+            if depth_array.shape != mask.shape:
+                rospy.logwarn("Depth array and segmentation mask shapes do not match.")
+                continue
+            depth_mask = depth_array * mask
+
+            # Write the depth mask to a file for debugging
+            # cv2.imwrite(f"/tmp/depth_mask_{detection.id.item()}.png", depth_mask.astype(np.uint8))  # type: ignore
+
             # Prevent taking the mean of an empty slice
-            if depth_array is None or np.all(np.isnan(depth_array[y1:y2, x1:x2])):
+            if depth_mask is None or np.all(np.isnan(depth_mask)):
+                rospy.logwarn("Depth mask is empty or invalid.")
                 continue
             obj_range: float
             bearing: Tensor
-            obj_range, bearing = self.calculate_bearing_and_obj_range(
-                depth_array, x1, y1, x2, y2
-            )
+            obj_range, bearing = self.calculate_bearing_and_obj_range(depth_mask)
 
             if (
                 np.isfinite(obj_range)
@@ -189,9 +215,6 @@ class YoloDetect:
             )  # This should be self.img.header, but there is no header on the np array??
             range_msg.range_bearings = range_bearings
             self.range_pub.publish(range_msg)
-        self.detection_image_pub.publish(
-            ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
-        )
         self.latch = False
 
     @staticmethod
@@ -226,19 +249,28 @@ class YoloDetect:
         return range_bearing
 
     def calculate_bearing_and_obj_range(
-        self, depth_array, x1: int, y1: int, x2: int, y2: int
+        self, depth_mask: np.ndarray
     ) -> Tuple[float, Tensor]:
-        depth_mask = depth_array[y1:y2, x1:x2]
-        
-        DEPTH_SCALE_FACTOR = 1.0 if self.is_sim else 0.001 # IRL Kinect is in mm instead of meters
+        DEPTH_SCALE_FACTOR = (
+            1.0 if self.is_sim else 0.001
+        )  # IRL Kinect is in mm instead of meters
         depth_mask = depth_mask * DEPTH_SCALE_FACTOR
+        masked_depth_values = depth_mask[depth_mask > 0]
 
+        # Threshold out anything above the mean in masked_depth_values
+        if masked_depth_values.size > 0:
+            mean_depth = np.nanmean(masked_depth_values)
+        else:
+            # rospy.logwarn("Masked depth values are empty.")
+            return float("nan"), torch.tensor(float("nan"))
+        masked_depth_values = masked_depth_values[masked_depth_values <= mean_depth]
 
-        z: np.floating = np.nanmedian(depth_mask)
+        z: np.floating = np.nanmedian(masked_depth_values)
+
+        if not np.isfinite(z) or z <= 0:
+            rospy.logwarn("Invalid median depth value.")
         obj_coords = np.nonzero(depth_mask)
         obj_coords = np.asarray(obj_coords).T
-
-        obj_coords = obj_coords + np.asarray([y1, x1])
 
         ux: NDArray[np.int64] = obj_coords[:, 1]
         uy: NDArray[np.int64] = obj_coords[:, 0]
@@ -251,11 +283,11 @@ class YoloDetect:
         x: NDArray[np.float64] = (ux - cx) * z / fx
         y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        x_mean: np.floating = np.nanmedian(x)  # float64
-        y_mean: np.floating = np.nanmedian(y)  # float64
-        z_mean: np.floating = np.nanmedian(z)  # float32
+        x_median: np.floating = np.nanmedian(x)  # float64
+        y_median: np.floating = np.nanmedian(y)  # float64
+        z_median: np.floating = np.nanmedian(z)  # float32
 
-        Oc: list[np.floating] = [x_mean, y_mean, z_mean]
+        Oc: list[np.floating] = [x_median, y_median, z_median]
 
         # Hypotenuse of x_mean and z_mean
         obj_range: float = np.sqrt(Oc[0] * Oc[0] + Oc[2] * Oc[2])

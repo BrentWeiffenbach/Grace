@@ -86,7 +86,6 @@ enum ArmStatus {
 ArmStatus currentStatus = WAITING;
 
 // maps motors to array with they step pin, dir pin, en pin, step_angle, gear ratio, delay
-// TODO TUNE DELAY
 StepperMotor motors[6] = {
   {STEP_J1, DIR_J1, EN_J1, 1.8, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},  // J1
   {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0}, // J2

@@ -59,7 +59,7 @@ class SemanticSLAM:
         self.pos_var = None
         """Robot pose variance"""
 
-        self.RANGE_VAR = 8e-04
+        self.RANGE_VAR = 5e-03
         self.BEARING_VAR = 0.01
         self.sigma_delta = np.diag([self.RANGE_VAR, self.BEARING_VAR])
         self.sigma_delta_inv = inv(self.sigma_delta)
@@ -176,7 +176,7 @@ class SemanticSLAM:
 
             dist, matched_obj = self.get_closest_object(obj_class, mx, my)
 
-            if dist > 0.5:
+            if dist >= 0.02:
                 x_var = (
                     self.pos_var
                     + np.power(np.sin(self.ang + bearing) * obj_range, 2)
@@ -214,12 +214,11 @@ class SemanticSLAM:
 
                 self.max_obj_id += 1
 
-            else:
+            elif dist != 0.0:
                 # If no closest object is found, keeping looking at the other objects
                 if matched_obj is None:
                     # Should it be continuing, or should it create a new object?
                     continue
-
                 obj_pos = matched_obj.pos
                 class_probs = matched_obj.class_probs
                 obj_x = obj_pos[0]
@@ -320,6 +319,8 @@ class SemanticSLAM:
                     class_probs,
                     obj_class,
                 )
+            else:
+                rospy.logerr("Garbage Range Bearings")
 
         semantic_map_msg = Object2DArray()
         semantic_map_msg.header = msg.header
@@ -358,7 +359,7 @@ class SemanticSLAM:
         """
         objects = []  # type: list[Object2D]
         used_ids = set()
-        for obj_id in self.objects:
+        for obj_id in reversed(list(self.objects.keys())):
             obj = self.objects[obj_id]
 
             if obj.id in used_ids:
