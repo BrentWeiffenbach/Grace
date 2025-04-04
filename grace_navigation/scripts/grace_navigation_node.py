@@ -226,8 +226,8 @@ class GraceNavigation:
             marker_id += 1
         self.centroid_marker_pub.publish(marker_array)
 
+    @staticmethod
     def publish_labled_markers(
-        self,
         keypoints: List[Tuple[Point, Union[np.floating, float]]],
         namespace: str = "frontiers",
         color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
@@ -261,7 +261,10 @@ class GraceNavigation:
 
             marker_array.markers.append(marker)
             marker_id += 1
-        self.centroid_marker_pub.publish(marker_array)
+        # self.centroid_marker_pub.publish(marker_array)
+        rospy.Publisher(
+            "/frontier/centroids", MarkerArray, queue_size=10
+        ).publish(marker_array)
 
     # region Exploration
     def explore(self) -> None:

@@ -2,6 +2,7 @@
 import numpy as np
 import rospy
 import tf2_ros
+from geometry_msgs.msg import Point, PointStamped, Pose, Quaternion
 from nav_msgs.msg import Odometry
 from numpy.linalg import inv, norm
 from scipy.stats import dirichlet
@@ -11,6 +12,7 @@ from tf2_ros import (
     ExtrapolationException,  # type: ignore
     TransformException,  # type: ignore
 )
+from visualization_msgs.msg import Marker, MarkerArray
 
 from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray, RobotState
 
@@ -60,7 +62,7 @@ class SemanticSLAM:
         """Robot pose variance"""
 
         self.RANGE_VAR = 5e-03
-        self.BEARING_VAR = 0.01
+        self.BEARING_VAR = 0.1
         self.sigma_delta = np.diag([self.RANGE_VAR, self.BEARING_VAR])
         self.sigma_delta_inv = inv(self.sigma_delta)
 
@@ -98,11 +100,20 @@ class SemanticSLAM:
         self.map_pub = rospy.Publisher(
             "/semantic_map", Object2DArray, queue_size=10, latch=True
         )
+        self.point_pub = rospy.Publisher(
+            "/semantic_map/point", PointStamped, queue_size=10
+        )
+        self.marker_pub = rospy.Publisher(
+            "/semantic_map/marker", MarkerArray, queue_size=30
+        )
         self.t = 0  # type: int
         """Timestamp, in seconds"""
 
         self.objects = {}  # type: dict[int, MapObject]
         self.max_obj_id = 0  # type: int
+        self.marker_array = MarkerArray()
+        self.marker_array.markers = []
+        
 
     def odom_callback(self, msg):
         # only takes the covariance, the pose is taken from tf transformation
@@ -170,7 +181,7 @@ class SemanticSLAM:
             ux = self.pos[0]  # type: np.float64
             uy = self.pos[1]  # type: np.float64
 
-            # Robot's position in world frame
+            # Object's position in world frame
             mx = ux + np.cos(self.ang + bearing) * obj_range  # type: np.float64
             my = uy + np.sin(self.ang + bearing) * obj_range  # type: np.float64
 
@@ -325,8 +336,8 @@ class SemanticSLAM:
         semantic_map_msg = Object2DArray()
         semantic_map_msg.header = msg.header
         objects = self.create_objects()
-
         semantic_map_msg.objects = objects
+        # self.add_markers(to_frame_rel)
         self.map_pub.publish(semantic_map_msg)
 
     def get_closest_object(self, obj_class, mx, my):
@@ -350,6 +361,100 @@ class SemanticSLAM:
                     dist = dist_temp
                     matched_obj = obj
         return dist, matched_obj
+    
+    def publish_objects(self, to_frame_rel):
+        for obj_id in self.objects:
+            obj = self.objects[obj_id]
+            _point = PointStamped()
+            _point.header.frame_id = to_frame_rel
+            _point.header.stamp = rospy.Time.now()
+            _point.point.x = obj.pos[0]
+            _point.point.y = obj.pos[1]
+            # self.point_pub.publish(_point)
+            yield obj
+            
+    def add_markers(self, to_frame_rel):
+        if self.marker_array.markers is None:
+            self.marker_array.markers = []
+
+        for obj in self.publish_objects(to_frame_rel):
+            # Check if marker with the same id already exists
+            # if any(_marker.id == obj.id and _marker.ns == obj.obj_class for _marker in self.marker_array.markers):
+            #     continue
+
+            # Check if the object already exists
+            existing_marker = None  # type: Marker | None
+            for _marker in self.marker_array.markers:
+                if _marker.id == obj.id and _marker.ns == obj.obj_class:
+                    existing_marker = _marker
+                    break
+
+            if existing_marker:
+                self.edit_marker(existing_marker, obj)
+            else:
+                marker = self.create_new_marker(to_frame_rel, obj)  # type: Marker
+                self.marker_array.markers.append(marker)
+
+        self.marker_pub.publish(self.marker_array)
+
+    def edit_marker(self, marker, obj):
+        # type: (Marker, MapObject) -> Marker
+        """Edit an existing marker with obj's details
+
+        Args:
+            marker (Marker): The marker to edit
+            obj (MapObject): The details to transform Marker into
+
+        Returns:
+            Marker: The changed Marker object
+        """
+        marker.header.stamp = rospy.Time.now()
+        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
+        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
+
+        return marker
+
+    def create_new_marker(self, to_frame_rel, obj):
+        # type: (str, MapObject) -> Marker
+        """Creates a marker in `to_frame_rel` frame with `obj`'s attributes.
+
+        Args:
+            to_frame_rel (str): The frame to put the marker in
+            obj (MapObject): The MapObject containing the marker's information.
+
+        Returns:
+            Marker: A marker with the same position as `obj` and the text as `obj.obj_class [obj.id]`
+        """
+        marker = Marker()
+        marker.frame_locked = False
+        marker.header.frame_id = to_frame_rel
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = obj.obj_class
+        marker.id = obj.id
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
+        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
+
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+
+        marker.color.r = 1
+        marker.color.g = 0
+        marker.color.b = 0
+        marker.color.a = 1
+
+        marker.pose.orientation = Quaternion(0, 0, 0, 1)
+
+        return marker
+    
+    def remove_marker(self, marker_id):
+        assert self.marker_array.markers is not None
+        _markers = self.marker_array.markers # type: list[Marker]
+        for marker in _markers:
+            if marker.id == marker_id:
+                self.marker_array.markers.remove(marker)
 
     def create_objects(self):
         """Creates a list of Object2D's based on `self.objects`.
@@ -383,10 +488,10 @@ class SemanticSLAM:
 if __name__ == "__main__":
     rospy.init_node("semantic_slam")
     rospy.loginfo("Press Ctrl + C to terminate")
-    while True:
-        state_msg = rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
-        if state_msg.state == RobotState.EXPLORING:  # type: ignore
-            break
+    # while True:
+    #     state_msg = rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
+    #     if state_msg.state == RobotState.EXPLORING:  # type: ignore
+    #         break
     whatever = SemanticSLAM()
     try:
         rospy.spin()
