@@ -674,7 +674,7 @@ class GraceNavigation:
             score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
             # Adjust score based on size
-            score *= size / 10
+            score += size / 10
 
             if target_pose is not None:
                 target_position = np.array(
@@ -695,8 +695,6 @@ class GraceNavigation:
                     direction_factor = (cos_angle + 1) / 2
                     score *= 1 + 3 * direction_factor
 
-
-            score = size
             scored_frontiers.append((frontier, score))
 
         # Sort by score (highest first)
@@ -780,7 +778,7 @@ class GraceNavigation:
                 self.frontier_search.global_costmap.info.width,
             )
         )
-        max_offset_distance = 400.0  # Maximum depth for BFS
+        max_offset_distance = 800.0  # Maximum depth for BFS TODO: Tune this
         visited = set()
         bfs_queue = queue.Queue()
         img_point = self.frontier_search.convert_map_coords_to_img_coords(
@@ -817,7 +815,7 @@ class GraceNavigation:
                 )
                 best_poses.append(new_pose)
                 if (
-                    len(best_poses) >= 20 and depth >= 0.8 * max_offset_distance
+                    len(best_poses) >= 50 and depth >= 0.8 * max_offset_distance
                 ) or len(best_poses) >= 100:  # TODO: Tune this
                     current_pose = self.get_current_pose()
                     current_position = np.array(

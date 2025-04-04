@@ -18,7 +18,7 @@ from grace_navigation.msg import RangeBearing, RangeBearings
 
 # Set the environment variable
 os.environ["YOLO_VERBOSE"] = "False"
-DETECTION_INTERVAL: Final[Union[int, float]] = 0.1
+DETECTION_INTERVAL: Final[Union[int, float]] = 0.3
 """The interval (in seconds) between detections. 0.25 is 4 times per second. 1 is 1 time per second.
 """
 
