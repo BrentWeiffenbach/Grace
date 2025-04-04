@@ -7,7 +7,7 @@ import numpy as np
 import rospy
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion
-from grace_navigation.msg import RangeBearing, RangeBearings, Object2D
+from grace_navigation.msg import RangeBearing, RangeBearingArray, Object2D
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
@@ -473,7 +473,7 @@ class GraceNavigation:
         # Subscribe to /range_bearing
         try:
             detections = rospy.wait_for_message(
-                "/range_bearing", RangeBearings, timeout=3
+                "/range_bearing", RangeBearingArray, timeout=3
             )
         except rospy.ROSException:
             rospy.logwarn("Timeout waiting for YOLO detections in done_cb")
@@ -499,7 +499,7 @@ class GraceNavigation:
             self.goal.place_location if has_object else self.goal.pick_object
         )
 
-        assert isinstance(detections, RangeBearings)  # type: ignore
+        assert isinstance(detections, RangeBearingArray)  # type: ignore
 
         # check if any detections are the target class
         if detections.range_bearings is None:

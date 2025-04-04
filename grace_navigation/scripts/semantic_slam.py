@@ -12,7 +12,7 @@ from tf2_ros import (
     TransformException,  # type: ignore
 )
 
-from grace_navigation.msg import Object2D, Object2DArray, RangeBearings, RobotState
+from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray, RobotState
 
 
 class MapObject:
@@ -93,7 +93,7 @@ class SemanticSLAM:
 
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
         self.range_sub = rospy.Subscriber(
-            "/range_bearing", RangeBearings, self.range_callback
+            "/range_bearing", RangeBearingArray, self.range_callback
         )
         self.map_pub = rospy.Publisher(
             "/semantic_map", Object2DArray, queue_size=10, latch=True

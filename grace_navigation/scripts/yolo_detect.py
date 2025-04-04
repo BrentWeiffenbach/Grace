@@ -14,7 +14,7 @@ from torch import Tensor
 from ultralytics import YOLO
 from ultralytics.engine.results import Boxes, Results
 
-from grace_navigation.msg import RangeBearing, RangeBearings
+from grace_navigation.msg import RangeBearing, RangeBearingArray
 
 # Set the environment variable
 os.environ["YOLO_VERBOSE"] = "False"
@@ -72,7 +72,7 @@ class YoloDetect:
             )
 
         self.range_pub = rospy.Publisher(
-            name="/range_bearing", data_class=RangeBearings, queue_size=10
+            name="/range_bearing", data_class=RangeBearingArray, queue_size=10
         )
 
         # Subscribers
@@ -171,7 +171,7 @@ class YoloDetect:
                 ros_numpy.msgify(Image, det_annotated, encoding="rgb8")
             )
 
-        range_msg = RangeBearings()
+        range_msg = RangeBearingArray()
         range_bearings: list = []
         classes: dict[int, str] = result[0].names
         # Find the depths of each detection and display them

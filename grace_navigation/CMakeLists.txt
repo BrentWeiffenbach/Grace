@@ -23,7 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
     Object2D.msg
     Object2DArray.msg
     RangeBearing.msg
-    RangeBearings.msg
+    RangeBearingArray.msg
   )
 
 ## Generate services in the 'srv' folder
