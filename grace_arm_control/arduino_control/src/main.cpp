@@ -170,7 +170,7 @@ void updateMotors() {
     }
   }
   if (allMotorsStopped && currentStatus == EXECUTING) {
-    nh.loginfo("All motors have stopped");
+    // nh.loginfo("All motors have stopped");
     currentStatus = COMPLETED;
     updateArmStatus();
   }
@@ -199,7 +199,29 @@ void moveMotorsOffSwitches(const int stepsToMove[6]) {
   }
 }
 
+void gripperCb(const std_msgs::String& msg) {
+  // nh.loginfo("Gripper command received");
+  gripperServo.attach(4);
+  if (strcmp(msg.data, "close") == 0) {
+    gripperServo.write(0);  // Close the gripper
+    nh.loginfo("Gripper closing");
+    gripperStartTime = millis();
+    gripperActive = true;
+  } else if (strcmp(msg.data, "open") == 0) {
+    gripperServo.write(180);  // Open the gripper
+    nh.loginfo("Gripper opening");
+    gripperStartTime = millis();
+    gripperActive = true;
+  } else {
+    nh.logwarn("Unknown gripper command");
+  }
+}
+
 void homing() {
+  // open gripper
+  std_msgs::String gripperCommand;
+  gripperCommand.data = "open";
+  gripperCb(gripperCommand);
   // move motors off their limit switches
   const int stepsToMove[6] = {30, 200, 20, 30, 30, 10}; // Example values for each joint
   moveMotorsOffSwitches(stepsToMove);
@@ -253,23 +275,7 @@ void goalStateCb(const sensor_msgs::JointState& msg) {
   }
 }
 
-void gripperCb(const std_msgs::String& msg) {
-  // nh.loginfo("Gripper command received");
-  gripperServo.attach(4);
-  if (strcmp(msg.data, "close") == 0) {
-    gripperServo.write(0);  // Close the gripper
-    nh.loginfo("Gripper closing");
-    gripperStartTime = millis();
-    gripperActive = true;
-  } else if (strcmp(msg.data, "open") == 0) {
-    gripperServo.write(180);  // Open the gripper
-    nh.loginfo("Gripper opening");
-    gripperStartTime = millis();
-    gripperActive = true;
-  } else {
-    nh.logwarn("Unknown gripper command");
-  }
-}
+
 
 /// INTERUPT SERVICE REQUESTS ///
 volatile unsigned long lastDebounceTimeJ1 = 0;
@@ -432,6 +438,7 @@ void loop() {
       }
       for (int i = 0; i < 6; i++) {
         motors[i].targetPosition.add(0.0);  // Set target position to zero for all motors
+        currentStatus = EXECUTING;
         moveMotor(i);
       }
     }

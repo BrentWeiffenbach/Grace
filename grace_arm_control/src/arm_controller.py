@@ -56,7 +56,6 @@ class ArmController:
 
     def homing(self):
         # rospy.loginfo("Homing signal received, publishing blank trajectory point with header 'Homing'")
-        self.gripper_pub.publish("open")
         self.home_sent = True
         blank_trajectory_point = JointTrajectoryPoint()
         blank_trajectory_point.positions = [0, 0, 0, 0, 0, 0]
