@@ -226,8 +226,8 @@ class GraceNavigation:
             marker_id += 1
         self.centroid_marker_pub.publish(marker_array)
 
-    @staticmethod
     def publish_labled_markers(
+        self,
         keypoints: List[Tuple[Point, Union[np.floating, float]]],
         namespace: str = "frontiers",
         color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
@@ -261,7 +261,7 @@ class GraceNavigation:
 
             marker_array.markers.append(marker)
             marker_id += 1
-        # self.centroid_marker_pub.publish(marker_array)
+        self.centroid_marker_pub.publish(marker_array)
         # rospy.Publisher(
         #     "/frontier/centroids", MarkerArray, queue_size=10
         # ).publish(marker_array)
@@ -566,11 +566,11 @@ class GraceNavigation:
         ]
 
         # DEBUG:
-        # self.publish_markers(
-        #     [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
-        #     namespace="semantic_objects",
-        #     color=(0.0, 1.0, 0.7),
-        # )
+        self.publish_markers(
+            [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
+            namespace="semantic_objects",
+            color=(0.0, 1.0, 0.7),
+        )
 
         if not cls_objects or len(cls_objects) == 0:
             if GraceNavigation.verbose:
@@ -729,11 +729,11 @@ class GraceNavigation:
         scored_frontiers = self.score_frontiers(keypoints, sizes, heuristic_pose)
         if scored_frontiers is None:
             return None
-        # self.publish_labled_markers(
-        #     keypoints=scored_frontiers,
-        #     namespace="frontiers",
-        #     color=(0.5, 0.1, 0.1),
-        # )
+        self.publish_labled_markers(
+            keypoints=scored_frontiers,
+            namespace="frontiers",
+            color=(0.5, 0.1, 0.1),
+        )
 
         best_frontier = scored_frontiers[0][0]
         best_frontier_pose = Pose()

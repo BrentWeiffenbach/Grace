@@ -2,7 +2,7 @@
 import numpy as np
 import rospy
 import tf2_ros
-from geometry_msgs.msg import Point, PointStamped, Pose, Quaternion
+from geometry_msgs.msg import Point, PointStamped, Quaternion
 from nav_msgs.msg import Odometry
 from numpy.linalg import inv, norm
 from scipy.stats import dirichlet
@@ -14,7 +14,7 @@ from tf2_ros import (
 )
 from visualization_msgs.msg import Marker, MarkerArray
 
-from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray, RobotState
+from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray
 
 
 class MapObject:
@@ -113,15 +113,17 @@ class SemanticSLAM:
         self.max_obj_id = 0  # type: int
         self.marker_array = MarkerArray()
         self.marker_array.markers = []
-        
+        # odom latch
+        self.latch = False
 
     def odom_callback(self, msg):
-        # only takes the covariance, the pose is taken from tf transformation
-        self.pos_var = msg.pose.covariance[0]
-        self.ang_var = msg.pose.covariance[-1]
-        self.sigma_p = np.diag([self.pos_var, self.pos_var, self.ang_var])
-        self.sigma_p_inv = inv(self.sigma_p)
-        self.t = msg.header.stamp.to_sec()
+        if not self.latch:
+            # only takes the covariance, the pose is taken from tf transformation
+            self.pos_var = msg.pose.covariance[0]
+            self.ang_var = msg.pose.covariance[-1]
+            self.sigma_p = np.diag([self.pos_var, self.pos_var, self.ang_var])
+            self.sigma_p_inv = inv(self.sigma_p)
+            self.t = msg.header.stamp.to_sec()
 
     def range_callback(self, msg):
         if self.pos_var is None:
@@ -165,7 +167,8 @@ class SemanticSLAM:
             )
             return
         # endregion
-
+        # latch so odom cannot be updated
+        self.latch = True
         for range_bearing in msg.range_bearings:
             obj_range = range_bearing.range
             bearing = range_bearing.bearing
@@ -338,6 +341,8 @@ class SemanticSLAM:
         objects = self.create_objects()
         semantic_map_msg.objects = objects
         # self.add_markers(to_frame_rel)
+        # unlatch odom
+        self.latch = False
         self.map_pub.publish(semantic_map_msg)
 
     def get_closest_object(self, obj_class, mx, my):
