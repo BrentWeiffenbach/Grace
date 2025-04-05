@@ -154,7 +154,7 @@
         <parent link="link_3" />
         <child link="link_4" />
         <axis xyz="1 0 0" />
-        <limit lower="-3.14" upper="3.14" effort="0.26" velocity="3" />
+        <limit lower="-3.17" upper="3.0" effort="0.26" velocity="3" />
     </joint>
     <link name="link_5">
         
@@ -185,7 +185,7 @@
         <parent link="link_4" />
         <child link="link_5" />
         <axis xyz="0 1 0" />
-        <limit lower="-1.74533" upper="1.74533" effort="100" velocity="3" />
+        <limit lower="-1.65806279" upper="1.65806279" effort="100" velocity="3" />
     </joint>
     <link name="link_6">
         
@@ -216,7 +216,7 @@
         <parent link="link_5" />
         <child link="link_6" />
         <axis xyz="1 0 0" />
-        <limit lower="-6.28" upper="6.28" effort="100" velocity="3" />
+        <limit lower="-2.321" upper="3.11" effort="100" velocity="3" />
     </joint>
     <link name="link_7">
         
