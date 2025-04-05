@@ -62,7 +62,7 @@ class SemanticSLAM:
         """Robot pose variance"""
 
         self.RANGE_VAR = 5e-03
-        self.BEARING_VAR = 0.1
+        self.BEARING_VAR = 0.01
         self.sigma_delta = np.diag([self.RANGE_VAR, self.BEARING_VAR])
         self.sigma_delta_inv = inv(self.sigma_delta)
 

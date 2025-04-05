@@ -170,7 +170,7 @@ void updateMotors() {
     }
   }
   if (allMotorsStopped && currentStatus == EXECUTING) {
-    // nh.loginfo("All motors have stopped");
+    nh.loginfo("All motors have stopped");
     currentStatus = COMPLETED;
     updateArmStatus();
   }

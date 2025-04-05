@@ -262,9 +262,9 @@ class GraceNavigation:
             marker_array.markers.append(marker)
             marker_id += 1
         # self.centroid_marker_pub.publish(marker_array)
-        rospy.Publisher(
-            "/frontier/centroids", MarkerArray, queue_size=10
-        ).publish(marker_array)
+        # rospy.Publisher(
+        #     "/frontier/centroids", MarkerArray, queue_size=10
+        # ).publish(marker_array)
 
     # region Exploration
     def explore(self) -> None:
@@ -336,9 +336,9 @@ class GraceNavigation:
                 self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
 
             if self.goal_pose is not None:
-                self.publish_markers(
-                    [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
-                )
+                # self.publish_markers(
+                #     [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
+                # )
                 # Found object
                 # Goal is in occupancy grid
                 navigating_to_object = True
@@ -566,11 +566,11 @@ class GraceNavigation:
         ]
 
         # DEBUG:
-        self.publish_markers(
-            [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
-            namespace="semantic_objects",
-            color=(0.0, 1.0, 0.7),
-        )
+        # self.publish_markers(
+        #     [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
+        #     namespace="semantic_objects",
+        #     color=(0.0, 1.0, 0.7),
+        # )
 
         if not cls_objects or len(cls_objects) == 0:
             if GraceNavigation.verbose:
@@ -588,8 +588,8 @@ class GraceNavigation:
             # )
             obj_point = Point(class_obj.x, class_obj.y, 0)  # type: ignore
             # YOU COULD maybe approximate the closest object location after seeing it is in occupancy grid, to effectivly calculate_offset inversely to find a good semantic location
-            # What two back-to-back all nighters does to a guy ^ 
-            
+            # What two back-to-back all nighters does to a guy ^
+
             # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
             if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
                 # most likely a haclucination if not inside the inflation layer
@@ -603,14 +603,14 @@ class GraceNavigation:
                 continue
             else:
                 # self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
-                self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
-                if len(in_occupancy_grid_objects) > 0:
-                    self.publish_markers(
-                        in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1)
-                    )
+                # self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
+                # if len(in_occupancy_grid_objects) > 0:
+                #     self.publish_markers(
+                #         in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1)
+                #     )
                 return obj_point
-        if len(in_occupancy_grid_objects) > 0:
-            self.publish_markers(in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1))
+        # if len(in_occupancy_grid_objects) > 0:
+        #     self.publish_markers(in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1))
         return None
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
@@ -656,7 +656,7 @@ class GraceNavigation:
 
         MIN_DISTANCE = 0.72  # TODO: Tune this
         MAX_DISTANCE = 30.0  # TODO: Tune this
-        MIN_SIZE = max(40.0, sum(sizes) / len(sizes)) # TODO: Tune this
+        MIN_SIZE = max(40.0, sum(sizes) / len(sizes))  # TODO: Tune this
 
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
 
@@ -677,7 +677,7 @@ class GraceNavigation:
             score: Union[np.floating, float] = 1 / max(distance, 0.1)
 
             # Adjust score based on size
-            score += size / 10
+            score += size / 5
 
             if target_pose is not None:
                 target_position = np.array(
@@ -729,11 +729,11 @@ class GraceNavigation:
         scored_frontiers = self.score_frontiers(keypoints, sizes, heuristic_pose)
         if scored_frontiers is None:
             return None
-        self.publish_labled_markers(
-            keypoints=scored_frontiers,
-            namespace="frontiers",
-            color=(0.5, 0.1, 0.1),
-        )
+        # self.publish_labled_markers(
+        #     keypoints=scored_frontiers,
+        #     namespace="frontiers",
+        #     color=(0.5, 0.1, 0.1),
+        # )
 
         best_frontier = scored_frontiers[0][0]
         best_frontier_pose = Pose()
@@ -749,6 +749,120 @@ class GraceNavigation:
 
     # region Calculations
     def calculate_offset(
+        self, point: Point, heuristic_func: Union[Callable, None] = None
+    ) -> Union[Pose, None]:
+        """
+        Calculate an offset point using DFS with a bias toward the robot position.
+
+        Args:
+            point (Point): A goal in map coordinates
+            heuristic_func (Callable, optional): A function that takes (pose, current_position, original_goal) and returns a score
+                (lower is better). If None, uses distance from current position as the default. Defaults to None.
+
+        Returns:
+            A valid Pose or None if no valid offset could be found
+        """
+        if heuristic_func is None:
+
+            def default_heuristic_func(poses_list, current_position, original_goal):
+                return min(
+                    poses_list,
+                    key=lambda pose: np.linalg.norm(
+                        np.array([pose.position.x, pose.position.y]) - current_position
+                    ),
+                )
+
+            heuristic_func = default_heuristic_func
+
+        # Get current robot position to direct DFS toward it
+        current_pose = self.get_current_pose()
+        current_position = np.array([current_pose.position.x, current_pose.position.y])
+
+        # point is a goal in map coordinates
+        map_image = np.array(self.frontier_search.global_costmap.data).reshape(
+            (
+                self.frontier_search.global_costmap.info.height,
+                self.frontier_search.global_costmap.info.width,
+            )
+        )
+
+        max_depth = 400.0  # Maximum depth for DFS TODO: Tune this
+        visited = set()
+        dfs_stack = []
+        img_point = self.frontier_search.convert_map_coords_to_img_coords(
+            (point.x, point.y)
+        )
+        dfs_stack.append((img_point, 0.0))  # (point, depth)
+        best_poses = []
+
+        while dfs_stack:
+            (img_x, img_y), depth = dfs_stack.pop()
+            map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
+                (img_x, img_y)
+            )
+
+            if (map_x, map_y) in visited:
+                continue
+
+            visited.add((map_x, map_y))
+
+            # uncomment to debug dfs
+            # self.publish_markers([Point(map_x, map_y, 0)], "DFS", color=(1, 1, 0))
+            # rospy.sleep(0.1)
+
+            # Check if the point is not in the occupancy grid
+            if self.frontier_search.is_point_in_occupancy_grid(
+                Point(map_x, map_y, 0), True
+            ):
+                new_pose = Pose()
+                new_pose.position = Point(map_x, map_y, 0)
+                new_pose.orientation = self.calculate_direction_between_points(
+                    point, new_pose.position
+                )
+                best_poses.append(new_pose)
+
+                if (
+                    len(best_poses) >= max_depth / 10 and depth >= 0.6 * max_depth
+                ) or len(best_poses) >= 100:  # TODO: Tune this
+                    best_pose = heuristic_func(best_poses, current_position, point)
+                    return best_pose
+
+            if depth >= max_depth:
+                continue
+
+            # Add neighbors to the stack, prioritizing directions toward the robot
+            neighbors = []
+            for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
+                nx, ny = img_x + dx, img_y + dy
+                if (
+                    0 <= nx < map_image.shape[1]
+                    and 0 <= ny < map_image.shape[0]
+                    and (
+                        self.frontier_search.convert_img_coords_to_map_coords((nx, ny))
+                    )
+                    not in visited
+                ):
+                    # Convert to map coordinates to calculate distance to robot
+                    map_nx, map_ny = (
+                        self.frontier_search.convert_img_coords_to_map_coords((nx, ny))
+                    )
+                    dist_to_robot = np.linalg.norm(
+                        np.array([map_nx, map_ny]) - current_position
+                    )
+                    neighbors.append(((nx, ny), dist_to_robot))
+
+            # Sort neighbors by distance to robot (ascending)
+            neighbors.sort(key=lambda x: x[1])
+
+            # Add neighbors to stack in reverse order (closest to robot will be popped first)
+            for (nx, ny), _ in reversed(neighbors):
+                dfs_stack.append(((nx, ny), depth + 1.0))
+
+        if GraceNavigation.verbose:
+            rospy.logwarn("Could not find a valid offset point using DFS.")
+        return None
+
+    def _calculate_offset(
         self, point: Point, heuristic_func: Union[Callable, None] = None
     ) -> Union[Pose, None]:
         """
@@ -781,7 +895,7 @@ class GraceNavigation:
                 self.frontier_search.global_costmap.info.width,
             )
         )
-        max_offset_distance = 800.0  # Maximum depth for BFS TODO: Tune this
+        max_offset_distance = 400.0  # Maximum depth for BFS TODO: Tune this
         visited = set()
         bfs_queue = queue.Queue()
         img_point = self.frontier_search.convert_map_coords_to_img_coords(
@@ -818,7 +932,8 @@ class GraceNavigation:
                 )
                 best_poses.append(new_pose)
                 if (
-                    len(best_poses) >= 50 and depth >= 0.8 * max_offset_distance
+                    len(best_poses) >= max_offset_distance / 10
+                    and depth >= 0.6 * max_offset_distance
                 ) or len(best_poses) >= 100:  # TODO: Tune this
                     current_pose = self.get_current_pose()
                     current_position = np.array(
