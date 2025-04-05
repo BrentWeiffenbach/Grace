@@ -16,7 +16,7 @@ from move_base_msgs.msg import (
     MoveBaseResult,
 )
 from nav_msgs.msg import OccupancyGrid, Odometry
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Int16
 from visualization_msgs.msg import Marker, MarkerArray
 
 from grace_navigation.msg import Object2DArray, RobotGoalMsg, RobotState
@@ -52,6 +52,8 @@ class GraceNavigation:
 
         # init FrontierSearch class to keep track of frontiers and map properties
         self.frontier_search = FrontierSearch()
+
+        self.remove_pub = rospy.Publisher("/semantic_map/remove", Int16, queue_size=10)
 
         self.semantic_map_sub = rospy.Subscriber(
             name="/semantic_map",
@@ -441,14 +443,14 @@ class GraceNavigation:
             - np.array([obj.position.x, obj.position.y])
         )
         # if either are too close, don't goto
-        # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
+        # # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
         THRESHOLD = 0.3  # TODO: Tune this
-        if pose_distance <= THRESHOLD:
-            if GraceNavigation.verbose:
-                rospy.logwarn_throttle(
-                    1, "Robot is already within the threshold distance to the goal."
-                )
-            return
+        # if pose_distance <= THRESHOLD:
+        #     if GraceNavigation.verbose:
+        #         rospy.logwarn_throttle(
+        #             1, "Robot is already within the threshold distance to the goal."
+        #         )
+        #     return
         if (
             last_goal_distance <= THRESHOLD
             and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED
@@ -472,6 +474,11 @@ class GraceNavigation:
         # rememebr last goto goal
 
     def yolo_final_check(self) -> bool:
+        def exit_final_check():
+            self.should_update_goal = True
+            self.done_flag = False
+            # self.last_goal = self.get_current_pose()
+            self.remove_pub.publish(self.goal_obj_id)
         # Only be done if the yolo object is visible at the goal
         # Subscribe to /range_bearing
         try:
@@ -480,9 +487,7 @@ class GraceNavigation:
             )
         except rospy.ROSException:
             rospy.logwarn("Timeout waiting for YOLO detections in done_cb")
-            self.should_update_goal = True
-            self.done_flag = False
-            self.last_goal = self.get_current_pose()
+            exit_final_check()
             return False
 
         has_object = rospy.wait_for_message(
@@ -507,9 +512,7 @@ class GraceNavigation:
         # check if any detections are the target class
         if detections.range_bearings is None:
             rospy.logwarn("No detections received in done_cb.")
-            # self.should_update_goal = True
-            # self.done_flag = False
-            # self.last_goal = self.get_current_pose()
+            exit_final_check()
             return False
 
         for detection in detections.range_bearings:
@@ -519,10 +522,7 @@ class GraceNavigation:
                 return True
             else:
                 rospy.logwarn("No detections with goal class at goal.")
-                # self.should_update_goal = True
-                # self.done_flag = False
-                # self.last_goal = self.get_current_pose()
-                # self.semantic_failure = True
+                exit_final_check()
                 return False
         return False
 
@@ -534,7 +534,9 @@ class GraceNavigation:
             _ (MoveBaseResult): The result of the move base. Ignored
         """
         # TODO: If final check fails, do something to not be here anymore
-        # self.yolo_final_check()
+        if not self.yolo_final_check():
+            rospy.loginfo("Final check failed, returning")
+            return
         self.done_flag = False
         self.goal_pose = None
         if goal_statuses[status] not in ["PREEMPTED"]:
@@ -587,6 +589,8 @@ class GraceNavigation:
             #     key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
             # )
             obj_point = Point(class_obj.x, class_obj.y, 0)  # type: ignore
+            self.goal_obj_id = class_obj.id
+            rospy.loginfo(f"Setting goal_obj_id to {self.goal_obj_id}")
             # YOU COULD maybe approximate the closest object location after seeing it is in occupancy grid, to effectivly calculate_offset inversely to find a good semantic location
             # What two back-to-back all nighters does to a guy ^
 
@@ -600,6 +604,7 @@ class GraceNavigation:
                 # remove object from cls_objects
                 cls_objects.remove(class_obj)
                 in_occupancy_grid_objects.append(obj_point)
+                self.remove_pub.publish(class_obj.id)
                 continue
             else:
                 # self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
@@ -781,7 +786,7 @@ class GraceNavigation:
                 self.frontier_search.global_costmap.info.width,
             )
         )
-        max_offset_distance = 400.0  # Maximum depth for BFS TODO: Tune this
+        max_offset_distance = 800.0  # Maximum depth for BFS TODO: Tune this
         visited = set()
         bfs_queue = queue.Queue()
         img_point = self.frontier_search.convert_map_coords_to_img_coords(

@@ -96,6 +96,7 @@ class YoloDetect:
         )
 
         # Download the YOLO model to the grace folder
+        # this must be a segement model so that the masks for range bearings work
         MODEL_NAME: Final = "yolo11s-seg.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 

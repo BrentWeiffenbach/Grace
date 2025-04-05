@@ -13,7 +13,7 @@ from tf2_ros import (
     TransformException,  # type: ignore
 )
 from visualization_msgs.msg import Marker, MarkerArray
-
+from std_msgs.msg import Int16
 from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray
 
 
@@ -97,6 +97,7 @@ class SemanticSLAM:
         self.range_sub = rospy.Subscriber(
             "/range_bearing", RangeBearingArray, self.range_callback
         )
+        self.remove_sub = rospy.Subscriber("/semantic_map/remove", Int16, self.remove_callback)
         self.map_pub = rospy.Publisher(
             "/semantic_map", Object2DArray, queue_size=10, latch=True
         )
@@ -125,6 +126,19 @@ class SemanticSLAM:
             self.sigma_p_inv = inv(self.sigma_p)
             self.t = msg.header.stamp.to_sec()
 
+    def remove_callback(self, msg):
+        semantic_map_msg = Object2DArray()
+        # Check if the object ID in the message exists in the current map
+        # Filter out the object with the given ID and re-add the rest
+        rospy.loginfo("Removing object with ID: {}".format(msg.data))
+        rospy.loginfo("Objects before removal: {}".format([obj.id for obj in self.objects.values()]))
+        self.objects = {obj.id: obj for obj in self.objects.values() if obj.id != msg.data}
+        rospy.loginfo("Objects after removal: {}".format([obj.id for obj in self.objects.values()]))
+
+        # Update the semantic map message with the remaining objects
+        semantic_map_msg.objects = self.create_objects()
+        self.map_pub.publish(semantic_map_msg)
+    
     def range_callback(self, msg):
         if self.pos_var is None:
             rospy.loginfo("robot pose covariance is not set")
