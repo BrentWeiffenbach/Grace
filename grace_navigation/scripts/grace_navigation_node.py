@@ -1,6 +1,5 @@
 from math import atan2
 from typing import Dict, List, Tuple, Union
-
 import actionlib
 import numpy as np
 import rospy
@@ -15,7 +14,9 @@ from move_base_msgs.msg import (
 )
 from nav_msgs.msg import OccupancyGrid, Odometry
 from std_msgs.msg import Bool, Int16
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import MarkerArray
+
+from utils import MarkerPublisher
 
 from grace_navigation.msg import (
     Object2D,
@@ -31,6 +32,7 @@ goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
 
 
+# region GraceNavigation Init
 class GraceNavigation:
     verbose: bool = False
 
@@ -45,16 +47,21 @@ class GraceNavigation:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
-    # region GraceNavigation Init
     def __init__(self, verbose: bool = False) -> None:
+        ### FLAGS ###
         GraceNavigation.verbose = verbose
-        self.goal: RobotGoal
-        self.goal_pose: Union[Pose, None] = None
-        self.state: int
         self.semantic_map: Object2DArray = Object2DArray()
         self.should_update_goal: bool = True
         self.done_flag: bool = False
-        self.final_checking: bool = False # if yolo final checking is running its true to prevent double cb
+        self.final_checking: bool = False
+        self.last_goal: Pose = Pose()
+        self.clear_last_goal()
+        """if yolo final checking is running its true to prevent double cb"""
+
+        ### ROBOT INFORMATION ###
+        self.goal: RobotGoal
+        self.goal_pose: Union[Pose, None] = None
+        self.state: int
         self.odom: Odometry = Odometry()  # Initialize to empty odom
         self.transform_srv: Union[rospy.ServiceProxy, None] = None
         """The transform service proxy. Use `self.connect_to_transform_service()` to connect to the service."""
@@ -62,14 +69,15 @@ class GraceNavigation:
         # init FrontierSearch class to keep track of frontiers and map properties
         self.frontier_search = FrontierSearch()
 
-        self.remove_pub = rospy.Publisher("/semantic_map/remove", Int16, queue_size=10)
-
+        ### SEMANTIC SLAM ###
         self.semantic_map_sub = rospy.Subscriber(
             name="/semantic_map",
             data_class=Object2DArray,
             callback=self.semantic_map_callback,
         )
+        self.remove_pub = rospy.Publisher("/semantic_map/remove", Int16, queue_size=10)
 
+        ### EXPLORATION ###
         self.goal_sub = rospy.Subscriber(
             name=GraceNode.GOAL_TOPIC,
             data_class=RobotGoalMsg,
@@ -82,6 +90,8 @@ class GraceNavigation:
             callback=self.state_callback,
         )
 
+        ### ENVIRONMENT INFORMATION ###
+        self.connect_to_transform_service()
         self.odom_sub = rospy.Subscriber(
             name="/odom", data_class=Odometry, callback=self.odom_callback
         )
@@ -101,31 +111,27 @@ class GraceNavigation:
             tcp_nodelay=True,
         )
 
+        ### PUBLISHERS ###
         self.centroid_marker_pub = rospy.Publisher(
             "/frontier/centroids", MarkerArray, queue_size=10
         )
-
         self.status_pub = rospy.Publisher(
             name=GraceNode.NAV_STATUS_TOPIC,
             data_class=actionlib.GoalStatus,
             queue_size=10,
         )
 
+        ### MOVE_BASE ###
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         GraceNavigation.verbose_log("Starting move_base action server...")
         self.move_base.wait_for_server()  # Wait until move_base server starts
         GraceNavigation.verbose_log("move_base action server started!")
 
-        self.connect_to_transform_service()
-
-        self.last_goal: Pose = Pose()
-        self.last_goal.position.x = float("inf")
-        self.last_goal.position.y = float("inf")
-        self.last_goal.position.z = float("inf")
-        self.last_goal.orientation.x = 0.0
-        self.last_goal.orientation.y = 0.0
-        self.last_goal.orientation.z = 0.0
-        self.last_goal.orientation.w = 1.0
+        ### OTHER ###
+        self.marker_publisher = rospy.Publisher(
+            "/visualization_marker_array", MarkerArray, queue_size=10
+        )
+        self.marker_utils = MarkerPublisher(self.marker_publisher, verbose=self.verbose)
 
     # region Callbacks
 
@@ -188,102 +194,6 @@ class GraceNavigation:
         # Publish LOST as the state since it will never naturally be published
         self.publish_status(actionlib.GoalStatus.LOST)
 
-    def publish_markers(
-        self,
-        keypoints: List[Point],
-        namespace: str = "frontiers",
-        color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
-        scale: Tuple[float, float, float] = (0.15, 0.15, 0.15),
-    ):
-        marker_array = MarkerArray()
-        marker_array.markers = []
-        marker_id = 0
-        has_object = rospy.wait_for_message(
-            topic=GraceNode.HAS_OBJECT_TOPIC,
-            topic_type=Bool,
-            timeout=rospy.Duration(10),
-        )
-        if has_object is None:
-            if GraceNavigation.verbose:
-                rospy.logwarn(
-                    "Failed to receive message for has_object. Defaulting to False."
-                )
-            has_object = False
-        else:
-            has_object = has_object.data
-
-        for k in keypoints:
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = rospy.Time.now()
-            marker.ns = namespace
-            marker.id = marker_id
-
-            if namespace == "Object_Goal" or namespace == "Object_Goal_Offset":
-                marker.type = Marker.TEXT_VIEW_FACING
-                target_obj_name: str = (
-                    self.goal.place_location if has_object else self.goal.pick_object
-                )
-
-                marker.text = target_obj_name
-            else:
-                marker.type = Marker.SPHERE
-
-            marker.action = Marker.ADD
-
-            marker.pose.position = k
-
-            marker.scale.x = scale[0]
-            marker.scale.y = scale[1]
-            marker.scale.z = scale[2]
-            marker.color.r = color[0]
-            marker.color.g = color[1]
-            marker.color.b = color[2]
-            marker.color.a = 1.0
-            marker.pose.orientation = Quaternion(0, 0, 0, 1)
-            marker.lifetime = rospy.Duration(0)
-
-            marker_array.markers.append(marker)
-            marker_id += 1
-        self.centroid_marker_pub.publish(marker_array)
-
-    def publish_labled_markers(
-        self,
-        keypoints: List[Tuple[Point, Union[np.floating, float]]],
-        namespace: str = "frontiers",
-        color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
-    ):
-        marker_array = MarkerArray()
-        marker_array.markers = []
-        marker_id = 0
-
-        for k in keypoints:
-            pos, score = k
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = rospy.Time.now()
-            marker.ns = namespace
-            marker.id = marker_id
-            marker.type = Marker.TEXT_VIEW_FACING
-            marker.text = f"Score: {round(score, 2)}"
-            marker.action = Marker.ADD
-
-            marker.pose.position = pos
-
-            marker.scale.x = 0.15
-            marker.scale.y = 0.15
-            marker.scale.z = 0.15
-            marker.color.r = color[0]
-            marker.color.g = color[1]
-            marker.color.b = color[2]
-            marker.color.a = 1.0
-            marker.pose.orientation = Quaternion(0, 0, 0, 1)
-            marker.lifetime = rospy.Duration(0)
-
-            marker_array.markers.append(marker)
-            marker_id += 1
-        self.centroid_marker_pub.publish(marker_array)
-
     def connect_to_transform_service(self) -> None:
         """Connects to the transform service"""
         try:
@@ -296,10 +206,9 @@ class GraceNavigation:
 
     # region Exploration
     def explore(self) -> None:
-        # BUG (?): self.goal can possibly be undefined. It is difficult to reproduce how it happened.
-
         EXPLORE_SECONDS = 20 * 60  # 20 minutes
         rospy.loginfo("Exploring")
+        # Explore the env until the goal is completed and done_cb finishes
         at_goal = self.explore_until_found(
             exploration_timeout=rospy.Duration(EXPLORE_SECONDS),
         )
@@ -361,14 +270,11 @@ class GraceNavigation:
 
             obj_point = self.find_object_in_semantic_map(target_obj_name)
             if obj_point is not None:
-                self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point, is_goal=True)
+                self.goal_pose: Union[Pose, None] = self.calculate_offset(
+                    obj_point, is_goal=True
+                )
 
             if self.goal_pose is not None:
-                # self.publish_markers(
-                #     [self.goal_pose.position], "Object_Goal_Offset", color=(0, 0, 1)
-                # )
-                # Found object
-                # Goal is in occupancy grid
                 navigating_to_object = True
 
                 if self.done_flag:
@@ -386,8 +292,6 @@ class GraceNavigation:
                     self.goal_pose,
                     yield_when_done=True,
                 )
-
-                # self.goal_pose = None
 
                 continue
             else:
@@ -427,12 +331,7 @@ class GraceNavigation:
                         offset_pose if offset_pose is not None else frontier_pose,
                         yield_when_done=False,
                     )
-                    # Commented because in sim it does not go to the object immediately but instead continues going to a frontier
-                    # rospy.sleep(
-                    #     2
-                    # )  # Increase to increase time between updating which frontier should be navigated to
-
-            rospy.sleep(1)  # Originally 0.5
+            rospy.sleep(1)  # Sleep for node to catch up
 
         return None
 
@@ -446,33 +345,21 @@ class GraceNavigation:
         if target_pose is None:
             rospy.logerr("Obj pose None was passed to goto")
             return
-        # Get distacne from robot to goal
-        # current_pose = self.get_current_pose()
-        # pose_distance = np.linalg.norm(
-        #     np.array([current_pose.position.x, current_pose.position.y])
-        #     - np.array([obj.position.x, obj.position.y])
-        # )
-        # distance from last to current goal
+
+        # Find distance between prev and cur goal to determine if it should be published again
         last_goal_distance = np.linalg.norm(
             np.array([self.last_goal.position.x, self.last_goal.position.y])
             - np.array([target_pose.position.x, target_pose.position.y])
         )
-        # if either are too close, don't goto
-        # # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
+
         THRESHOLD = 0.3  # TODO: Tune this
-        # if pose_distance <= THRESHOLD:
-        #     if GraceNavigation.verbose:
-        #         rospy.logwarn_throttle(
-        #             1, "Robot is already within the threshold distance to the goal."
-        #         )
-        #     return
+
         if (
             last_goal_distance <= THRESHOLD
             and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED
         ):  # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
             if GraceNavigation.verbose:
                 rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
-            self.last_goal = target_pose
             return
 
         self.last_goal = target_pose
@@ -486,9 +373,7 @@ class GraceNavigation:
             done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
         self.goal_pose = None
-        # if yield_when_done:
         rospy.sleep(2)
-        # rememebr last goto goal
 
     def yolo_final_check(self) -> bool:
         # TODO: Optimize
@@ -504,7 +389,7 @@ class GraceNavigation:
         def exit_final_check():
             self.should_update_goal = True
             self.done_flag = False
-            # self.last_goal = self.get_current_pose()
+            self.clear_last_goal()
             self.remove_pub.publish(self.goal_obj_id)
             self.final_checking = False
 
@@ -563,7 +448,6 @@ class GraceNavigation:
             status (int): The status of the robot at the end. Use the `goal_statuses` dict to get a user-friendly string.
             _ (MoveBaseResult): The result of the move base. Ignored
         """
-        # TODO: If final check fails, do something to not be here anymore
         if self.final_checking:
             return
         self.goal_pose = None
@@ -603,8 +487,8 @@ class GraceNavigation:
         ]
 
         # DEBUG:
-        self.publish_markers(
-            [Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
+        self.marker_utils.publish_point_markers(
+            points=[Point(class_obj.x, class_obj.y, 0) for class_obj in cls_objects],
             namespace="semantic_objects",
             color=(0.0, 1.0, 0.7),
         )
@@ -614,44 +498,21 @@ class GraceNavigation:
                 rospy.logwarn(f"No objects with class: {obj}")
             return None
 
-        # in_occupancy_grid_objects = []
-        # too_close_objects # Too close to object could potentially continuially remove the goal pose when approaching making it impossible to actually arrive
-
-        # loop through objs to check if they are closest and 'NOT navigable' / in occupancy grid
-        for class_obj in cls_objects:
-            # closest_obj = min(
-            #     cls_objects,
-            #     key=lambda obj: np.linalg.norm(np.array([obj.x, obj.y]) - current_position),
-            # )
-            obj_point = Point(class_obj.x, class_obj.y, 0)  # type: ignore
-            self.goal_obj_id = class_obj.id
-            # rospy.loginfo(f"Setting goal_obj_id to {self.goal_obj_id}")
-            # YOU COULD maybe approximate the closest object location after seeing it is in occupancy grid, to effectivly calculate_offset inversely to find a good semantic location
-            # What two back-to-back all nighters does to a guy ^
-
-            # Commented from cherry picked commit because it makes the robot not go to reasonable goals sometimes
-            # if self.frontier_search.is_point_in_occupancy_grid(obj_point, True):
-                # most likely a haclucination if not inside the inflation layer
-                # is_point_in_occupancy_grid returns True if it is reachable by turtlebot
-                # GraceNavigation.verbose_log(
-                #     "DEBUG: This semantic object was in occupancy grid, most likely a hallucination."
-                # )
-                # remove object from cls_objects
-                # cls_objects.remove(class_obj)
-                # in_occupancy_grid_objects.append(obj_point)
-                # self.remove_pub.publish(class_obj.id)
-                # continue
-            # else:
-                # self.goal_pose: Union[Pose, None] = self.calculate_offset(obj_point)
-                # self.publish_markers([obj_point], "Object_Goal", color=(0, 1, 0))
-                # if len(in_occupancy_grid_objects) > 0:
-                #     self.publish_markers(
-                #         in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1)
-                #     )
-            return obj_point
-        # if len(in_occupancy_grid_objects) > 0:
-        #     self.publish_markers(in_occupancy_grid_objects, "IN_GRID", color=(1, 0, 1))
+        if cls_objects:
+            best_object = cls_objects[0]
+            self.goal_obj_id = best_object.id
+            return Point(best_object.x, best_object.y, 0)
         return None
+
+    def clear_last_goal(self) -> None:
+        self.last_goal = Pose()
+        self.last_goal.position.x = float("inf")
+        self.last_goal.position.y = float("inf")
+        self.last_goal.position.z = float("inf")
+        self.last_goal.orientation.x = 0.0
+        self.last_goal.orientation.y = 0.0
+        self.last_goal.orientation.z = 0.0
+        self.last_goal.orientation.w = 1.0
 
     def wait_for_semantic_map(self, sleep_time_s: Union[int, rospy.Duration]) -> bool:
         """Checks if self.semantic_map is initialized. If it is not, sleep for `sleep_time_s` seconds and try again.
@@ -714,10 +575,10 @@ class GraceNavigation:
                 continue
 
             # Basic score is inverse distance
-            score: Union[np.floating, float] = 1 / max(distance, 0.1) * 2
+            score: Union[np.floating, float] = 1 / max(distance, 0.1) * 3
 
             # Adjust score based on size
-            score += size / 3
+            score += size / 5
 
             if target_pose is not None:
                 target_position = np.array(
@@ -736,7 +597,7 @@ class GraceNavigation:
                     )
                     # Boost score if frontier is in direction of target object
                     direction_factor = (cos_angle + 1) / 2
-                    score *= 1 + 10 * direction_factor
+                    score *= 1 + 2 * direction_factor
 
             scored_frontiers.append((frontier, score))
 
@@ -769,8 +630,8 @@ class GraceNavigation:
         scored_frontiers = self.score_frontiers(keypoints, sizes, heuristic_pose)
         if scored_frontiers is None:
             return None
-        self.publish_labled_markers(
-            keypoints=scored_frontiers,
+        self.marker_utils.publish_scored_markers(
+            scored_points=scored_frontiers,
             namespace="frontiers",
             color=(0.5, 0.1, 0.1),
         )
@@ -788,7 +649,9 @@ class GraceNavigation:
         return best_frontier_pose
 
     # region Calculations
-    def calculate_offset(self, point: Point, is_goal: bool = False) -> Union[Pose, None]:
+    def calculate_offset(
+        self, point: Point, is_goal: bool = False
+    ) -> Union[Pose, None]:
         """
         Calculate an offset point using BFS with a customizable heuristic function.
 
@@ -835,7 +698,7 @@ class GraceNavigation:
                 if e2 < dx:
                     err += dx
                     y0 += sy
-            return points  # Ensure the function always returns a list
+            return points
 
         line_points = bresenham_line(start[0], start[1], end[0], end[1])
 
@@ -856,7 +719,9 @@ class GraceNavigation:
                 pose.orientation = self.calculate_direction_between_points(
                     point, current_pose.position
                 )
-                rospy.loginfo(f"Offset was close to robot. Distance to robot: {distance_to_robot:.2f} meters")
+                rospy.loginfo(
+                    f"Offset was close to robot. Distance to robot: {distance_to_robot:.2f} meters"
+                )
                 return pose
             # find closest unoccupied cell in direction of robot
             if (
@@ -874,17 +739,6 @@ class GraceNavigation:
                 )
                 rospy.loginfo(f"Chosen offset index: {i}")
                 return pose
-
-            # # Publish marker for the cell being checked
-            # map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
-            #     (img_x, img_y)
-            # )
-            # self.publish_markers(
-            #     [Point(map_x, map_y, 0)],
-            #     namespace="checked_cells",
-            #     color=(0.0, 0.0, 1.0),  # Blue color for checked cells
-            #     scale=(0.05, 0.05, 0.05),
-            # )
 
         if GraceNavigation.verbose:
             rospy.logwarn("No valid unoccupied cell found within MAX_OFFSET.")
@@ -951,17 +805,6 @@ class GraceNavigation:
             "Returning odom instead of transform of current pose."
         )
         return self.odom.pose.pose
-
-    def _get_current_pose(self) -> Pose:
-        """Returns the current pose of the turtlebot by subscribing to the `/odom`.
-
-        Returns:
-            Pose: The turtlebot's current Pose.
-        """
-
-        assert self.odom
-        pose: Pose = self.odom.pose.pose
-        return pose
 
     # region Run Node
     def run(self) -> None:

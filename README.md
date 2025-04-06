@@ -23,6 +23,12 @@ You can also set the output to verbose by using the `verbose:=true` argument.
 
 Run the onboard on the TurtleBot by running `roslaunch onboard.launch`.
 
+
+## To Test
+
+* Verify that the logic in Semantic SLAM is the same
+
+
 ## Known Issues
 
 * Need to tune min distance choice for frontiers

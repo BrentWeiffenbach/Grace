@@ -3,24 +3,22 @@
 import numpy as np
 import rospy
 import tf2_ros
-from geometry_msgs.msg import Point, PointStamped, Quaternion
+from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from numpy.linalg import inv, norm
-from scipy.stats import dirichlet
 from tf import transformations
 from tf2_ros import (
     ConnectivityException,  # type: ignore
     ExtrapolationException,  # type: ignore
     TransformException,  # type: ignore
 )
-from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Int16
 from grace_navigation.msg import Object2D, Object2DArray, RangeBearingArray
 
 
 class MapObject:
-    def __init__(self, object_id, pos, pos_var, class_probs, obj_class):
-        # type: (int, np.ndarray, np.ndarray, np.ndarray, str) -> None
+    def __init__(self, object_id, pos, pos_var, obj_class):
+        # type: (int, np.ndarray, np.ndarray, str) -> None
         self.id = object_id  # type: int
         """The MapObject's id.
         """
@@ -30,23 +28,21 @@ class MapObject:
         self.pos_var = pos_var
         self.pos_var_inv = None
         self._update_inverse()
-        self.class_probs = class_probs
         self.obj_class = obj_class  # type: str
 
     def _update_inverse(self):
         self.pos_var_inv = inv(self.pos_var)
 
-    def update(self, pos, pos_var, class_probs, obj_class):
-        # type: (np.ndarray, np.ndarray, np.ndarray, str) -> None
+    def update(self, pos, pos_var, obj_class):
+        # type: (np.ndarray, np.ndarray, str) -> None
         self.pos = pos
         self.pos_var = pos_var
         self._update_inverse()
-        self.class_probs = class_probs
         self.obj_class = obj_class
 
     def __repr__(self):
-        return "MapObject(id={}, pos={}, pos_var={}, class_probs={}, obj_class='{}')".format(
-            self.id, self.pos, self.pos_var, self.class_probs, self.obj_class
+        return "MapObject(id={}, pos={}, pos_var={}, obj_class='{}')".format(
+            self.id, self.pos, self.pos_var, self.obj_class
         )
 
 
@@ -107,16 +103,11 @@ class SemanticSLAM:
         self.point_pub = rospy.Publisher(
             "/semantic_map/point", PointStamped, queue_size=10
         )
-        self.marker_pub = rospy.Publisher(
-            "/semantic_map/marker", MarkerArray, queue_size=30
-        )
         self.t = 0  # type: int
         """Timestamp, in seconds"""
 
         self.objects = {}  # type: dict[int, MapObject]
         self.max_obj_id = 0  # type: int
-        self.marker_array = MarkerArray()
-        self.marker_array.markers = []
         # odom latch
         self.latch = False
 
@@ -133,10 +124,7 @@ class SemanticSLAM:
         semantic_map_msg = Object2DArray()
         # Check if the object ID in the message exists in the current map
         # Filter out the object with the given ID and re-add the rest
-        # rospy.loginfo("Removing object with ID: {}".format(msg.data))
-        # rospy.loginfo("Objects before removal: {}".format([obj.id for obj in self.objects.values()]))
         self.objects = {obj.id: obj for obj in self.objects.values() if obj.id != msg.data}
-        # rospy.loginfo("Objects after removal: {}".format([obj.id for obj in self.objects.values()]))
 
         # Update the semantic map message with the remaining objects
         semantic_map_msg.objects = self.create_objects()
@@ -194,9 +182,6 @@ class SemanticSLAM:
             if obj_class == "person":
                 continue
 
-            probability = range_bearing.probability
-            probability = np.asarray(probability) / np.sum(probability)  # Normalize probability # fmt: skip
-
             # Robot's current position
             ux = self.pos[0]  # type: np.float64
             uy = self.pos[1]  # type: np.float64
@@ -225,14 +210,9 @@ class SemanticSLAM:
                 object_pos = np.asarray([mx, my])
                 object_pos_var = np.diag([x_var, y_var])
 
-                class_probs = np.zeros(self.numberOfClasses)
-                for i in range(self.numberOfClasses):
-                    class_probs[i] = dirichlet.pdf(probability, self.all_alphas[i])
-
-                class_probs = class_probs / np.sum(class_probs)  # Normalize class_probs
-
+                
                 self.objects[self.max_obj_id] = MapObject(
-                    obj_id, object_pos, object_pos_var, class_probs, obj_class
+                    obj_id, object_pos, object_pos_var, obj_class
                 )
 
                 if not np.isfinite(object_pos_var).all():
@@ -251,7 +231,6 @@ class SemanticSLAM:
                     # Should it be continuing, or should it create a new object?
                     continue
                 obj_pos = matched_obj.pos
-                class_probs = matched_obj.class_probs
                 obj_x = obj_pos[0]
                 obj_y = obj_pos[1]
 
@@ -326,28 +305,10 @@ class SemanticSLAM:
                 for i in range(self.numberOfClasses):
                     alpha = np.ones(self.numberOfClasses)
                     alpha[i] = self.ALPHA_CONSTANT
-                    class_probs[i] = dirichlet.pdf(probability, alpha) * class_probs[i]
 
-                class_probs = np.asarray(class_probs)
-                class_probs = np.asarray(class_probs) / np.sum(class_probs)
-                class_probs = (class_probs + 0.004) / (
-                    class_probs + 0.004 * len(self.classes)
-                )
-                # BUG: self.classes[np.argmax(class_probs)] is not actually returning the correct value,
-                # and defaulting to 0 (person)
-                # if self.classes[np.argmax(class_probs)] == "person":
-                #     continue
-                # print(class_probs)
-                # matched_obj.update(
-                #     updated_pos,
-                #     updated_pos_var,
-                #     class_probs,
-                #     self.classes[np.argmax(class_probs)],
-                # )
                 matched_obj.update(
                     updated_pos,
                     updated_pos_var,
-                    class_probs,
                     obj_class,
                 )
             else:
@@ -395,88 +356,6 @@ class SemanticSLAM:
             # self.point_pub.publish(_point)
             yield obj
             
-    def add_markers(self, to_frame_rel):
-        if self.marker_array.markers is None:
-            self.marker_array.markers = []
-
-        for obj in self.publish_objects(to_frame_rel):
-            # Check if marker with the same id already exists
-            # if any(_marker.id == obj.id and _marker.ns == obj.obj_class for _marker in self.marker_array.markers):
-            #     continue
-
-            # Check if the object already exists
-            existing_marker = None  # type: Marker | None
-            for _marker in self.marker_array.markers:
-                if _marker.id == obj.id and _marker.ns == obj.obj_class:
-                    existing_marker = _marker
-                    break
-
-            if existing_marker:
-                self.edit_marker(existing_marker, obj)
-            else:
-                marker = self.create_new_marker(to_frame_rel, obj)  # type: Marker
-                self.marker_array.markers.append(marker)
-
-        self.marker_pub.publish(self.marker_array)
-
-    def edit_marker(self, marker, obj):
-        # type: (Marker, MapObject) -> Marker
-        """Edit an existing marker with obj's details
-
-        Args:
-            marker (Marker): The marker to edit
-            obj (MapObject): The details to transform Marker into
-
-        Returns:
-            Marker: The changed Marker object
-        """
-        marker.header.stamp = rospy.Time.now()
-        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
-
-        return marker
-
-    def create_new_marker(self, to_frame_rel, obj):
-        # type: (str, MapObject) -> Marker
-        """Creates a marker in `to_frame_rel` frame with `obj`'s attributes.
-
-        Args:
-            to_frame_rel (str): The frame to put the marker in
-            obj (MapObject): The MapObject containing the marker's information.
-
-        Returns:
-            Marker: A marker with the same position as `obj` and the text as `obj.obj_class [obj.id]`
-        """
-        marker = Marker()
-        marker.frame_locked = False
-        marker.header.frame_id = to_frame_rel
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = obj.obj_class
-        marker.id = obj.id
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.action = Marker.ADD
-        marker.pose.position = Point(obj.pos[0], obj.pos[1], 0)
-        marker.text = "{} [{}]".format(obj.obj_class, obj.id)
-
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-
-        marker.color.r = 1
-        marker.color.g = 0
-        marker.color.b = 0
-        marker.color.a = 1
-
-        marker.pose.orientation = Quaternion(0, 0, 0, 1)
-
-        return marker
-    
-    def remove_marker(self, marker_id):
-        assert self.marker_array.markers is not None
-        _markers = self.marker_array.markers # type: list[Marker]
-        for marker in _markers:
-            if marker.id == marker_id:
-                self.marker_array.markers.remove(marker)
 
     def create_objects(self):
         """Creates a list of Object2D's based on `self.objects`.
@@ -500,7 +379,6 @@ class SemanticSLAM:
 
             obj_msg.covariance = obj.pos_var.flatten()
             obj_msg.id = obj.id
-            obj_msg.probability = obj.class_probs.tolist()
             obj_msg.cls = obj.obj_class
 
             objects.append(obj_msg)

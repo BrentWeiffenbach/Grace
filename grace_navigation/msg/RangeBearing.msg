@@ -8,5 +8,4 @@ float32 range           # range data [m]
                         # (Object out of range)
 float32 bearing
 int16 id
-float64[] probability
 string obj_class
