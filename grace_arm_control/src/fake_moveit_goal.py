@@ -1,5 +1,5 @@
 #!/usr/bin/env python2.7
-from moveit_commander import MoveGroupCommander  # type: ignore
+from moveit_commander import MoveGroupCommander # type: ignore
 from grace_navigation.msg import RobotState
 
 import rospy
@@ -8,8 +8,8 @@ class FakeMoveItGoal:
     def __init__(self):
         rospy.sleep(20)  # Wait for move_group to initialize
         rospy.Subscriber("/grace/state", RobotState, self.state_callback)
+        self.group = MoveGroupCommander("arm_group", wait_for_servers=10)
         self.state = None
-        self.group = None
 
     def publish_goal(self):
         assert self.group is not None
@@ -31,8 +31,8 @@ class FakeMoveItGoal:
         #     self.state = msg.state
 
         if msg.state in [RobotState.PLACING, RobotState.PICKING]:
-            if self.group is None:
-                self.group = MoveGroupCommander("arm_group")
+            # if self.group is None:
+            #     self.group = MoveGroupCommander("arm_group")
             self.publish_goal()
 
 if __name__ == "__main__":

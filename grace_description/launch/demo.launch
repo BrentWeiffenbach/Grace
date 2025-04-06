@@ -30,14 +30,14 @@
   
   <!-- node for virtual joint location publishing -->
   <!-- <node pkg="grace_description" type="fake_virtual_joint_publisher.py" name="fake_virtual_joint_publisher"/> -->
+  <!-- arm low level controller -->
+  <!-- <include file="$(find grace_arm_control)/launch/arm_controller.launch"/> -->
 
 <!-- Joint state converter from arm joint states -->
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
     <rosparam param="source_list">[grace/arm_joint_states]</rosparam>
   </node>
 
-  <!-- arm low level controller -->
-  <include file="$(find grace_arm_control)/launch/arm_controller.launch"/>
 
   <!-- Run the main MoveIt! executable without trajectory execution (we do not have controllers configured by default) -->
   <include file="$(find grace_description)/launch/move_group.launch">
@@ -54,14 +54,15 @@
     <!-- launch planar joint execution controller -->
   <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/>
 
+  <!-- TOOD: Replace with visual grasping node -->
+  <node name="fake_moveit_goal" pkg="grace_arm_control" type="fake_moveit_goal.py" output="screen" /> 
+  
   <!-- Run Rviz and load the default config to see the state of the move_group node -->
   <include file="$(find grace_arm_config)/launch/moveit_rviz.launch" if="$(arg use_rviz)">
     <arg name="rviz_config" value="$(find grace_arm_config)/launch/moveit.rviz"/>
     <arg name="debug" value="$(arg debug)"/>
   </include>
 
-  <!-- TOOD: Replace with visual grasping node -->
-  <node name="fake_moveit_goal" pkg="grace_arm_control" type="fake_moveit_goal.py" output="screen" /> 
 
 
   <!-- If database loading was enabled, start mongodb as well -->
