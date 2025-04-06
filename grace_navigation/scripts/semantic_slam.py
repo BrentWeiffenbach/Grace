@@ -51,6 +51,8 @@ class MapObject:
 
 class SemanticSLAM:
     def __init__(self):
+        # odom latch
+        self.latch = True
         self.target_frame = "camera_rgb_optical_frame"
         # self.target_frame = "camera_link"
         self.tfBuffer = tf2_ros.Buffer()
