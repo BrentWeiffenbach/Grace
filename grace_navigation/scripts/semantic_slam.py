@@ -130,10 +130,10 @@ class SemanticSLAM:
         semantic_map_msg = Object2DArray()
         # Check if the object ID in the message exists in the current map
         # Filter out the object with the given ID and re-add the rest
-        rospy.loginfo("Removing object with ID: {}".format(msg.data))
-        rospy.loginfo("Objects before removal: {}".format([obj.id for obj in self.objects.values()]))
+        # rospy.loginfo("Removing object with ID: {}".format(msg.data))
+        # rospy.loginfo("Objects before removal: {}".format([obj.id for obj in self.objects.values()]))
         self.objects = {obj.id: obj for obj in self.objects.values() if obj.id != msg.data}
-        rospy.loginfo("Objects after removal: {}".format([obj.id for obj in self.objects.values()]))
+        # rospy.loginfo("Objects after removal: {}".format([obj.id for obj in self.objects.values()]))
 
         # Update the semantic map message with the remaining objects
         semantic_map_msg.objects = self.create_objects()

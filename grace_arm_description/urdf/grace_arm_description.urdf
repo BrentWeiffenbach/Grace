@@ -216,7 +216,7 @@
         <parent link="link_5" />
         <child link="link_6" />
         <axis xyz="1 0 0" />
-        <limit lower="-2.321" upper="3.11" effort="100" velocity="3" />
+        <limit lower="-0.506" upper="5.694" effort="100" velocity="3" />
     </joint>
     <link name="link_7">
         

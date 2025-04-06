@@ -353,7 +353,7 @@ void limitSwitchJ5ISR() {
 void limitSwitchJ6ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ6) > debounceDelay) {
-    motors[5].currentPosition = -133.0;  // Set J6 position to -135 degrees
+    motors[5].currentPosition = -29.0;  // Set J6 position to -135 degrees
     if (currentStatus == HOMING) {
       motors[5].moving = false;         // Stop motor J6 only if in HOMING state
     }
