@@ -28,9 +28,7 @@ class FakeMoveItGoal:
             self.publish_goal()
 
 if __name__ == "__main__":
-    while True:
-        state_msg = rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
-        if state_msg.state == RobotState.EXPLORING:  # type: ignore
-            break
+    rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
+    rospy.loginfo("Fake MoveIt Goal Node Initalized")
     fake_moveit_goal = FakeMoveItGoal()
     rospy.spin()
