@@ -5,8 +5,7 @@ import actionlib
 import numpy as np
 import rospy
 from frontier_search import FrontierSearch
-from geometry_msgs.msg import Point, Pose, Quaternion
-from grace_navigation.msg import RangeBearing, RangeBearingArray, Object2D
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist
 from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
@@ -18,7 +17,15 @@ from nav_msgs.msg import OccupancyGrid, Odometry
 from std_msgs.msg import Bool, Int16
 from visualization_msgs.msg import Marker, MarkerArray
 
-from grace_navigation.msg import Object2DArray, RobotGoalMsg, RobotState
+from grace_navigation.msg import (
+    Object2D,
+    Object2DArray,
+    RangeBearing,
+    RangeBearingArray,
+    RobotGoalMsg,
+    RobotState,
+)
+from grace_navigation.srv import Transform, TransformResponse
 
 goal_statuses: Dict[int, str] = get_constants_from_msg(actionlib.GoalStatus)
 """Gets all of the non-callable integer constants from actionlib.GoalStatus msg. """
@@ -48,6 +55,8 @@ class GraceNavigation:
         self.should_update_goal: bool = True
         self.done_flag: bool = False
         self.odom: Odometry = Odometry()  # Initialize to empty odom
+        self.transform_srv: Union[rospy.ServiceProxy, None] = None
+        """The transform service proxy. Use `self.connect_to_transform_service()` to connect to the service."""
 
         # init FrontierSearch class to keep track of frontiers and map properties
         self.frontier_search = FrontierSearch()
@@ -106,6 +115,8 @@ class GraceNavigation:
         self.move_base.wait_for_server()  # Wait until move_base server starts
         GraceNavigation.verbose_log("move_base action server started!")
 
+        self.connect_to_transform_service()
+
         self.last_goal: Pose = Pose()
         self.last_goal.position.x = float("inf")
         self.last_goal.position.y = float("inf")
@@ -116,6 +127,7 @@ class GraceNavigation:
         self.last_goal.orientation.w = 1.0
 
     # region Callbacks
+
     def map_callback(self, msg: OccupancyGrid) -> None:
         self.frontier_search.map = msg
         new_size: float = self.frontier_search.map.info.resolution
@@ -270,9 +282,16 @@ class GraceNavigation:
             marker_array.markers.append(marker)
             marker_id += 1
         self.centroid_marker_pub.publish(marker_array)
-        # rospy.Publisher(
-        #     "/frontier/centroids", MarkerArray, queue_size=10
-        # ).publish(marker_array)
+
+    def connect_to_transform_service(self) -> None:
+        """Connects to the transform service"""
+        try:
+            rospy.wait_for_service("transform", timeout=5)
+            self.transform_srv = rospy.ServiceProxy("transform", Transform)
+            GraceNavigation.verbose_log("Connected to Transform service!")
+        except rospy.ROSException as e:
+            rospy.logerr(f"Failed to connect to Transform service! {e}")
+            self.transform_srv = None
 
     # region Exploration
     def explore(self) -> None:
@@ -472,6 +491,12 @@ class GraceNavigation:
 
     def yolo_final_check(self) -> bool:
         self.move_base.cancel_all_goals()
+        twist_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+        twist_pub.publish(twist)
+
         def exit_final_check():
             self.should_update_goal = True
             self.done_flag = False
@@ -661,7 +686,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 1.0  # TODO: Tune this
+        MIN_DISTANCE = 1.5  # TODO: Tune this
         MAX_DISTANCE = 30.0  # TODO: Tune this
         MIN_SIZE = max(40.0, sum(sizes) / len(sizes))  # TODO: Tune this
 
@@ -681,10 +706,10 @@ class GraceNavigation:
                 continue
 
             # Basic score is inverse distance
-            score: Union[np.floating, float] = 1 / max(distance, 0.1)
+            score: Union[np.floating, float] = 1 / max(distance, 0.1) * 2
 
             # Adjust score based on size
-            score += size / 5
+            score += size / 3
 
             if target_pose is not None:
                 target_position = np.array(
@@ -703,7 +728,7 @@ class GraceNavigation:
                     )
                     # Boost score if frontier is in direction of target object
                     direction_factor = (cos_angle + 1) / 2
-                    score *= 1 + 3 * direction_factor
+                    score *= 1 + 10 * direction_factor
 
             scored_frontiers.append((frontier, score))
 
@@ -776,6 +801,7 @@ class GraceNavigation:
         start = self.frontier_search.convert_map_coords_to_img_coords(
             (point.x, point.y)
         )
+
         current_pose = self.get_current_pose()
         end = self.frontier_search.convert_map_coords_to_img_coords(
             (current_pose.position.x, current_pose.position.y)
@@ -815,10 +841,10 @@ class GraceNavigation:
                 - np.array([current_pose.position.x, current_pose.position.y])
             )
             # when robot is already close to the goal obj
-            THRESHOLD = 0.5  # TODO: Tune
+            THRESHOLD = 1.25  # TODO: Tune
             if distance_to_robot <= THRESHOLD:
                 pose = Pose()
-                pose.position = point
+                pose.position = current_pose.position
                 pose.orientation = self.calculate_direction_between_points(
                     point, current_pose.position
                 )
@@ -839,7 +865,7 @@ class GraceNavigation:
                 )
                 return pose
 
-            # Publish marker for the cell being checked
+            # # Publish marker for the cell being checked
             # map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
             #     (img_x, img_y)
             # )
@@ -874,6 +900,49 @@ class GraceNavigation:
         return Quaternion(x=0, y=0, z=qz, w=qw)
 
     def get_current_pose(self) -> Pose:
+        """
+        Returns:
+            (Pose): The current pose of the Turtlebot using transforms
+        """
+        if self.transform_srv is None:
+            self.connect_to_transform_service()
+            if self.transform_srv is None:
+                rospy.logerr(
+                    "Cannot get current pose! Failed to connect to the Transform server!"
+                )
+                GraceNavigation.verbose_log("Returning odom instead...")
+                return self.odom.pose.pose
+        try:
+            transform: TransformResponse = self.transform_srv("base_link", "map")
+
+            if transform.success:
+                current_pose = Pose()
+
+                transform_translation = transform.transform.transform.translation
+                transform_orientation = transform.transform.transform.rotation
+                current_pose.position = Point(
+                    transform_translation.x,
+                    transform_translation.y,
+                    transform_translation.z,
+                )
+                current_pose.orientation = Quaternion(
+                    transform_orientation.x,
+                    transform_orientation.y,
+                    transform_orientation.z,
+                    transform_orientation.w,
+                )
+
+                return current_pose
+        except rospy.ServiceException as e:
+            self.transform_srv = None  # Reset connection
+            rospy.logerr(f"Failed to get current pose! {e}")
+
+        GraceNavigation.verbose_log(
+            "Returning odom instead of transform of current pose."
+        )
+        return self.odom.pose.pose
+
+    def _get_current_pose(self) -> Pose:
         """Returns the current pose of the turtlebot by subscribing to the `/odom`.
 
         Returns:

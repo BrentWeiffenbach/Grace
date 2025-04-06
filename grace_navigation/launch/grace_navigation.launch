@@ -17,4 +17,6 @@
         <param name="verbose" value="$(arg verbose)" />
     </node>
 
+    <node name="transform_server" pkg="grace_navigation" type="transform_server.py" output="screen"/>
+
 </launch>
