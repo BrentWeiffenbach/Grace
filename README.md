@@ -1,4 +1,4 @@
-# Grace
+*# Grace
 
 Key Launch Files:
 
@@ -24,6 +24,13 @@ You can also set the output to verbose by using the `verbose:=true` argument.
 Run the onboard on the TurtleBot by running `roslaunch onboard.launch`.
 
 ## Known Issues
+
+* Need to tune min distance choice for frontiers
+* Orientation of offset frontiers is wrong
+* Could not contact move_group? Unverified
+* Picking frontiers over the goal? Unverified
+* fake moveit publisher is not loading? Unverififed
+  * Pyassimp installed
 
 * A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.
   * Fixed by moving movebase to a different launch file

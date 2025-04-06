@@ -107,7 +107,14 @@ class GraceNavigation:
         self.move_base.wait_for_server()  # Wait until move_base server starts
         GraceNavigation.verbose_log("move_base action server started!")
 
-        self.last_goal: Pose = self.get_current_pose()
+        self.last_goal: Pose = Pose()
+        self.last_goal.position.x = float('inf')
+        self.last_goal.position.y = float('inf')
+        self.last_goal.position.z = float('inf')
+        self.last_goal.orientation.x = 0.0
+        self.last_goal.orientation.y = 0.0
+        self.last_goal.orientation.z = 0.0
+        self.last_goal.orientation.w = 1.0
 
     # region Callbacks
     def map_callback(self, msg: OccupancyGrid) -> None:
@@ -356,7 +363,6 @@ class GraceNavigation:
                             1,
                             f"Goal for {target_obj_name} is accessible, navigating to it",
                         )
-
                 self.goto(
                     self.goal_pose,
                     yield_when_done=True,
@@ -391,19 +397,8 @@ class GraceNavigation:
                     )
                     self.should_update_goal = False
 
-                    def navigable_heuristic(
-                        poses_list, current_position, original_goal
-                    ):
-                        # return min(
-                        #     poses_list,
-                        #     key=lambda pose: np.linalg.norm(
-                        #         np.array([pose.position.x, pose.position.y]) - current_position
-                        #     ),
-                        # )
-                        return poses_list[0]
-
                     offset_pose = self.calculate_offset(
-                        frontier_pose.position, navigable_heuristic
+                        frontier_pose.position
                     )
                     if offset_pose is not None:
                         offset_pose.orientation = (
@@ -431,12 +426,15 @@ class GraceNavigation:
             obj (Pose): The pose move_base should attempt to go to.
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
         """
+        if obj is None:
+            rospy.logerr("Obj pose None was passed to goto")
+            return
         # Get distacne from robot to goal
-        current_pose = self.get_current_pose()
-        pose_distance = np.linalg.norm(
-            np.array([current_pose.position.x, current_pose.position.y])
-            - np.array([obj.position.x, obj.position.y])
-        )
+        # current_pose = self.get_current_pose()
+        # pose_distance = np.linalg.norm(
+        #     np.array([current_pose.position.x, current_pose.position.y])
+        #     - np.array([obj.position.x, obj.position.y])
+        # )
         # distance from last to current goal
         last_goal_distance = np.linalg.norm(
             np.array([self.last_goal.position.x, self.last_goal.position.y])
@@ -534,20 +532,24 @@ class GraceNavigation:
             _ (MoveBaseResult): The result of the move base. Ignored
         """
         # TODO: If final check fails, do something to not be here anymore
-        if not self.yolo_final_check():
-            rospy.loginfo("Final check failed, returning")
-            return
-        self.done_flag = False
         self.goal_pose = None
+        self.done_flag = False
         if goal_statuses[status] not in ["PREEMPTED"]:
             self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
             self.should_update_goal = True
         if goal_statuses[status] in ["SUCCEEDED"]:
+            if not self.yolo_final_check():
+                rospy.loginfo("Final check failed, returning")
+                
+                return
             self.done_flag = True
 
     def no_yield_done_cb(self, status: int, _: MoveBaseResult) -> None:
         self.goal_pose = None
+        if status == actionlib.GoalStatus.ABORTED:
+            rospy.loginfo("NO YEILD ABORTED")
+            self.should_update_goal = True
         if goal_statuses[status] in ["SUCCEEDED"]:
             self.should_update_goal = True
 
@@ -590,7 +592,7 @@ class GraceNavigation:
             # )
             obj_point = Point(class_obj.x, class_obj.y, 0)  # type: ignore
             self.goal_obj_id = class_obj.id
-            rospy.loginfo(f"Setting goal_obj_id to {self.goal_obj_id}")
+            # rospy.loginfo(f"Setting goal_obj_id to {self.goal_obj_id}")
             # YOU COULD maybe approximate the closest object location after seeing it is in occupancy grid, to effectivly calculate_offset inversely to find a good semantic location
             # What two back-to-back all nighters does to a guy ^
 
@@ -754,104 +756,99 @@ class GraceNavigation:
 
     # region Calculations
     def calculate_offset(
-        self, point: Point, heuristic_func: Union[Callable, None] = None
+        self, point: Point
     ) -> Union[Pose, None]:
         """
         Calculate an offset point using BFS with a customizable heuristic function.
 
         Args:
             point (Point): A goal in map coordinates
-            heuristic_func (Callable, optional): A function that takes (pose, current_position, original_goal) and returns a score
-                (lower is better). If None, uses distance from current position as the default. Defaults to None.
 
         Returns:
             A valid Pose or None if no valid offset could be found
         """
-        if heuristic_func is None:
-
-            def default_heuristic_func(poses_list, current_position, original_goal):
-                return min(
-                    poses_list,
-                    key=lambda pose: np.linalg.norm(
-                        np.array([pose.position.x, pose.position.y]) - current_position
-                    ),
-                )
-
-            heuristic_func = default_heuristic_func
-
-        # point is a goal in map coordinates
+        MIN_OFFSET = 3
+        MAX_OFFSET = 400  # TODO: Tune this
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
-                self.frontier_search.global_costmap.info.height,
-                self.frontier_search.global_costmap.info.width,
+            self.frontier_search.global_costmap.info.height,
+            self.frontier_search.global_costmap.info.width,
             )
         )
-        max_offset_distance = 800.0  # Maximum depth for BFS TODO: Tune this
-        visited = set()
-        bfs_queue = queue.Queue()
-        img_point = self.frontier_search.convert_map_coords_to_img_coords(
-            (point.x, point.y)
+        start = self.frontier_search.convert_map_coords_to_img_coords((point.x, point.y))
+        end = self.frontier_search.convert_map_coords_to_img_coords(
+            (self.get_current_pose().position.x, self.get_current_pose().position.y)
         )
-        bfs_queue.put(img_point)
 
-        depth: float = 0.0
+        def bresenham_line(x0, y0, x1, y1):
+            """https://github.com/encukou/bresenham/blob/master/bresenham.py
+            """
+            """Bresenham's line algorithm to generate points between two coordinates."""
+            points = []
+            dx = abs(x1 - x0)
+            dy = abs(y1 - y0)
+            sx = 1 if x0 < x1 else -1
+            sy = 1 if y0 < y1 else -1
+            err = dx - dy
 
-        best_poses = []
+            while True:
+                points.append((x0, y0))
+                if x0 == x1 and y0 == y1:
+                    break
+                e2 = 2 * err
+                if e2 > -dy:
+                    err -= dy
+                    x0 += sx
+                if e2 < dx:
+                    err += dx
+                    y0 += sy
+            return points  # Ensure the function always returns a list
+                
+        line_points = bresenham_line(start[0], start[1], end[0], end[1])
 
-        while not bfs_queue.empty():
-            img_x, img_y = bfs_queue.get()
-            map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
-                (img_x, img_y)
-            )
-            if (map_x, map_y) in visited:
+        for i, (img_x, img_y) in enumerate(line_points):
+            if i < MIN_OFFSET:
                 continue
-
-            visited.add((map_x, map_y))
-            depth += 1.0
-            # uncomment to debug bfs
-            # self.publish_markers([Point(map_x, map_y, 0)], "BFS", color=(1, 1, 0))
-            # rospy.sleep(0.1)
-
-            # Check if the point is not in the occupancy grid
-            if self.frontier_search.is_point_in_occupancy_grid(
-                Point(map_x, map_y, 0), True
+            if i > MAX_OFFSET:
+                break
+            current_pose = self.get_current_pose()
+            distance_to_robot = np.linalg.norm(
+                np.array([point.x, point.y]) - np.array([current_pose.position.x, current_pose.position.y])
+            )
+            THRESHOLD = 0.5  # TODO: Tune
+            if distance_to_robot <= THRESHOLD:
+                pose = Pose()
+                pose.position = point
+                pose.orientation = self.calculate_direction_between_points(point, current_pose.position)
+                return pose
+            if (
+            0 <= img_x < map_image.shape[1]
+            and 0 <= img_y < map_image.shape[0]
+            and map_image[img_y, img_x] == 0  # Check for unoccupied cell
             ):
-                new_pose = Pose()
-                new_pose.position = Point(map_x, map_y, 0)
-                new_pose.orientation = self.calculate_direction_between_points(
-                    point, new_pose.position
+                map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
+                    (img_x, img_y)
                 )
-                best_poses.append(new_pose)
-                if (
-                    len(best_poses) >= max_offset_distance / 10
-                    and depth >= 0.6 * max_offset_distance
-                ) or len(best_poses) >= 100:  # TODO: Tune this
-                    current_pose = self.get_current_pose()
-                    current_position = np.array(
-                        [current_pose.position.x, current_pose.position.y]
-                    )
-                    best_pose = heuristic_func(best_poses, current_position, point)
-                    return best_pose
+                pose = Pose()
+                pose.position = Point(map_x, map_y, 0)
+                pose.orientation = self.calculate_direction_between_points(
+                    point, pose.position
+                )
+                return pose
 
-            if depth >= max_offset_distance:
-                if GraceNavigation.verbose:
-                    rospy.logwarn(
-                        "Could not find a valid offset point using BFS. Depth Limited"
-                    )
-                return None
-
-            # Add neighbors to the queue
-            for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
-                nx, ny = img_x + dx, img_y + dy
-                if (
-                    0 <= nx < map_image.shape[1]
-                    and 0 <= ny < map_image.shape[0]
-                    and (nx, ny) not in visited
-                ):
-                    bfs_queue.put((nx, ny))
+            # Publish marker for the cell being checked
+            # map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
+            #     (img_x, img_y)
+            # )
+            # self.publish_markers(
+            #     [Point(map_x, map_y, 0)],
+            #     namespace="checked_cells",
+            #     color=(0.0, 0.0, 1.0),  # Blue color for checked cells
+            #     scale=(0.05, 0.05, 0.05),
+            # )
 
         if GraceNavigation.verbose:
-            rospy.logwarn("Could not find a valid offset point using BFS.")
+            rospy.logwarn("No valid unoccupied cell found within MAX_OFFSET.")
         return None
 
     def calculate_direction_towards_object(self, point: Point) -> Quaternion:

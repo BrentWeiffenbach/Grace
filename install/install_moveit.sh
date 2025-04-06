@@ -32,6 +32,8 @@ sudo apt-get install -qq libconsole-bridge-dev
 sudo apt-get install -qq libccd-dev libfcl-dev libglew-dev
 sudo apt-get install -qq ros-melodic-pcl-ros
 
+python -m pip install pyassimp==3.3
+
 $verbose && echo "Cloning required repositories..."
 [ -d "rviz_visual_tools" ] || git clone -b master https://github.com/PickNikRobotics/rviz_visual_tools
 [ -d "geometric_shapes" ] || git clone -b noetic-devel https://github.com/ros-planning/geometric_shapes.git geometric_shapes
