@@ -128,10 +128,7 @@ class GraceNavigation:
         GraceNavigation.verbose_log("move_base action server started!")
 
         ### OTHER ###
-        self.marker_publisher = rospy.Publisher(
-            "/visualization_marker_array", MarkerArray, queue_size=10
-        )
-        self.marker_utils = MarkerPublisher(self.marker_publisher, verbose=self.verbose)
+        self.marker_utils = MarkerPublisher(self.centroid_marker_pub, verbose=self.verbose)
 
     # region Callbacks
 
@@ -292,6 +289,7 @@ class GraceNavigation:
                     self.goal_pose,
                     yield_when_done=True,
                 )
+                rospy.sleep(1)
 
                 continue
             else:
@@ -434,6 +432,7 @@ class GraceNavigation:
             if detection.obj_class == target_obj_name:
                 rospy.loginfo("YOLO final check worked!")
                 self.final_checking = False
+                self.done_flag = True
                 return True
             else:
                 rospy.logwarn("No detections with goal class at goal.")
@@ -719,9 +718,10 @@ class GraceNavigation:
                 pose.orientation = self.calculate_direction_between_points(
                     point, current_pose.position
                 )
-                rospy.loginfo(
-                    f"Offset was close to robot. Distance to robot: {distance_to_robot:.2f} meters"
-                )
+                if GraceNavigation.verbose:
+                    rospy.loginfo(
+                        f"Offset was close to robot. Distance to robot: {distance_to_robot:.2f} meters"
+                    )
                 return pose
             # find closest unoccupied cell in direction of robot
             if (
@@ -737,7 +737,6 @@ class GraceNavigation:
                 pose.orientation = self.calculate_direction_between_points(
                     point, current_pose.position
                 )
-                rospy.loginfo(f"Chosen offset index: {i}")
                 return pose
 
         if GraceNavigation.verbose:
