@@ -47,25 +47,31 @@ class ArmController:
         max_attempts = 20  # Increase the number of attempts
         attempt = 0
         retry_delay = 5  # seconds
-        
+
         while not rospy.is_shutdown() and attempt < max_attempts:
             attempt += 1
             try:
-                rospy.loginfo("Attempting to initialize MoveGroupCommander (attempt {}/{})".format(attempt, max_attempts))
+                rospy.loginfo("Waiting for move_group action server to start (attempt {}/{})...".format(attempt, max_attempts))
+                rospy.wait_for_service("/move_group/plan_execution", timeout=10)  # Wait for the move_group service
+                rospy.loginfo("move_group action server is now available!")
+
+                rospy.loginfo("Attempting to initialize MoveGroupCommander...")
                 self.move_group = MoveGroupCommander("arm_group")
                 self.move_group_initialized = True
                 rospy.loginfo("Successfully initialized MoveGroupCommander")
-                
+
                 # Process any pending zeroing requests
                 with self.zeroing_lock:
                     for _ in range(len(self.zeroing_queue)):
                         self.do_zeroing()
                     self.zeroing_queue = []
                 return
+            except rospy.ROSException:
+                rospy.logwarn("move_group action server not available yet. Retrying...")
             except Exception as e:
                 rospy.logwarn("Failed to initialize MoveGroupCommander: {}".format(e))
                 time.sleep(retry_delay)  # Wait before retrying
-                
+
         rospy.logerr("Failed to initialize MoveGroupCommander after maximum attempts")
 
     def state_callback(self, msg):
