@@ -51,7 +51,7 @@ class ArmController:
         while not rospy.is_shutdown() and attempt < max_attempts:
             attempt += 1
             try:
-                rospy.loginfo(f"Attempting to initialize MoveGroupCommander (attempt {attempt}/{max_attempts})")
+                rospy.loginfo("Attempting to initialize MoveGroupCommander (attempt {}/{})".format(attempt, max_attempts))
                 self.move_group = MoveGroupCommander("arm_group")
                 self.move_group_initialized = True
                 rospy.loginfo("Successfully initialized MoveGroupCommander")
@@ -63,7 +63,7 @@ class ArmController:
                     self.zeroing_queue = []
                 return
             except Exception as e:
-                rospy.logwarn(f"Failed to initialize MoveGroupCommander: {e}")
+                rospy.logwarn("Failed to initialize MoveGroupCommander: {}".format(e))
                 time.sleep(retry_delay)  # Wait before retrying
                 
         rospy.logerr("Failed to initialize MoveGroupCommander after maximum attempts")
@@ -123,7 +123,7 @@ class ArmController:
             else:
                 rospy.logerr("MoveGroupCommander is not initialized. Cannot set joint value target.")
         except Exception as e:
-            rospy.logerr(f"Error during zeroing: {e}")
+            rospy.logerr("Error during zeroing: {}".format(e))
             # If we get an error here, it might be because the connection was lost
             # Reinitialize the move_group
             self.move_group_initialized = False
