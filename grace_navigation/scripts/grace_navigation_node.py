@@ -1,6 +1,5 @@
-import queue
 from math import atan2
-from typing import Dict, List, Tuple, Union, Callable
+from typing import Dict, List, Tuple, Union
 
 import actionlib
 import numpy as np
@@ -108,9 +107,9 @@ class GraceNavigation:
         GraceNavigation.verbose_log("move_base action server started!")
 
         self.last_goal: Pose = Pose()
-        self.last_goal.position.x = float('inf')
-        self.last_goal.position.y = float('inf')
-        self.last_goal.position.z = float('inf')
+        self.last_goal.position.x = float("inf")
+        self.last_goal.position.y = float("inf")
+        self.last_goal.position.z = float("inf")
         self.last_goal.orientation.x = 0.0
         self.last_goal.orientation.y = 0.0
         self.last_goal.orientation.z = 0.0
@@ -368,7 +367,7 @@ class GraceNavigation:
                     yield_when_done=True,
                 )
 
-                self.goal_pose = None
+                # self.goal_pose = None
 
                 continue
             else:
@@ -397,9 +396,7 @@ class GraceNavigation:
                     )
                     self.should_update_goal = False
 
-                    offset_pose = self.calculate_offset(
-                        frontier_pose.position
-                    )
+                    offset_pose = self.calculate_offset(frontier_pose.position)
                     if offset_pose is not None:
                         offset_pose.orientation = (
                             self.calculate_direction_towards_object(
@@ -419,14 +416,14 @@ class GraceNavigation:
 
         return None
 
-    def goto(self, obj: Pose, yield_when_done: bool = True) -> None:
+    def goto(self, target_pose: Pose, yield_when_done: bool = True) -> None:
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
-            obj (Pose): The pose move_base should attempt to go to.
+            target_pose (Pose): The pose move_base should attempt to go to.
             yield_when_done (bool, optional): Whether goto should yield to grace_node (call done_cb) when it is done. Defaults to True.
         """
-        if obj is None:
+        if target_pose is None:
             rospy.logerr("Obj pose None was passed to goto")
             return
         # Get distacne from robot to goal
@@ -438,7 +435,7 @@ class GraceNavigation:
         # distance from last to current goal
         last_goal_distance = np.linalg.norm(
             np.array([self.last_goal.position.x, self.last_goal.position.y])
-            - np.array([obj.position.x, obj.position.y])
+            - np.array([target_pose.position.x, target_pose.position.y])
         )
         # if either are too close, don't goto
         # # BUG: If two goal semantic objects for pick and palce are right next to each other this doesnt work
@@ -455,28 +452,32 @@ class GraceNavigation:
         ):  # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
             if GraceNavigation.verbose:
                 rospy.logwarn_throttle(1, "Robot tried to goto the same goal.")
+            self.last_goal = target_pose
             return
 
-        self.last_goal = obj
+        self.last_goal = target_pose
         GraceNavigation.verbose_log("Publishing goal to MoveBase")
         dest = MoveBaseGoal()
         dest.target_pose.header.frame_id = "map"
         dest.target_pose.header.stamp = rospy.Time.now()
-        dest.target_pose.pose = obj
+        dest.target_pose.pose = target_pose
         self.move_base.send_goal(
             goal=dest,
             done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
+        self.goal_pose = None
         # if yield_when_done:
         rospy.sleep(2)
         # rememebr last goto goal
 
     def yolo_final_check(self) -> bool:
+        self.move_base.cancel_all_goals()
         def exit_final_check():
             self.should_update_goal = True
             self.done_flag = False
             # self.last_goal = self.get_current_pose()
             self.remove_pub.publish(self.goal_obj_id)
+
         # Only be done if the yolo object is visible at the goal
         # Subscribe to /range_bearing
         try:
@@ -534,16 +535,15 @@ class GraceNavigation:
         # TODO: If final check fails, do something to not be here anymore
         self.goal_pose = None
         self.done_flag = False
-        if goal_statuses[status] not in ["PREEMPTED"]:
-            self.publish_status(status)
         if status == actionlib.GoalStatus.ABORTED:
             self.should_update_goal = True
         if goal_statuses[status] in ["SUCCEEDED"]:
             if not self.yolo_final_check():
                 rospy.loginfo("Final check failed, returning")
-                
                 return
             self.done_flag = True
+        elif goal_statuses[status] not in ["PREEMPTED"]:
+            self.publish_status(status)
 
     def no_yield_done_cb(self, status: int, _: MoveBaseResult) -> None:
         self.goal_pose = None
@@ -661,7 +661,7 @@ class GraceNavigation:
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
 
-        MIN_DISTANCE = 0.72  # TODO: Tune this
+        MIN_DISTANCE = 1.0  # TODO: Tune this
         MAX_DISTANCE = 30.0  # TODO: Tune this
         MIN_SIZE = max(40.0, sum(sizes) / len(sizes))  # TODO: Tune this
 
@@ -755,9 +755,7 @@ class GraceNavigation:
         return best_frontier_pose
 
     # region Calculations
-    def calculate_offset(
-        self, point: Point
-    ) -> Union[Pose, None]:
+    def calculate_offset(self, point: Point) -> Union[Pose, None]:
         """
         Calculate an offset point using BFS with a customizable heuristic function.
 
@@ -768,21 +766,22 @@ class GraceNavigation:
             A valid Pose or None if no valid offset could be found
         """
         MIN_OFFSET = 3
-        MAX_OFFSET = 400  # TODO: Tune this
+        MAX_OFFSET = 300  # TODO: Tune this
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
-            self.frontier_search.global_costmap.info.height,
-            self.frontier_search.global_costmap.info.width,
+                self.frontier_search.global_costmap.info.height,
+                self.frontier_search.global_costmap.info.width,
             )
         )
-        start = self.frontier_search.convert_map_coords_to_img_coords((point.x, point.y))
+        start = self.frontier_search.convert_map_coords_to_img_coords(
+            (point.x, point.y)
+        )
+        current_pose = self.get_current_pose()
         end = self.frontier_search.convert_map_coords_to_img_coords(
-            (self.get_current_pose().position.x, self.get_current_pose().position.y)
+            (current_pose.position.x, current_pose.position.y)
         )
 
         def bresenham_line(x0, y0, x1, y1):
-            """https://github.com/encukou/bresenham/blob/master/bresenham.py
-            """
             """Bresenham's line algorithm to generate points between two coordinates."""
             points = []
             dx = abs(x1 - x0)
@@ -803,7 +802,7 @@ class GraceNavigation:
                     err += dx
                     y0 += sy
             return points  # Ensure the function always returns a list
-                
+
         line_points = bresenham_line(start[0], start[1], end[0], end[1])
 
         for i, (img_x, img_y) in enumerate(line_points):
@@ -811,20 +810,24 @@ class GraceNavigation:
                 continue
             if i > MAX_OFFSET:
                 break
-            current_pose = self.get_current_pose()
             distance_to_robot = np.linalg.norm(
-                np.array([point.x, point.y]) - np.array([current_pose.position.x, current_pose.position.y])
+                np.array([point.x, point.y])
+                - np.array([current_pose.position.x, current_pose.position.y])
             )
+            # when robot is already close to the goal obj
             THRESHOLD = 0.5  # TODO: Tune
             if distance_to_robot <= THRESHOLD:
                 pose = Pose()
                 pose.position = point
-                pose.orientation = self.calculate_direction_between_points(point, current_pose.position)
+                pose.orientation = self.calculate_direction_between_points(
+                    point, current_pose.position
+                )
                 return pose
+            # find closest unoccupied cell in direction of robot
             if (
-            0 <= img_x < map_image.shape[1]
-            and 0 <= img_y < map_image.shape[0]
-            and map_image[img_y, img_x] == 0  # Check for unoccupied cell
+                0 <= img_x < map_image.shape[1]
+                and 0 <= img_y < map_image.shape[0]
+                and map_image[img_y, img_x] == 0  # Check for unoccupied cell
             ):
                 map_x, map_y = self.frontier_search.convert_img_coords_to_map_coords(
                     (img_x, img_y)
@@ -832,7 +835,7 @@ class GraceNavigation:
                 pose = Pose()
                 pose.position = Point(map_x, map_y, 0)
                 pose.orientation = self.calculate_direction_between_points(
-                    point, pose.position
+                    point, current_pose.position
                 )
                 return pose
 
