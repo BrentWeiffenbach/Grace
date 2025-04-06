@@ -223,7 +223,7 @@ void homing() {
   gripperCommand.data = "open";
   gripperCb(gripperCommand);
   // move motors off their limit switches
-  const int stepsToMove[6] = {30, 200, 20, 30, 30, 10}; // Example values for each joint
+  const int stepsToMove[6] = {30, 200, 30, 30, 30, 30}; // Example values for each joint
   moveMotorsOffSwitches(stepsToMove);
 
   currentStatus = HOMING;
@@ -353,7 +353,7 @@ void limitSwitchJ5ISR() {
 void limitSwitchJ6ISR() {
   unsigned long currentTime = millis();
   if ((currentTime - lastDebounceTimeJ6) > debounceDelay) {
-    motors[5].currentPosition = -29.0;  // Set J6 position to -135 degrees
+    motors[5].currentPosition = -29.0;  // Set J6 position to -30 degrees
     if (currentStatus == HOMING) {
       motors[5].moving = false;         // Stop motor J6 only if in HOMING state
     }
