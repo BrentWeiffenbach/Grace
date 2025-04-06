@@ -5,8 +5,6 @@ from std_msgs.msg import String, Bool
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import math
-import threading
-import time
 from grace_navigation.msg import RobotState
 from moveit_commander import MoveGroupCommander # type: ignore
 
@@ -21,15 +19,6 @@ class ArmController:
         self.final_point_sent = False
         self.home_sent = False
         self.zero_sent = False
-        self.move_group_initialized = False
-        self.move_group = None
-        self.zeroing_queue = []
-        self.zeroing_lock = threading.Lock()
-        
-        # Start a separate thread to initialize MoveGroup with retries
-        self.init_thread = threading.Thread(target=self.initialize_move_group)
-        self.init_thread.daemon = True
-        self.init_thread.start()
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
@@ -41,38 +30,6 @@ class ArmController:
         # Dummy topics for MoveIt! to recognize the controllers
         self.dummy_arm_controller_pub = rospy.Publisher('grace/arm_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
         self.dummy_gripper_controller_pub = rospy.Publisher('grace/gripper_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
-
-    def initialize_move_group(self):
-        """Initialize move_group in a separate thread with retries"""
-        max_attempts = 20  # Increase the number of attempts
-        attempt = 0
-        retry_delay = 5  # seconds
-
-        while not rospy.is_shutdown() and attempt < max_attempts:
-            attempt += 1
-            try:
-                rospy.loginfo("Waiting for move_group action server to start (attempt {}/{})...".format(attempt, max_attempts))
-                rospy.wait_for_service("/move_group/plan_execution", timeout=10)  # Wait for the move_group service
-                rospy.loginfo("move_group action server is now available!")
-
-                rospy.loginfo("Attempting to initialize MoveGroupCommander...")
-                self.move_group = MoveGroupCommander("arm_group")
-                self.move_group_initialized = True
-                rospy.loginfo("Successfully initialized MoveGroupCommander")
-
-                # Process any pending zeroing requests
-                with self.zeroing_lock:
-                    for _ in range(len(self.zeroing_queue)):
-                        self.do_zeroing()
-                    self.zeroing_queue = []
-                return
-            except rospy.ROSException:
-                rospy.logwarn("move_group action server not available yet. Retrying...")
-            except Exception as e:
-                rospy.logwarn("Failed to initialize MoveGroupCommander: {}".format(e))
-                time.sleep(retry_delay)  # Wait before retrying
-
-        rospy.logerr("Failed to initialize MoveGroupCommander after maximum attempts")
 
     def state_callback(self, msg):
         self.state = msg.state
@@ -108,34 +65,15 @@ class ArmController:
         self.send_next_trajectory_point()
     
     def zeroing(self):
-        """Queue a zeroing operation or execute it immediately if MoveGroup is ready"""
-        if not self.move_group_initialized:
-            rospy.logwarn("MoveGroupCommander not initialized yet. Queuing zeroing request.")
-            with self.zeroing_lock:
-                self.zeroing_queue.append(True)
-            return
-            
-        self.do_zeroing()
-    
-    def do_zeroing(self):
-        """Execute the actual zeroing operation with initialized MoveGroup"""
-        try:
-            joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-            rospy.loginfo("Sending zero request to moveit...")
-            if self.move_group is not None:
-                self.move_group.set_joint_value_target(joint_values)
-                success, plan, _, _ = self.move_group.plan()
-                self.state = RobotState.EXPLORING
-            else:
-                rospy.logerr("MoveGroupCommander is not initialized. Cannot set joint value target.")
-        except Exception as e:
-            rospy.logerr("Error during zeroing: {}".format(e))
-            # If we get an error here, it might be because the connection was lost
-            # Reinitialize the move_group
-            self.move_group_initialized = False
-            self.init_thread = threading.Thread(target=self.initialize_move_group)
-            self.init_thread.daemon = True
-            self.init_thread.start()
+        group = MoveGroupCommander("arm_group")  # Use your specific planning group name
+        # rospy.loginfo("State is returning to zero pose")
+        # self.arm_control_status_pub.publish(Bool(False))
+        # group.set_start_state_to_current_state()
+        joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        rospy.loginfo("Sending zero request to moveit...")
+        group.set_joint_value_target(joint_values)
+        success, plan, _, _ = group.plan()
+        self.state = RobotState.EXPLORING
 
     def arm_status_callback(self, msg):
         self.arm_status = msg.data
@@ -223,14 +161,6 @@ class ArmController:
         if self.publish_timer is not None:
             self.publish_timer.shutdown()
             self.publish_timer = None
-        
-        # Also reinitialize the MoveGroupCommander
-        self.move_group_initialized = False
-        self.init_thread = threading.Thread(target=self.initialize_move_group)
-        self.init_thread.daemon = True
-        self.init_thread.start()
-        
-        # Reconnect subscribers and publishers
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
