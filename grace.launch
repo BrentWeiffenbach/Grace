@@ -53,7 +53,7 @@
         <!-- launch moveit for ik and motion planning -->
         <include file="$(find grace_description)/launch/move_group.launch">
             <arg name="allow_trajectory_execution" value="true"/>
-            <arg name="fake_execution" value="true"/>
+            <arg name="fake_execution" value="false"/>
             <arg name="fake_execution_type" value="interpolate" />
             <arg name="info" value="true"/>
             <arg name="debug" value="false"/>

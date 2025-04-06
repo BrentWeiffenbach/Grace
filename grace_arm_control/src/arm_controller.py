@@ -11,6 +11,10 @@ from moveit_commander import MoveGroupCommander # type: ignore
 class ArmController:
     def __init__(self):
         rospy.init_node('arm_controller', anonymous=True)
+        # Dummy topics for MoveIt! to recognize the controllers
+        self.dummy_arm_controller_pub = rospy.Publisher('grace/arm_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
+        self.dummy_gripper_controller_pub = rospy.Publisher('grace/gripper_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
+
         self.state = -1
         self.arm_status = None
         self.trajectory_points = []
@@ -26,10 +30,6 @@ class ArmController:
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
         self.gripper_pub = rospy.Publisher('/grace/gripper', String, queue_size=10)
         self.arm_control_status_pub = rospy.Publisher('/grace/arm_control_status', Bool, queue_size=10)
-
-        # Dummy topics for MoveIt! to recognize the controllers
-        self.dummy_arm_controller_pub = rospy.Publisher('grace/arm_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
-        self.dummy_gripper_controller_pub = rospy.Publisher('grace/gripper_controller/follow_joint_trajectory', JointTrajectory, queue_size=10)
 
     def state_callback(self, msg):
         self.state = msg.state
