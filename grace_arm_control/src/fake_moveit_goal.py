@@ -6,9 +6,9 @@ import rospy
 
 class FakeMoveItGoal:
     def __init__(self):
-        rospy.init_node("fake_moveit_goal")
-        self.group = MoveGroupCommander("arm_group")  # Use your specific planning group name
+        rospy.sleep(20)  # Wait for move_group to initialize
         rospy.Subscriber("/grace/state", RobotState, self.state_callback)
+        self.state = None
 
     def publish_goal(self):
         # Define the goal joint values
@@ -24,11 +24,15 @@ class FakeMoveItGoal:
             rospy.logerr("Planning failed!")
 
     def state_callback(self, msg):
+        if self.state is None:
+            self.group = MoveGroupCommander("arm_group")
+            self.state = msg.state
+
         if msg.state in [RobotState.PLACING, RobotState.PICKING]:
             self.publish_goal()
 
 if __name__ == "__main__":
-    rospy.wait_for_message(topic="/grace/state", topic_type=RobotState)
+    rospy.init_node("fake_moveit_goal")        
     rospy.loginfo("Fake MoveIt Goal Node Initalized")
     fake_moveit_goal = FakeMoveItGoal()
     rospy.spin()

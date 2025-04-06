@@ -54,10 +54,12 @@
         <include file="$(find grace_description)/launch/move_group.launch">
             <arg name="allow_trajectory_execution" value="true"/>
             <arg name="fake_execution" value="false"/>
+            <arg name="fake_execution_type" value="interpolate" />
             <arg name="info" value="true"/>
+            <arg name="debug" value="false"/>
             <arg name="pipeline" value="ompl"/>
-            <arg name="load_robot_description" value="$(eval not arg('sim'))"/>
-            <arg name="remap" value="false"/>
+            <arg name="load_robot_description" value="true"/>
+            <arg name="remap" value="true"/>
         </include>
         
         <!-- launch planar joint execution controller for moveit to control the turtlebot-->
