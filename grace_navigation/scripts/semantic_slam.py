@@ -1,4 +1,5 @@
 #!/usr/bin/env python2.7
+# TODO: Remove all of the extra calculations and optimzie
 import numpy as np
 import rospy
 import tf2_ros
