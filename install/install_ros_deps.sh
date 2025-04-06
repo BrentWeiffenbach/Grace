@@ -36,6 +36,10 @@ if [ ! -d "src/turtlebot" ]; then
 fi
 
 sudo apt-get install -qq ros-melodic-gmapping ros-melodic-move-base ros-melodic-dwa-local-planner ros-melodic-rosserial ros-melodic-rosserial-arduino
+sudo apt-get install -qq ros-melodic-trajectory-msgs ros-melodic-xacro ros-melodic-resource-retriever ros-melodic-urdf
+sudo apt-get install -qq ros-melodic-interactive-markers ros-melodic-gazebo-ros ros-melodic-octomap-msgs ros-melodic-rviz-visual-tools ros-melodic-gazebo* 
+sudo apt-get install -qq ros-melodic-robot-state-publisher ros-melodic-image-geometry ros-melodic-joy ros-melodic-depth-image-proc rosbash ros-melodic-warehouse-ros
+sudo apt-get install -qq ros-melodic-joint-state-publisher ros-melodic-geometry2 ros-melodic-depthimage-to-laserscan ros-melodic-yocs-velocity-smoother
 
 catkin clean
 catkin build
