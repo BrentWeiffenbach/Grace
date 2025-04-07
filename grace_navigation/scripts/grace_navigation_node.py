@@ -292,10 +292,12 @@ class GraceNavigation:
                             1,
                             f"Goal for {target_obj_name} is accessible, navigating to it",
                         )
-                self.goto(
-                    self.goal_pose,
-                    yield_when_done=True,
-                )
+                        
+                if not self.final_checking:
+                    self.goto(
+                        self.goal_pose,
+                        yield_when_done=True,
+                    )
                 rospy.sleep(1)
 
                 continue
