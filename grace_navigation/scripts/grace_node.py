@@ -320,9 +320,9 @@ class GraceNode:
         if self.state == RobotState.WAITING or self.state == RobotState.EXPLORING:
             return
         if self.state == RobotState.PICKING and is_completed.data:
-            self.state = RobotState.ZEROING
             self.has_object = True
             self.has_object_publisher.publish(self.has_object)
+            self.state = RobotState.ZEROING
         elif self.state == RobotState.PLACING and is_completed.data:
             self.has_object = False
             self.has_object_publisher.publish(self.has_object)
@@ -403,7 +403,7 @@ if __name__ == "__main__":
     #     rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location="suitcase", pick_object="chair")
+    grace.goal = RobotGoal(place_location="chair", pick_object="cup")
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

@@ -57,6 +57,7 @@ class GraceNavigation:
         self.last_goal: Pose = Pose()
         self.clear_last_goal()
         """if yolo final checking is running its true to prevent double cb"""
+        self.has_object: bool = False
 
         ### ROBOT INFORMATION ###
         self.goal: RobotGoal
@@ -90,7 +91,7 @@ class GraceNavigation:
             callback=self.state_callback,
         )
 
-        ### ENVIRONMENT INFORMATION ###
+        ### ENVIRONMENT SUBSCRIBERS ###
         self.connect_to_transform_service()
         self.odom_sub = rospy.Subscriber(
             name="/odom", data_class=Odometry, callback=self.odom_callback
@@ -111,6 +112,12 @@ class GraceNavigation:
             tcp_nodelay=True,
         )
 
+        self.has_object_sub = rospy.Subscriber(
+            "/grace/has_object",
+            Bool,
+            self.has_object_callback,
+        )
+
         ### PUBLISHERS ###
         self.centroid_marker_pub = rospy.Publisher(
             "/frontier/centroids", MarkerArray, queue_size=10
@@ -128,7 +135,9 @@ class GraceNavigation:
         GraceNavigation.verbose_log("move_base action server started!")
 
         ### OTHER ###
-        self.marker_utils = MarkerPublisher(self.centroid_marker_pub, verbose=self.verbose)
+        self.marker_utils = MarkerPublisher(
+            self.centroid_marker_pub, verbose=self.verbose
+        )
 
     # region Callbacks
 
@@ -156,6 +165,9 @@ class GraceNavigation:
 
     def odom_callback(self, msg: Odometry) -> None:
         self.odom = msg
+
+    def has_object_callback(self, msg: Bool) -> None:
+        self.has_object = msg.data
 
     def goal_callback(self, msg: RobotGoalMsg) -> None:
         goal = RobotGoal(place_location=msg.place_location, pick_object=msg.pick_object)
@@ -218,6 +230,8 @@ class GraceNavigation:
             return
 
         rospy.loginfo("Reached object!")
+        self.done_flag = False
+        self.final_checking = False
         self.move_base.cancel_all_goals()
         self.publish_status(actionlib.GoalStatus.SUCCEEDED)
         return
@@ -234,17 +248,10 @@ class GraceNavigation:
 
         start_time: rospy.Time = rospy.Time.now()
         exploration_timeout = max(exploration_timeout, rospy.Duration(0))
-        has_object = rospy.wait_for_message(
-            topic=GraceNode.HAS_OBJECT_TOPIC,
-            topic_type=Bool,
-            timeout=rospy.Duration(10),
-        )
 
-        assert has_object
         assert self.goal
-        has_object = has_object.data
         target_obj_name: str = (
-            self.goal.place_location if has_object else self.goal.pick_object
+            self.goal.place_location if self.has_object else self.goal.pick_object
         )
 
         navigating_to_object = False
@@ -350,10 +357,10 @@ class GraceNavigation:
             - np.array([target_pose.position.x, target_pose.position.y])
         )
 
-        THRESHOLD = 0.3  # TODO: Tune this
+        GOAL_REACH_THRESHOLD = 0.3  # TODO: Tune this
 
         if (
-            last_goal_distance <= THRESHOLD
+            last_goal_distance <= GOAL_REACH_THRESHOLD
             and self.move_base.get_state() != actionlib.GoalStatus.SUCCEEDED
         ):  # tries to prevent not publishing a goal ever again if a frontier succeeds (or 2d nav goal)
             if GraceNavigation.verbose:
@@ -374,22 +381,20 @@ class GraceNavigation:
         rospy.sleep(2)
 
     def yolo_final_check(self) -> bool:
-        # TODO: Optimize
         # TODO: Add a turn torwards object center before exiting
+        if self.final_checking:
+            return False
         self.final_checking = True
-        self.move_base.cancel_all_goals()
+        # self.move_base.cancel_all_goals()
+
+        # Stop the robot
         twist_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         twist = Twist()
-        twist.linear.x = 0.0
-        twist.angular.z = 0.0
         twist_pub.publish(twist)
 
-        def exit_final_check():
-            self.should_update_goal = True
-            self.done_flag = False
-            self.clear_last_goal()
-            self.remove_pub.publish(self.goal_obj_id)
-            self.final_checking = False
+        target_obj_name: str = (
+            self.goal.place_location if self.has_object else self.goal.pick_object
+        )
 
         # Only be done if the yolo object is visible at the goal
         # Subscribe to /range_bearing
@@ -397,47 +402,31 @@ class GraceNavigation:
             detections = rospy.wait_for_message(
                 "/range_bearing", RangeBearingArray, timeout=3
             )
-        except rospy.ROSException:
-            rospy.logwarn("Timeout waiting for YOLO detections in done_cb")
-            exit_final_check()
-            return False
-
-        has_object = rospy.wait_for_message(
-            topic=GraceNode.HAS_OBJECT_TOPIC,
-            topic_type=Bool,
-            timeout=rospy.Duration(10),
-        )
-        if has_object is None:
-            rospy.logwarn(
-                "Failed to receive message for has_object. Defaulting to False."
-            )
-            has_object = False
-        else:
-            has_object = has_object.data
-
-        target_obj_name: str = (
-            self.goal.place_location if has_object else self.goal.pick_object
-        )
-
-        assert isinstance(detections, RangeBearingArray)  # type: ignore
-
-        # check if any detections are the target class
-        if detections.range_bearings is None:
-            rospy.logwarn("No detections received in done_cb.")
-            exit_final_check()
-            return False
-
-        for detection in detections.range_bearings:
-            detection: RangeBearing
-            if detection.obj_class == target_obj_name:
-                rospy.loginfo("YOLO final check worked!")
-                self.final_checking = False
-                self.done_flag = True
-                return True
+            assert isinstance(detections, RangeBearingArray)
+            if detections.range_bearings is not None:
+                for detection in detections.range_bearings:
+                    detection: RangeBearing
+                    if detection.obj_class == target_obj_name:
+                        rospy.loginfo("YOLO final check worked!")
+                        self.final_checking = False
+                        self.done_flag = True
+                        return True
             else:
-                rospy.logwarn("No detections with goal class at goal.")
-                exit_final_check()
-                return False
+                rospy.logwarn("No YOLO detection at goal")
+
+        except rospy.ROSException as e:
+            rospy.logwarn(f"Timeout or error in YOLO final check: {e}")
+        except Exception as e:
+            rospy.logerr(f"Error in YOLO final check: {e}")
+
+        self.should_update_goal = True
+        self.done_flag = False
+        self.clear_last_goal()
+
+        if hasattr(self, "goal_obj_id"):
+            self.remove_pub.publish(self.goal_obj_id)
+
+        self.final_checking = False
         return False
 
     def done_cb(self, status: int, _: MoveBaseResult) -> None:
@@ -711,8 +700,8 @@ class GraceNavigation:
                 - np.array([current_pose.position.x, current_pose.position.y])
             )
             # when robot is already close to the goal obj
-            THRESHOLD = 1.5  # TODO: Tune
-            if distance_to_robot <= THRESHOLD:
+            GOAL_PROXIMITY_THRESHOLD = 1.5  # TODO: Tune
+            if distance_to_robot <= GOAL_PROXIMITY_THRESHOLD:
                 pose = Pose()
                 pose.position = current_pose.position
                 pose.orientation = self.calculate_direction_between_points(

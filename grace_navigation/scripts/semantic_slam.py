@@ -99,7 +99,7 @@ class SemanticSLAM:
         # region TF
         try:
             trans = self.tfBuffer.lookup_transform(
-                to_frame_rel, from_frame_rel, rospy.Time(0)
+                to_frame_rel, from_frame_rel, msg.header.stamp
             )
 
             self.pos = np.asarray(
