@@ -1,3 +1,4 @@
 grace_navigation/RangeBearing range_bearing
 ---
 geometry_msgs/PoseStamped pose
+bool success

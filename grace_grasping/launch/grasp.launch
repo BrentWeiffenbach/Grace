@@ -1,0 +1,5 @@
+<launch>
+    <node name="object_detection_server" pkg="grace_grasping" type="object_detection_server.py" output="screen"/>
+    <node name="get_object_pose_server" pkg="grace_grasping" type="get_object_pose_server.py" output="screen"/>
+    <node name="moveit_grasping" pkg="grace_grasping" type="moveit_grasping.py" output="screen"/>
+</launch>

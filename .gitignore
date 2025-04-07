@@ -6,6 +6,9 @@ yolovenv/
 !.gitignore
 .vscode
 typings/ultralytics
+typings/moveit
+typings/moveit_commander
+typings/moveit_msgs
 __pycache__
 
 out

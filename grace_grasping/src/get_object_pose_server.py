@@ -8,20 +8,20 @@ from tf2_ros import (
     TransformException,  # type: ignore
 )
 from geometry_msgs.msg import PoseStamped, Point
-from grace_grasping.srv import GetObjectPoseResponse, GetObjectPoseRequest  # noqa: F401
+from grace_grasping.srv import GetObjectPose, GetObjectPoseResponse, GetObjectPoseRequest  # noqa: F401
 import numpy as np
 
 
 class GetObjectPoseServer:
     def __init__(self):
-        rospy.init_node("range_to_tf_broadcaster")
+        rospy.init_node("get_object_pose_server")
         self.br = TransformBroadcaster()
         self.tfBuffer = tf2_ros.Buffer(rospy.Duration(10))
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
         self.ref_link_frame = "base_link"
         self.camera_height = 0.3048  # measured
         self.service = rospy.Service(
-            "get_object_pose", GetObjectPoseServer, self.callback
+            "get_object_pose", GetObjectPose, self.callback
         )
 
     def callback(self, msg):
@@ -78,6 +78,7 @@ class GetObjectPoseServer:
             res.pose.pose.orientation.y = 0
             res.pose.pose.orientation.z = 0
             res.pose.pose.orientation.w = 1
+
             # DEBUG: Create a new TF frame for the object
             # object_id = msg.range_bearing.id
             # object_frame = "object_{}".format(object_id)
@@ -89,8 +90,9 @@ class GetObjectPoseServer:
             #     object_frame,
             #     self.ref_link_frame,
             # )
+            res.success = True
         except (TransformException, ConnectivityException, ExtrapolationException):
-            pass
+            res.success = False
 
         return res
 

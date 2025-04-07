@@ -382,6 +382,7 @@ class GraceNavigation:
         self.goal_pose = None
 
     def yolo_final_check(self) -> bool:
+        # TODO: Replace with the ObjectDetection service
         # TODO: Add a turn torwards object center before exiting
         if self.final_checking:
             return False
