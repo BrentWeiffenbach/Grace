@@ -223,7 +223,7 @@ void homing() {
   gripperCommand.data = "open";
   gripperCb(gripperCommand);
   // move motors off their limit switches
-  const int stepsToMove[6] = {30, 200, 30, 30, 30, 30}; // Example values for each joint
+  const int stepsToMove[6] = {30, 200, 30, 30, 90, 60}; // Example values for each joint
   moveMotorsOffSwitches(stepsToMove);
 
   currentStatus = HOMING;
