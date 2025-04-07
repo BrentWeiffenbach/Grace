@@ -14,7 +14,7 @@ class FakeMoveItGoal:
     def publish_goal(self):
         assert self.group is not None
         # Define the goal joint values
-        goal_joint_values = [0.08059417813617288, 0.8414356555608558, -0.3932249476604554, 
+        goal_joint_values = [0.08059417813617288, 0.95, -0.3932249476604554, 
                              0.18421584162174223, 0.45491917923620506, 0.16590019448519736]
         self.group.set_joint_value_target(goal_joint_values)
 

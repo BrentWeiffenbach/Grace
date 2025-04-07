@@ -167,7 +167,7 @@ class FrontierSearch:
 
         # Sort components by area in descending order, excluding the background (label 0)
         sorted_indices = np.argsort(stats[1:, cv2.CC_STAT_AREA])[::-1] + 1  # Add 1 to skip background
-        top_indices = sorted_indices[:10]  # Get the top 10 components
+        top_indices = sorted_indices[:15]  # Get the top 10 components
 
         # store sizes of frontiers for scoring
         centroids = []

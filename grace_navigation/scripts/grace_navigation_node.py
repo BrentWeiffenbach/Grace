@@ -380,7 +380,6 @@ class GraceNavigation:
             done_cb=self.done_cb if yield_when_done else self.no_yield_done_cb,
         )
         self.goal_pose = None
-        rospy.sleep(2)
 
     def yolo_final_check(self) -> bool:
         # TODO: Add a turn torwards object center before exiting
@@ -528,7 +527,7 @@ class GraceNavigation:
             )
             return False
         return True
-
+    
     # region Frontiers
     def score_frontiers(
         self,
@@ -541,73 +540,85 @@ class GraceNavigation:
                 "Frontiers and sizes must be non-empty and of the same length."
             )
             return None
-
+        
         current_pose: Pose = self.get_current_pose()
         current_position = np.array([current_pose.position.x, current_pose.position.y])
-
-        MIN_DISTANCE = 1.25  # TODO: Tune this
-        MAX_DISTANCE = 30.0  # TODO: Tune this
-        MIN_SIZE = max(40.0, sum(sizes) / len(sizes))  # TODO: Tune this
-
+        
+        # use goal pose if passsed, or current_pose
+        target_pose = target_pose or current_pose
+        
+        ALIGNMENT_WEIGHT = 7 #TODO: Tune This
+        MIN_DISTANCE = 0.75 #TODO: Tune this
+        MAX_DISTANCE = 30.0 #TODO: Tune this
+        MIN_SIZE = max(40.0, sum(sizes) / len(sizes))
+        
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
-
+        target_position = np.array([target_pose.position.x, target_pose.position.y])
+        
         for frontier, size in zip(frontiers, sizes):
+            # filter by size and distance
             frontier_position = np.array([frontier.x, frontier.y])
-            distance: np.floating = np.linalg.norm(frontier_position - current_position)
-
-            if size <= MIN_SIZE:
+            distance_from_current: np.floating = np.linalg.norm(frontier_position - current_position)
+            if size <= MIN_SIZE or distance_from_current < MIN_DISTANCE or distance_from_current > MAX_DISTANCE:
                 continue
+            
+            distance_to_target: np.floating = np.linalg.norm(frontier_position - target_position)
+            
+            # Base score is inverse of distance to target (closer to target = higher score)
+            base_score = 1.0 / max(distance_to_target, 0.1) * 2
 
-            if distance < MIN_DISTANCE:
-                continue
-
-            if distance > MAX_DISTANCE:
-                continue
-
-            # Basic score is inverse distance
-            score: Union[np.floating, float] = 1 / max(distance, 0.1) * 3
-
-            # Adjust score based on size
-            score += size / 5
-
-            if target_pose is not None:
-                target_position = np.array(
-                    [target_pose.position.x, target_pose.position.y]
-                )
-                frontier_to_target = frontier_position - target_position
-                frontier_to_position = frontier_position - current_position
-
-                if (
-                    np.linalg.norm(frontier_to_target) > 0
-                    and np.linalg.norm(frontier_to_position) > 0
-                ):
-                    cos_angle = np.dot(frontier_to_target, frontier_to_position) / (
-                        np.linalg.norm(frontier_to_target)
-                        * np.linalg.norm(frontier_to_position)
-                    )
-                    # Boost score if frontier is in direction of target object
-                    direction_factor = (cos_angle + 1) / 2
-                    score *= 1 + 2 * direction_factor
-
+            # Add size contribution to the score
+            size_contribution = size / 90.0
+            base_score += size_contribution
+            
+            direction_to_frontier = frontier_position - current_position
+            direction_to_target = current_position - target_position
+            
+            if np.linalg.norm(direction_to_frontier) > 0 and np.linalg.norm(direction_to_target) > 0:
+                # Normalize vectors
+                direction_to_frontier = direction_to_frontier / np.linalg.norm(direction_to_frontier)
+                direction_to_target = direction_to_target / np.linalg.norm(direction_to_target)
+                
+                # Calculate how aligned the frontier is with the target direction
+                target_alignment = np.dot(direction_to_frontier, direction_to_target)
+                target_alignment_factor = (target_alignment + 1) / 2
+                
+                # Boost score based on alignment with target direction
+                score = base_score * (1 + ALIGNMENT_WEIGHT * target_alignment_factor)
+            else:
+                score = base_score
+                
+            # Add debug information
+            if GraceNavigation.verbose:
+                rospy.loginfo(f"Frontier ({frontier.x:.2f}, {frontier.y:.2f}): " 
+                            f"Distance to target: {distance_to_target:.2f}, "
+                            f"Base score: {base_score:.4f}, "
+                            f"Final score: {score:.4f}")
+            
             scored_frontiers.append((frontier, score))
-
+        
         # Sort by score (highest first)
         scored_frontiers.sort(key=lambda x: x[1], reverse=True)
-
-        if scored_frontiers:
+        
+        if scored_frontiers and GraceNavigation.verbose:
             best_frontier_position = scored_frontiers[0][0]
             distance_from_current_pose = np.linalg.norm(
                 np.array([best_frontier_position.x, best_frontier_position.y])
                 - np.array([current_position[0], current_position[1]])
             )
-            if GraceNavigation.verbose:
-                rospy.loginfo(
-                    f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}), "
-                    f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
-                    f"Size: {sizes[frontiers.index(best_frontier_position)]:.2f}"
-                )
-            return scored_frontiers
-        return None
+            distance_from_target = np.linalg.norm(
+                np.array([best_frontier_position.x, best_frontier_position.y])
+                - target_position
+            )
+            rospy.loginfo(
+                f"Best Frontier Position: ({best_frontier_position.x:.2f}, {best_frontier_position.y:.2f}), "
+                f"Distance from Current Pose: {distance_from_current_pose:.2f} meters, "
+                f"Distance from Target: {distance_from_target:.2f} meters, "
+                f"Size: {sizes[frontiers.index(best_frontier_position)]:.2f}, "
+                f"Score: {scored_frontiers[0][1]:.4f}"
+            )
+        
+        return scored_frontiers if scored_frontiers else None
 
     def compute_frontier_goal_pose(self, heuristic_pose: Pose) -> Union[Pose, None]:
         keypoints: List[Point]
@@ -651,8 +662,8 @@ class GraceNavigation:
         Returns:
             A valid Pose or None if no valid offset could be found
         """
-        MIN_OFFSET = 22 if is_goal else 3
-        MAX_OFFSET = 40  # TODO: Tune this
+        MIN_OFFSET = 19 if is_goal else 3
+        MAX_OFFSET = 37  if is_goal else 100 # TODO: Tune this
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
                 self.frontier_search.global_costmap.info.height,
@@ -703,7 +714,7 @@ class GraceNavigation:
             )
             # when robot is already close to the goal obj
             GOAL_PROXIMITY_THRESHOLD = 1.5  # TODO: Tune
-            if distance_to_robot <= GOAL_PROXIMITY_THRESHOLD:
+            if distance_to_robot <= GOAL_PROXIMITY_THRESHOLD and is_goal:
                 pose = Pose()
                 pose.position = current_pose.position
                 pose.orientation = self.calculate_direction_between_points(
