@@ -6,6 +6,8 @@ float32 range           # range data [m]
                         # (Detection too close to the sensor to quantify)
                         # +Inf represents no detection within the fixed distance.
                         # (Object out of range)
+float32 elevation       # elevation data [m]
+                        # The exact same as range but for the y axis (of a 2d plane)
 float32 bearing
 int16 id
 string obj_class

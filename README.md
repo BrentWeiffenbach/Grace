@@ -30,7 +30,7 @@ Run the onboard on the TurtleBot by running `roslaunch onboard.launch`.
 
 
 ## Known Issues
-* Yolo_final_check / donecb is being called twice after reaching an object
+* Yolo_detect is going to need changes for navigation after the modifications for grasping
 
 * A known bug is that `/opt/ros/melodic/include/gmapping/gridfastslam/gridslamprocessor.hxx` floods the console without the ability to disable.
   * Fixed by moving movebase to a different launch file

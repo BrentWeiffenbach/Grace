@@ -16,20 +16,21 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  RobotState.msg
-  RobotGoalMsg.msg
-  Object2D.msg
-  Object2DArray.msg
-  RangeBearing.msg
-  RangeBearingArray.msg
-)
+  add_message_files(
+    FILES
+    RobotState.msg
+    RobotGoalMsg.msg
+    Object2D.msg
+    Object2DArray.msg
+    RangeBearing.msg
+    RangeBearings.msg
+  )
 
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
   Transform.srv
+#   Service2.srv
 )
 
 ## Generate actions in the 'action' folder

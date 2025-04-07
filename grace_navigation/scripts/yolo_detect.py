@@ -18,7 +18,7 @@ from grace_navigation.msg import RangeBearing, RangeBearingArray
 
 # Set the environment variable
 os.environ["YOLO_VERBOSE"] = "False"
-DETECTION_INTERVAL: Final[Union[int, float]] = 0.2
+DETECTION_INTERVAL: Final[Union[int, float]] = 0.01
 """The interval (in seconds) between detections. 0.25 is 4 times per second. 1 is 1 time per second.
 """
 
@@ -97,7 +97,7 @@ class YoloDetect:
 
         # Download the YOLO model to the grace folder
         # this must be a segement model so that the masks for range bearings work
-        MODEL_NAME: Final = "yolo11s-seg.pt"
+        MODEL_NAME: Final = "yolo11m-seg.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model
@@ -156,7 +156,7 @@ class YoloDetect:
         image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
         depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # type: ignore
 
-        CONFIDENCE_SCORE: Final[float] = 0.65
+        CONFIDENCE_SCORE: Final[float] = 0.45
         result: List[Results] = []
 
         # Get the results
@@ -199,7 +199,7 @@ class YoloDetect:
                 continue
             obj_range: float
             bearing: Tensor
-            obj_range, bearing = self.calculate_bearing_and_obj_range(depth_mask)
+            obj_range, bearing, elevation = self.calculate_range_bearing(depth_mask)
 
             if (
                 np.isfinite(obj_range)
@@ -207,7 +207,7 @@ class YoloDetect:
                 and detection.id is not None
             ):
                 range_bearing: RangeBearing = self.create_range_bearing(
-                    classes, detection, obj_range, bearing
+                    classes, detection, obj_range, bearing, elevation
                 )
                 range_bearings.append(range_bearing)
         if range_bearings:
@@ -220,7 +220,7 @@ class YoloDetect:
 
     @staticmethod
     def create_range_bearing(
-        classes: Dict[int, str], detection: Boxes, obj_range: float, bearing: Tensor
+        classes: Dict[int, str], detection: Boxes, obj_range: float, bearing: Tensor, elevation: Tensor
     ) -> RangeBearing:
         """Creates a RangeBearing based on the classes, detections, ranges, and bearings.
 
@@ -229,6 +229,7 @@ class YoloDetect:
             detection (Boxes): The detections.
             obj_range (float): The distance from the object.
             bearing (Tensor): The direction that the object is in.
+            elevation (Tensor): The y direction that the object is in.
 
         Returns:
             RangeBearing: Polar Coordinates representation of the range (distance) and bearing (direction) of an object from the robot.
@@ -237,13 +238,14 @@ class YoloDetect:
         range_bearing = RangeBearing()
         range_bearing.range = obj_range  # float
         range_bearing.bearing = float(bearing.item())  # float
+        range_bearing.elevation = float(elevation.item())
         range_bearing.id = int(detection.id.item())  # type: ignore # int
         range_bearing.obj_class = classes[int(detection.cls.item())]
         return range_bearing
 
-    def calculate_bearing_and_obj_range(
+    def calculate_range_bearing(
         self, depth_mask: np.ndarray
-    ) -> Tuple[float, Tensor]:
+    ) -> Tuple[float, Tensor, Tensor]:
         DEPTH_SCALE_FACTOR = (
             1.0 if self.is_sim else 0.001
         )  # IRL Kinect is in mm instead of meters
@@ -255,7 +257,7 @@ class YoloDetect:
             mean_depth = np.nanmean(masked_depth_values)
         else:
             # rospy.logwarn("Masked depth values are empty.")
-            return float("nan"), torch.tensor(float("nan"))
+            return float("nan"), torch.tensor(float("nan")), torch.tensor(float("nan"))
         masked_depth_values = masked_depth_values[masked_depth_values <= mean_depth]
 
         z: np.floating = np.nanmedian(masked_depth_values)
@@ -286,7 +288,8 @@ class YoloDetect:
         obj_range: float = np.sqrt(Oc[0] * Oc[0] + Oc[2] * Oc[2])
 
         bearing: Tensor = np.arctan2(-Oc[0], Oc[2])
-        return obj_range, bearing
+        elevation: Tensor = np.arctan2(-Oc[1], Oc[2])
+        return obj_range, bearing, elevation
 
     def run(self) -> None:
         rospy.spin()

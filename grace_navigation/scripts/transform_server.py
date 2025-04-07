@@ -2,7 +2,7 @@
 import rospy
 import tf2_ros
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException  # type: ignore
-from grace_navigation.srv import Transform, TransformResponse
+from grace_navigation.srv import Transform, TransformRequest, TransformResponse  # noqa: F401
 
 
 class TransformServer:
@@ -12,6 +12,7 @@ class TransformServer:
         self.service = rospy.Service("transform", Transform, self.transform)
 
     def transform(self, req):
+        # type: (TransformRequest) -> TransformResponse
         res = TransformResponse()
         try:
             trans = self.tf_buffer.lookup_transform(
