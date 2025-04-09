@@ -29,7 +29,7 @@ planner_configs:
     range: 0.0  # Max motion added to tree. ==> maxDistance_ default: 0.0, if 0.0, set on setup()
     goal_bias: 0.05  # When close to goal select goal, with this probability? default: 0.05
     simplify_solutions: false
-    longest_valid_segment_fraction: 0.03
+    longest_valid_segment_fraction: 0.005
   RRTConnect:
     type: geometric::RRTConnect
     range: 0.0  # Max motion added to tree. ==> maxDistance_ default: 0.0, if 0.0, set on setup()
@@ -123,7 +123,7 @@ planner_configs:
     dense_delta_fraction: 0.001  # delta fraction for interface detection. default: 0.001
     max_failures: 5000  # maximum consecutive failure limit. default: 5000
 arm_group:
-  default_planner_config: RRT
+  default_planner_config: RRTstar
   planner_configs:
     - SBL
     - EST

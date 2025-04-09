@@ -256,13 +256,13 @@ class YoloDetect:
 
         # Threshold out anything above the mean in masked_depth_values
         if masked_depth_values.size > 0:
-            mean_depth = np.nanmean(masked_depth_values)
+            mean_depth = np.nanmedian(masked_depth_values)
         else:
             # rospy.logwarn("Masked depth values are empty.")
             return float("nan"), torch.tensor(float("nan")), torch.tensor(float("nan"))
         masked_depth_values = masked_depth_values[masked_depth_values <= mean_depth]
 
-        z: np.floating = np.nanmean(masked_depth_values)
+        z: np.floating = np.nanmedian(masked_depth_values)
 
         if not np.isfinite(z) or z <= 0:
             rospy.logwarn("Invalid median depth value.")
@@ -280,9 +280,9 @@ class YoloDetect:
         x: NDArray[np.float64] = (ux - cx) * z / fx
         y: NDArray[np.float64] = (uy - cy) * z / fy
 
-        x_median: np.floating = np.nanmean(x)  # float64
-        y_median: np.floating = np.nanmean(y)  # float64
-        z_median: np.floating = np.nanmean(z)  # float32
+        x_median: np.floating = np.nanmedian(x)  # float64
+        y_median: np.floating = np.nanmedian(y)  # float64
+        z_median: np.floating = np.nanmedian(z)  # float32
 
         Oc: list[np.floating] = [x_median, y_median, z_median]
 

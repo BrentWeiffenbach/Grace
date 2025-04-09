@@ -16,11 +16,11 @@ from std_msgs.msg import Bool
 from trajectory_utils import extract_path_from_trajectory, quaternion_to_yaw
 
 # Pure Pursuit Controller Parameters (tunable)
-LOOKAHEAD_DISTANCE = 0.05  # Lookahead distance (meters)
-DESIRED_LINEAR_VELOCITY = 0.15  # Constant linear velocity (m/s)
-POSITION_THRESHOLD = 0.02  # Position tolerance (meters) for goal achievement
-ROTATION_THRESHOLD = 0.03  # Orientation tolerance (radians) for final rotation
-Kp_rotation = 0.3  # Proportional gain for rotation correction
+LOOKAHEAD_DISTANCE = 0.1  # Lookahead distance (meters)
+DESIRED_LINEAR_VELOCITY = 0.1  # Constant linear velocity (m/s)
+POSITION_THRESHOLD = 0.022  # Position tolerance (meters) for goal achievement
+ROTATION_THRESHOLD = 0.01  # Orientation tolerance (radians) for final rotation
+Kp_rotation = 0.55 # Proportional gain for rotation correction
 
 # Global variable to store current odometry
 current_odom = None
@@ -37,8 +37,7 @@ def odom_callback(data):
 
 def rotate_to_final_orientation(final_yaw):
     """
-    Rotates the robot in place until its orientation matches the final desired yaw within a tolerance,
-    or until a timeout is reached.
+    Rotates the robot in place until its orientation matches the final desired yaw within a tolerance.
 
     Args:
         final_yaw: The desired final yaw (radians).
@@ -50,17 +49,7 @@ def rotate_to_final_orientation(final_yaw):
         rospy.logwarn("Odometry data is not available. Skipping rotation.")
         return
 
-    # Timeout duration (in seconds)
-    timeout_duration = 10.0
-    start_time = rospy.Time.now()
-
     while not rospy.is_shutdown():
-        # Check for timeout
-        elapsed_time = (rospy.Time.now() - start_time).to_sec()
-        if elapsed_time > timeout_duration:
-            rospy.logwarn("Rotation timed out after {:.2f} seconds.".format(timeout_duration))
-            break
-
         if current_odom is None:
             rospy.logwarn("Waiting for odometry data for rotation...")
             rate.sleep()
@@ -71,7 +60,9 @@ def rotate_to_final_orientation(final_yaw):
         error_yaw = math.atan2(
             math.sin(final_yaw - current_yaw), math.cos(final_yaw - current_yaw)
         )
-        rospy.logdebug("Rotation error: {:.2f} rad".format(error_yaw))
+        # rospy.loginfo("Current yaw: {:.2f}, Target yaw: {:.2f}, Error yaw: {:.2f}".format(
+        #     current_yaw, final_yaw, error_yaw
+        # ))
 
         # Check if the error is within the threshold
         if abs(error_yaw) < ROTATION_THRESHOLD:
@@ -80,9 +71,14 @@ def rotate_to_final_orientation(final_yaw):
 
         # Publish angular velocity command
         twist_msg = Twist()
-        twist_msg.angular.z = Kp_rotation * error_yaw
+        angular_velocity = Kp_rotation * error_yaw * 5.3
+        # Set a minimum angular velocity to ensure movement
+        if abs(angular_velocity) < 0.45:
+            angular_velocity = 0.45 if angular_velocity > 0 else -0.45
+        twist_msg.angular.z = angular_velocity
         twist_msg.linear.x = 0.0
         cmd_vel_pub.publish(twist_msg)
+        # rospy.loginfo("Published angular velocity: {:.2f}".format(twist_msg.angular.z))
         rate.sleep()
 
     # Stop rotation
@@ -161,6 +157,12 @@ def execute_trajectory_pure_pursuit(points, initial_pose):
         final_goal = path_xy[-1]
         goal_distance = math.hypot(final_goal[0] - current_x, final_goal[1] - current_y)
         if goal_distance < POSITION_THRESHOLD:
+            arrived_pub = rospy.Publisher("/grace/planar_arrived", Bool, queue_size=10)
+            rospy.sleep(1)
+            arrived_msg = Bool()
+            arrived_msg.data = True
+            arrived_pub.publish(arrived_msg)
+            rospy.loginfo("Published True to /grace/planar_arrived to indicate arrival at final goal.")
             rospy.loginfo(
                 "Final goal position reached: distance {:.2f} m.".format(goal_distance)
             )
@@ -174,8 +176,20 @@ def execute_trajectory_pure_pursuit(points, initial_pose):
     twist_msg.angular.z = 0.0
     cmd_vel_pub.publish(twist_msg)
 
+
     # Rotate in place to achieve the final orientation.
     rotate_to_final_orientation(final_yaw)
+    # Publish a small forward twist to grab the object.
+    rospy.sleep(10) #TODO: replace with waiting until the arm is done
+    twist_msg = Twist()
+    twist_msg.linear.x = 0.07  # Slow forward motion
+    twist_msg.angular.z = 0.0
+    start_time = rospy.Time.now()
+    while (rospy.Time.now() - start_time).to_sec() < 2.0:  # Move for 2 seconds
+        cmd_vel_pub.publish(twist_msg)
+        rospy.sleep(0.1)  # Small delay to maintain control loop
+    cmd_vel_pub.publish(Twist())  # Stop the robot
+    rospy.loginfo("Published small forward twist to grab the object.")
     rospy.loginfo("Pure pursuit trajectory execution complete.")
     # Publish a True boolean to /grace/planar_execution to indicate completion.
     completion_pub = rospy.Publisher("/grace/planar_execution", Bool, queue_size=10)
