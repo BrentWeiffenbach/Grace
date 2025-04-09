@@ -18,7 +18,7 @@ class GetObjectPoseServer:
         self.br = TransformBroadcaster()
         self.tfBuffer = tf2_ros.Buffer(rospy.Duration(10))
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
-        self.ref_link_frame = "base_link"
+        self.ref_link_frame = "base_footprint"
         self.camera_height = 0.3048  # measured
         self.service = rospy.Service(
             "get_object_pose", GetObjectPose, self.callback
@@ -29,7 +29,7 @@ class GetObjectPoseServer:
         res = GetObjectPoseResponse()
         res.pose = PoseStamped()
         
-        target_frame_rel = "base_link"
+        target_frame_rel = "base_footprint"
         source_frame_rel = "camera_rgb_optical_frame"
         # use tf to find position
         try:

@@ -156,12 +156,14 @@ class YoloDetect:
         image_array: np.ndarray = ros_numpy.numpify(self.latest_rgb_image)  # type: ignore
         depth_array: np.ndarray = ros_numpy.numpify(self.latest_depth_image)  # type: ignore
 
-        CONFIDENCE_SCORE: Final[float] = 0.45
+        CONFIDENCE_SCORE: Final[float] = 0.30
         result: List[Results] = []
 
         # Get the results
+        # Define the class indices for chair, suitcase, cup, sportsball, dining table, and bottle
+        target_classes = [56, 28, 41, 37, 60, 39]  # COCO class indices for the specified objects
         result = self.model.track(
-            source=image_array, conf=CONFIDENCE_SCORE, persist=True
+            source=image_array, conf=CONFIDENCE_SCORE, persist=True, classes=target_classes
         )  # get the results
         if YoloDetect.verbose:
             SHOW_DETECTION_BOXES: Final[bool] = False

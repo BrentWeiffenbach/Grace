@@ -89,11 +89,13 @@ class ArmController:
             self.final_point_sent = True
         elif self.arm_status == "completed":
             if self.state == RobotState.PICKING:
+                rospy.wait_for_message('/grace/planar_execution', Bool)
                 rospy.loginfo("State is PICKING. Closing the gripper.")
                 self.gripper_pub.publish("close")
                 rospy.sleep(1)
                 self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.PLACING:
+                rospy.wait_for_message('/grace/planar_execution', Bool)
                 rospy.loginfo("State is PLACING. Opening the gripper.")
                 self.gripper_pub.publish("open")
                 rospy.sleep(1)
