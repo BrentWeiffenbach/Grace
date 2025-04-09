@@ -66,14 +66,21 @@ class ArmController:
     
     def zeroing(self):
         group = MoveGroupCommander("arm_group")  # Use your specific planning group name
-        group.set_longest_valid_segment_fraction(0.09)  # Set the longest valid segment fraction
-        # rospy.loginfo("State is returning to zero pose")
-        # self.arm_control_status_pub.publish(Bool(False))
-        # group.set_start_state_to_current_state()
+        
+        # Or alternatively, you can set it using ROS parameter server
+        rospy.set_param("/move_group/ompl/arm_group/longest_valid_segment_fraction", 0.009)
+        
+        rospy.loginfo("Setting precise trajectory planning (0.09) for zeroing")
+        
+        # Set joint targets
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
         group.set_joint_value_target(joint_values)
         success, plan, _, _ = group.plan()
+        
+        # Reset the parameter back to normal for other operations
+        rospy.set_param("/move_group/ompl/arm_group/longest_valid_segment_fraction", 0.03)
+        
         self.state = RobotState.EXPLORING
 
     def arm_status_callback(self, msg):
