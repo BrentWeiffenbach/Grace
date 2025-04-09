@@ -114,7 +114,6 @@ class MoveItGrasping:
                 self.publish_marker("base_footprint", self.object_posestamped.pose, "actual_obj")
 
                 self.plan_base()
-                rospy.sleep(3)
                 self.plan_arm()
 
             except rospy.ServiceException as se:
@@ -127,7 +126,7 @@ class MoveItGrasping:
 
     def plan_base(self):
         # Adjust the pose for base_group
-        self.base_goal_pose.position.x = self.object_posestamped.pose.position.x + -0.3
+        self.base_goal_pose.position.x = self.object_posestamped.pose.position.x + -0.35
         self.base_goal_pose.position.y = self.object_posestamped.pose.position.y
         self.base_goal_pose.position.z = 0.0
         self.base_goal_pose.orientation = self.object_posestamped.pose.orientation
@@ -225,12 +224,14 @@ class MoveItGrasping:
             rospy.logerr("Error planning base movement: %s", str(e))
             return False
     def plan_arm(self):
-        virtual_obj_pose = self.transform_pose_to_virtual_baselink(self.object_posestamped, self.base_goal_pose)
-        
-        # Adjust the x position by 3.5 inches (converted to meters)
-        virtual_obj_pose.pose.position.x -= 8.0 * 0.0254  # 1 inch = 0.0254 meters
+        virtual_obj_pose = self.transform_pose_to_virtual_baselink()
         
         self.publish_marker("base_link", virtual_obj_pose.pose, "virtual_obj_pose")
+
+        # Set goal tolerances for the arm group
+        self.arm_group.set_goal_position_tolerance(0.01)  # 1 cm tolerance
+        self.arm_group.set_goal_orientation_tolerance(0.05)  # ~2.87 degrees tolerance
+        self.arm_group.set_goal_tolerance(0.01)  # General tolerance
 
         self.arm_group.set_pose_target(virtual_obj_pose)
         self.arm_group.set_num_planning_attempts(10)
@@ -270,7 +271,7 @@ class MoveItGrasping:
         if self.state in [RobotState.PLACING, RobotState.PICKING]:
             self.publish_goal()
 
-    def transform_pose_to_virtual_baselink(self, object_pose, base_goal_pose):
+    def transform_pose_to_virtual_baselink(self):
         # Convert the base goal pose to transformation matrix
         trans = [self.base_goal_pose.position.x, self.base_goal_pose.position.y, self.base_goal_pose.position.z]
         rot = [
@@ -286,15 +287,15 @@ class MoveItGrasping:
 
         # Convert object pose to matrix
         obj_trans = [
-            object_pose.pose.position.x,
-            object_pose.pose.position.y,
-            object_pose.pose.position.z
+            self.object_posestamped.pose.position.x - 0.1,
+            self.object_posestamped.pose.position.y,
+            self.object_posestamped.pose.position.z
         ]
         obj_rot = [
-            object_pose.pose.orientation.x,
-            object_pose.pose.orientation.y,
-            object_pose.pose.orientation.z,
-            object_pose.pose.orientation.w
+            self.object_posestamped.pose.orientation.x,
+            self.object_posestamped.pose.orientation.y,
+            self.object_posestamped.pose.orientation.z,
+            self.object_posestamped.pose.orientation.w
         ]
         T_obj = tf.transformations.concatenate_matrices(tf.transformations.translation_matrix(obj_trans), tf.transformations.quaternion_matrix(obj_rot))
 
