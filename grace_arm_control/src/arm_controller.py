@@ -70,7 +70,9 @@ class ArmController:
         # Or alternatively, you can set it using ROS parameter server
         rospy.set_param("/move_group/ompl/arm_group/longest_valid_segment_fraction", 0.009)
         
-        rospy.loginfo("Setting precise trajectory planning (0.09) for zeroing")
+        rospy.loginfo("Setting precise trajectory planning (0.009) for zeroing")
+
+        rospy.sleep(0.5)
         
         # Set joint targets
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
