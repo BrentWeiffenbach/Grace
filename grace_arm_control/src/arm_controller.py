@@ -30,6 +30,8 @@ class ArmController:
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
         self.gripper_pub = rospy.Publisher('/grace/gripper', String, queue_size=10)
         self.arm_control_status_pub = rospy.Publisher('/grace/arm_control_status', Bool, queue_size=10)
+        
+        self.group = MoveGroupCommander("arm_group")
 
     def state_callback(self, msg):
         self.state = msg.state
@@ -65,20 +67,18 @@ class ArmController:
         self.send_next_trajectory_point()
     
     def zeroing(self):
-        group = MoveGroupCommander("arm_group")  # Use your specific planning group name
-        
-        # Or alternatively, you can set it using ROS parameter server
-        rospy.set_param("/move_group/ompl/arm_group/longest_valid_segment_fraction", 0.009)
-        
-        rospy.loginfo("Setting precise trajectory planning (0.009) for zeroing")
-
-        rospy.sleep(0.5)
-        
-        # Set joint targets
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
-        group.set_joint_value_target(joint_values)
-        success, plan, _, _ = group.plan()
+        self.group.set_joint_value_target(joint_values)
+        plan_success, plan, _, _ = self.group.plan()
+        if plan_success:
+            rospy.loginfo(
+                "Arm zero planning successful"
+            )
+            return True
+        else:
+            rospy.logerr("Arm zero planning failed")
+
         
         # Reset the parameter back to normal for other operations
         rospy.set_param("/move_group/ompl/arm_group/longest_valid_segment_fraction", 0.03)
