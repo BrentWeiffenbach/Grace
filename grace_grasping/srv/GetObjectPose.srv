@@ -1,4 +1,5 @@
-grace_navigation/RangeBearing range_bearing
+string target_obj_name
+bool only_detect
 ---
 geometry_msgs/PoseStamped pose
 bool success

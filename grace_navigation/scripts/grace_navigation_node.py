@@ -1,5 +1,6 @@
 from math import atan2
 from typing import Dict, List, Tuple, Union
+
 import actionlib
 import numpy as np
 import rospy
@@ -14,15 +15,13 @@ from move_base_msgs.msg import (
 )
 from nav_msgs.msg import OccupancyGrid, Odometry
 from std_msgs.msg import Bool, Int16
+from utils import MarkerPublisher
 from visualization_msgs.msg import MarkerArray
 
-from utils import MarkerPublisher
-
+from grace_grasping.srv import GetObjectPose, GetObjectPoseResponse
 from grace_navigation.msg import (
     Object2D,
     Object2DArray,
-    RangeBearing,
-    RangeBearingArray,
     RobotGoalMsg,
     RobotState,
 )
@@ -359,7 +358,7 @@ class GraceNavigation:
             - np.array([target_pose.position.x, target_pose.position.y])
         )
 
-        GOAL_REACH_THRESHOLD = 0.3  # TODO: Tune this
+        GOAL_REACH_THRESHOLD = 0.3  # Tunable
 
         if (
             last_goal_distance <= GOAL_REACH_THRESHOLD
@@ -382,44 +381,34 @@ class GraceNavigation:
         self.goal_pose = None
 
     def yolo_final_check(self) -> bool:
-        # TODO: Replace with the ObjectDetection service
-        # TODO: Add a turn torwards object center before exiting
         if self.final_checking:
             return False
         self.final_checking = True
-        # self.move_base.cancel_all_goals()
-
         # Stop the robot
         twist_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         twist = Twist()
         twist_pub.publish(twist)
-
         target_obj_name: str = (
             self.goal.place_location if self.has_object else self.goal.pick_object
         )
 
         # Only be done if the yolo object is visible at the goal
-        # Subscribe to /range_bearing
         try:
-            detections = rospy.wait_for_message(
-                "/range_bearing", RangeBearingArray, timeout=3
-            )
-            assert isinstance(detections, RangeBearingArray)
-            if detections.range_bearings is not None:
-                for detection in detections.range_bearings:
-                    detection: RangeBearing
-                    if detection.obj_class == target_obj_name:
-                        rospy.loginfo("YOLO final check worked!")
-                        self.final_checking = False
-                        self.done_flag = True
-                        return True
-            else:
-                rospy.logwarn("No YOLO detection at goal")
-
+            rospy.wait_for_service("get_object_pose", timeout=5)
+            obj_pose_srv = rospy.ServiceProxy("get_object_pose", GetObjectPose)
         except rospy.ROSException as e:
-            rospy.logwarn(f"Timeout or error in YOLO final check: {e}")
-        except Exception as e:
-            rospy.logerr(f"Error in YOLO final check: {e}")
+            rospy.logerr("YOLO_final_check failed to connect to GetObjectPose service! {}".format(e))
+            obj_pose_srv = None
+
+        if obj_pose_srv is not None:
+            obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(target_obj_name, True)
+            if obj_pose_srv_result.success:
+                    rospy.loginfo("YOLO final check worked!")
+                    self.final_checking = False
+                    self.done_flag = True
+                    return True
+            else: 
+                rospy.logwarn("Pose is unknown")        
 
         self.should_update_goal = True
         self.done_flag = False
@@ -461,7 +450,9 @@ class GraceNavigation:
             self.should_update_goal = True
 
     def find_object_in_semantic_map(self, obj: str) -> Union[Point, None]:
-        """
+        """Finds the provided object in the semantic map, and returns its location, or None if it was not found.
+        Args:
+            obj (str): The object to find in the semantic map.
         Returns:
             Union (Point, None): The object found's coordinates, or None if it was not found. In map coordinates.
         """
@@ -495,6 +486,7 @@ class GraceNavigation:
         return None
 
     def clear_last_goal(self) -> None:
+        """Clears self.last goal by setting everything to garbage values."""
         self.last_goal = Pose()
         self.last_goal.position.x = float("inf")
         self.last_goal.position.y = float("inf")
@@ -536,6 +528,13 @@ class GraceNavigation:
         sizes: List[float],
         target_pose: Union[Pose, None] = None,
     ) -> Union[List[Tuple[Point, Union[np.floating, float]]], None]:
+        """Scores the frontiers based on the distance, size of frontier, and direction the robot is facing
+        
+        Args:
+            frontiers (List[Point]): The frontiers.
+            sizes (List[float]): The size of the frontiers.
+            target_pose (Pose, optional): The pose to use as a hueristic for scoring frontiers. Defaults to None.
+        """
         if not frontiers or not sizes or len(frontiers) != len(sizes):
             rospy.logwarn(
                 "Frontiers and sizes must be non-empty and of the same length."
@@ -548,9 +547,9 @@ class GraceNavigation:
         # use goal pose if passsed, or current_pose
         target_pose = target_pose or current_pose
         
-        ALIGNMENT_WEIGHT = 7 #TODO: Tune This
-        MIN_DISTANCE = 0.75 #TODO: Tune this
-        MAX_DISTANCE = 30.0 #TODO: Tune this
+        ALIGNMENT_WEIGHT = 7 # Tunable
+        MIN_DISTANCE = 0.75 # Tunable
+        MAX_DISTANCE = 30.0 # Tunable
         MIN_SIZE = max(40.0, sum(sizes) / len(sizes))
         
         scored_frontiers: List[Tuple[Point, Union[np.floating, float]]] = []
@@ -664,7 +663,7 @@ class GraceNavigation:
             A valid Pose or None if no valid offset could be found
         """
         MIN_OFFSET = 19 if is_goal else 3
-        MAX_OFFSET = 37  if is_goal else 100 # TODO: Tune this
+        MAX_OFFSET = 37  if is_goal else 100 # Tunable
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
                 self.frontier_search.global_costmap.info.height,
@@ -714,7 +713,7 @@ class GraceNavigation:
                 - np.array([current_pose.position.x, current_pose.position.y])
             )
             # when robot is already close to the goal obj
-            GOAL_PROXIMITY_THRESHOLD = 1.5  # TODO: Tune
+            GOAL_PROXIMITY_THRESHOLD = 1.5  # Tunable
             if distance_to_robot <= GOAL_PROXIMITY_THRESHOLD and is_goal:
                 pose = Pose()
                 pose.position = current_pose.position

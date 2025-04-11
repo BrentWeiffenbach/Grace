@@ -1,4 +1,4 @@
-*# Grace
+# Grace
 
 Key Launch Files:
 
@@ -22,11 +22,6 @@ To launch the turtlebot navigation in sim, run `roslaunch grace.launch`. Find th
 You can also set the output to verbose by using the `verbose:=true` argument.
 
 Run the onboard on the TurtleBot by running `roslaunch onboard.launch`.
-
-
-## To Test
-
-* Verify that the logic in Semantic SLAM is the same
 
 
 ## Known Issues

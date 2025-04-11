@@ -1,15 +1,21 @@
 #!/usr/bin/env python2.7
+import numpy as np
 import rospy
-from tf import TransformBroadcaster, transformations
 import tf2_ros
+from geometry_msgs.msg import Point, PoseStamped
+from tf import TransformBroadcaster, transformations
 from tf2_ros import (
     ConnectivityException,  # type: ignore
     ExtrapolationException,  # type: ignore
     TransformException,  # type: ignore
 )
-from geometry_msgs.msg import PoseStamped, Point
-from grace_grasping.srv import GetObjectPose, GetObjectPoseResponse, GetObjectPoseRequest  # noqa: F401
-import numpy as np
+
+from grace_grasping.srv import (
+    GetObjectPose,
+    GetObjectPoseRequest,  # noqa: F401
+    GetObjectPoseResponse,
+)
+from grace_navigation.msg import RangeBearing, RangeBearingArray
 
 
 class GetObjectPoseServer:
@@ -20,15 +26,57 @@ class GetObjectPoseServer:
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
         self.ref_link_frame = "base_footprint"
         self.camera_height = 0.3048  # measured
+        self.RANGE_BEARING_CACHE_SIZE = 5
+        """The number of range bearings to store in cache"""
+        self.range_bearings = []
+        """Cached range bearings. The most recent one is located at index 0.
+        """
+
+        self.range_bearing_sub = rospy.Subscriber(
+            "/range_bearing", RangeBearingArray, self.range_bearing_callback
+        )
         self.service = rospy.Service(
-            "get_object_pose", GetObjectPose, self.callback
+            "get_object_pose", GetObjectPose, self.service_callback
         )
 
-    def callback(self, msg):
+    def range_bearing_callback(self, msg):
+        """Callback to store the latest RangeBearingArray message."""
+        if len(self.range_bearings) == self.RANGE_BEARING_CACHE_SIZE:
+            self.range_bearings.pop()  # Remove oldest element
+        self.range_bearings.insert(0, msg)  # Insert newest range bearing
+
+    def service_callback(self, msg):
         # type: (GetObjectPoseRequest) -> GetObjectPoseResponse
+        success, obj_range_bearing = self.check_for_object(msg.target_obj_name)
+        if msg.only_detect:
+            return GetObjectPoseResponse(PoseStamped(), success)
+
+        if not success:
+            return GetObjectPoseResponse(PoseStamped(), success)
+        return self.get_object_pose(obj_range_bearing)
+
+    def check_for_object(self, obj):
+        # type: (str) -> (bool, RangeBearing) # type: ignore
+        rospy.loginfo("Received request for object: {}".format(obj))
+
+        if len(self.range_bearings) == 0:
+            rospy.logwarn("Object {} not found.".format(obj))
+            return False, RangeBearing()
+
+        for range_bearing_array in self.range_bearings:
+            for detection in range_bearing_array.range_bearings:
+                    if detection.obj_class == obj:
+                        rospy.loginfo("Object {} found.".format(obj))
+                        return True, detection
+
+        rospy.logwarn("Object {} not found.".format(obj))
+        return False, RangeBearing()
+
+    def get_object_pose(self, range_bearing):
+        # type: (RangeBearing) -> GetObjectPoseResponse
         res = GetObjectPoseResponse()
         res.pose = PoseStamped()
-        
+
         target_frame_rel = "base_footprint"
         source_frame_rel = "camera_rgb_optical_frame"
         # use tf to find position
@@ -61,14 +109,10 @@ class GetObjectPoseServer:
             uy = pos[1]  # type: np.float64
 
             # Object's position in world frame
-            object_x = (
-                ux + np.cos(ang + msg.range_bearing.bearing) * msg.range_bearing.range
-            )  # type: np.float64
-            object_y = (
-                uy + np.sin(ang + msg.range_bearing.bearing) * msg.range_bearing.range
-            )  # type: np.float64
-            object_z = pos[2] + msg.range_bearing.range * np.sin(
-                msg.range_bearing.elevation
+            object_x = ux + np.cos(ang + range_bearing.bearing) * range_bearing.range  # type: np.float64
+            object_y = uy + np.sin(ang + range_bearing.bearing) * range_bearing.range  # type: np.float64
+            object_z = pos[2] + range_bearing.range * np.sin(
+                range_bearing.elevation
             )  # Calculate object's z coordinate
 
             res.pose.header.frame_id = self.ref_link_frame

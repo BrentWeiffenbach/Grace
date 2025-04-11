@@ -83,6 +83,8 @@
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
         <param name="arm" value="$(arg arm)" />
+        <param name="pick_object" value="dining table" />
+        <param name="place_location" value="suitcase" />
     </node>
 
     <!-- Launch RViz for navigation and arm control visualizations--> 

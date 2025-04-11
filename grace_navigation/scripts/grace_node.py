@@ -393,17 +393,19 @@ if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     verbose = rospy.get_param("~verbose", False)
     arm_enabled = rospy.get_param("~arm", False)
+    pick_object = rospy.get_param("~pick_object", "dining table")
+    place_location = rospy.get_param("~place_location", "suitcase")
     assert type(verbose) is bool
     assert type(arm_enabled) is bool
+    assert type(pick_object) is str
+    assert type(place_location) is str
     grace = GraceNode(verbose=verbose, arm_enabled=arm_enabled)
     rospy.on_shutdown(grace.shutdown)
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
     grace.state = GraceNode.DEFAULT_STATE
-    # if arm_enabled:
-    #     rospy.wait_for_message("/grace/arm_control_status", Bool)
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location="chair", pick_object="suitcase")
+    grace.goal = RobotGoal(place_location=place_location, pick_object=pick_object)
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:
