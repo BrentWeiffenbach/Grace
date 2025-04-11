@@ -115,6 +115,8 @@ class ArmController:
                 self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.EXPLORING:
                 self.arm_control_status_pub.publish(Bool(True))
+            elif self.state == RobotState.ZEROING:
+                self.arm_control_status_pub.publish(Bool(True))
             else:
                 rospy.loginfo("Unkown state: {}".format(self.state))
         elif self.arm_status == "lost_sync":
