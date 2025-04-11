@@ -44,13 +44,15 @@ class RobotGoal:
                          "microwave","oven","toaster","sink","refrigerator","book","clock",
                          "vase","scissors","teddy bear","hair drier","toothbrush"]  # fmt: skip
 
-    def __init__(self, place_location: str, pick_object: str) -> None:
+    def __init__(self, place_location: str, pick_location: str, pick_object: str) -> None:
         """
         Args:
             place_location (str): The object to place the `pick_object` on. Must be a valid YOLO class.
+            pick_location (str): The object to get `pick_object` from. Must be a valid YOLO class.
             pick_object (str): The object to place on a `place_location`. Must be a valid YOLO class.
         """
         self.place_location = place_location
+        self.pick_location = pick_location
         self.pick_object = pick_object
 
     @property
@@ -70,6 +72,23 @@ class RobotGoal:
             str: The pick object's class name.
         """
         return self._pick_object
+    
+    @property
+    def pick_location(self) -> str:
+        """The object to get the `pick_object` from.
+
+        Returns:
+            str: The pick locations's class name.
+        """
+        return self._pick_location
+    
+    @pick_location.setter
+    def pick_location(self, pick_location: str) -> None:
+        if not RobotGoal.is_valid_class(pick_location):
+            raise ValueError(
+                f"Invalid pick location. {pick_location} is not in RobotGoal.classes!"
+            )
+        self._pick_location = pick_location
 
     @place_location.setter
     def place_location(self, place_location: str) -> None:
@@ -96,14 +115,15 @@ class RobotGoal:
             return False
         return (
             self.pick_object == other.pick_object
+            and self.pick_location == other.pick_location
             and self.place_location == other.place_location
         )
 
     def __str__(self) -> str:
-        return f"Goal: Place {self.pick_object} on a {self.place_location}"
+        return f"Goal: Pick {self.pick_object} from a {self.pick_location} on a {self.place_location}"
 
     def __repr__(self) -> str:
-        return f"RobotGoal(place_location={self.place_location}, pick_object={self.pick_object})"
+        return f"RobotGoal(place_location={self.place_location}, pick_location={self.pick_location}, pick_object={self.pick_object})"
 
 
 _states: Dict[int, str] = get_constants_from_msg(RobotState)
@@ -327,6 +347,7 @@ class GraceNode:
             self.has_object = False
             self.has_object_publisher.publish(self.has_object)
             self.state = RobotState.ZEROING
+            move_backwards()
         elif self.state == RobotState.ZEROING:
             if self.has_object and is_completed.data:
                 self.state = RobotState.EXPLORING
@@ -361,6 +382,7 @@ class GraceNode:
 
         self.goal_publisher.publish(
             self.goal.place_location,
+            self.goal.pick_location,
             self.goal.pick_object,
         )
 
@@ -371,7 +393,7 @@ class GraceNode:
 
 
 def rotate_360() -> None:
-    rotate_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
+    cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
     rotate_msg = Twist()
     rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
 
@@ -380,32 +402,44 @@ def rotate_360() -> None:
     rotate_end_time = rospy.Time.now() + rotate_duration
 
     while rospy.Time.now() < rotate_end_time:
-        rotate_pub.publish(rotate_msg)
+        cmd_vel_pub.publish(rotate_msg)
         rospy.sleep(0.1)
 
     # Stop rotation
     rotate_msg.angular.z = 0.0
-    rotate_pub.publish(rotate_msg)
+    cmd_vel_pub.publish(rotate_msg)
     # Rotate 360 degrees before doing exploration
+def move_backwards():
+    cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
+    twist_msg = Twist()
+    twist_msg.linear.x = -0.09  # Slow backward motion
+    twist_msg.angular.z = 0.0
+    start_time = rospy.Time.now()
+    while (rospy.Time.now() - start_time).to_sec() < 3.0:  # time to move
+        cmd_vel_pub.publish(twist_msg)
+        rospy.sleep(0.1)  # Small delay to maintain control loop
+    cmd_vel_pub.publish(Twist())  # Stop the robot
 
 
 if __name__ == "__main__":
     rospy.init_node(name="GraceNode")  # type: ignore
     verbose = rospy.get_param("~verbose", False)
     arm_enabled = rospy.get_param("~arm", False)
-    pick_object = rospy.get_param("~pick_object", "dining table")
+    pick_location = rospy.get_param("~pick_location", "dining table")
     place_location = rospy.get_param("~place_location", "suitcase")
+    pick_object = rospy.get_param("~pick_object", "cup")
     assert type(verbose) is bool
     assert type(arm_enabled) is bool
-    assert type(pick_object) is str
+    assert type(pick_location) is str
     assert type(place_location) is str
+    assert type(pick_object) is str
     grace = GraceNode(verbose=verbose, arm_enabled=arm_enabled)
     rospy.on_shutdown(grace.shutdown)
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
     grace.state = GraceNode.DEFAULT_STATE
     rospy.sleep(5)
     rotate_360()
-    grace.goal = RobotGoal(place_location=place_location, pick_object=pick_object)
+    grace.goal = RobotGoal(place_location=place_location, pick_location=pick_location, pick_object=pick_object)
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()
     try:

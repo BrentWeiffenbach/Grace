@@ -169,7 +169,7 @@ class GraceNavigation:
         self.has_object = msg.data
 
     def goal_callback(self, msg: RobotGoalMsg) -> None:
-        goal = RobotGoal(place_location=msg.place_location, pick_object=msg.pick_object)
+        goal = RobotGoal(place_location=msg.place_location, pick_location=msg.pick_location, pick_object=msg.pick_object)
         self.goal = goal
 
     def state_callback(self, msg: RobotState) -> None:
@@ -250,7 +250,7 @@ class GraceNavigation:
 
         assert self.goal
         target_obj_name: str = (
-            self.goal.place_location if self.has_object else self.goal.pick_object
+            self.goal.place_location if self.has_object else self.goal.pick_location
         )
 
         navigating_to_object = False
@@ -389,7 +389,7 @@ class GraceNavigation:
         twist = Twist()
         twist_pub.publish(twist)
         target_obj_name: str = (
-            self.goal.place_location if self.has_object else self.goal.pick_object
+            self.goal.place_location if self.has_object else self.goal.pick_location
         )
 
         # Only be done if the yolo object is visible at the goal

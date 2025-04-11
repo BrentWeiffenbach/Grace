@@ -23,6 +23,7 @@ class MoveItGrasping:
         self.offset_posestamped = PoseStamped()
         self.base_goal_pose = Pose()
         self.place_location = "suitcase"
+        self.pick_object_goal = "cup"
         rospy.sleep(5)  # Wait for move_group to initialize
         self.arm_group = MoveGroupCommander("arm_group", wait_for_servers=20)
         self.base_group = MoveGroupCommander("base_group", wait_for_servers=20)
@@ -129,7 +130,7 @@ class MoveItGrasping:
     def pick_object(self):
         assert self.obj_pose_srv is not None
         try:
-            object_posestamped = self.get_pose_of_obj("cup")
+            object_posestamped = self.get_pose_of_obj(self.pick_object_goal)
             if object_posestamped is None:
                 return
 
@@ -330,6 +331,7 @@ class MoveItGrasping:
             
     def goal_callback(self, msg):
         self.place_location = msg.place_location
+        self.pick_object_goal = msg.pick_object
 
     def transform_goal_to_relative_baselink(self):
         try:

@@ -1,2 +1,3 @@
 string place_location
+string pick_location
 string pick_object

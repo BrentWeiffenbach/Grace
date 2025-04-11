@@ -97,7 +97,7 @@ class MarkerPublisher:
         goal_name: str,
         has_object: Optional[bool] = None,
         has_object_topic: str = GraceNode.HAS_OBJECT_TOPIC,
-        pick_object_name: str = "",
+        pick_location_name: str = "",
         place_location_name: str = "",
         namespace: str = "Object_Goal",
         color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
@@ -119,8 +119,8 @@ class MarkerPublisher:
                     )
                 has_object = False
 
-        if pick_object_name and place_location_name:
-            target_obj_name = place_location_name if has_object else pick_object_name
+        if pick_location_name and place_location_name:
+            target_obj_name = place_location_name if has_object else pick_location_name
         else:
             target_obj_name = goal_name
 
