@@ -347,7 +347,7 @@ class GraceNode:
             self.has_object = False
             self.has_object_publisher.publish(self.has_object)
             self.state = RobotState.ZEROING
-            move_backwards()
+            ManualControl.move_backwards()
         elif self.state == RobotState.ZEROING:
             if self.has_object and is_completed.data:
                 self.state = RobotState.EXPLORING
@@ -392,33 +392,40 @@ class GraceNode:
         self.state = RobotState.EXPLORING
 
 
-def rotate_360() -> None:
-    cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
-    rotate_msg = Twist()
-    rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
+class ManualControl:
+    cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/teleop", Twist, queue_size=1)
+    # def __init__(self) -> None:
+    #     self.cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
+    
+    
+    @staticmethod
+    def rotate_360() -> None:
+        
+        rotate_msg = Twist()
+        rotate_msg.angular.z = 1.0  # Rotate at 1 rad/s
 
-    # Rotate for the duration required to complete a full rotation
-    rotate_duration = rospy.Duration(2 * 2 * 3.14159 / abs(rotate_msg.angular.z)) # type: ignore
-    rotate_end_time = rospy.Time.now() + rotate_duration
+        # Rotate for the duration required to complete a full rotation
+        rotate_duration = rospy.Duration(2 * 2 * 3.14159 / abs(rotate_msg.angular.z)) # type: ignore
+        rotate_end_time = rospy.Time.now() + rotate_duration
 
-    while rospy.Time.now() < rotate_end_time:
-        cmd_vel_pub.publish(rotate_msg)
-        rospy.sleep(0.1)
+        while rospy.Time.now() < rotate_end_time:
+            ManualControl.cmd_vel_pub.publish(rotate_msg)
+            rospy.sleep(0.1)
 
-    # Stop rotation
-    rotate_msg.angular.z = 0.0
-    cmd_vel_pub.publish(rotate_msg)
-    # Rotate 360 degrees before doing exploration
-def move_backwards():
-    cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=1)
-    twist_msg = Twist()
-    twist_msg.linear.x = -0.09  # Slow backward motion
-    twist_msg.angular.z = 0.0
-    start_time = rospy.Time.now()
-    while (rospy.Time.now() - start_time).to_sec() < 3.0:  # time to move
-        cmd_vel_pub.publish(twist_msg)
-        rospy.sleep(0.1)  # Small delay to maintain control loop
-    cmd_vel_pub.publish(Twist())  # Stop the robot
+        # Stop rotation
+        rotate_msg.angular.z = 0.0
+        ManualControl.cmd_vel_pub.publish(rotate_msg)
+        # Rotate 360 degrees before doing exploration
+    @staticmethod
+    def move_backwards():
+        twist_msg = Twist()
+        twist_msg.linear.x = -0.09  # Slow backward motion
+        twist_msg.angular.z = 0.0
+        start_time = rospy.Time.now()
+        while (rospy.Time.now() - start_time).to_sec() < 3.0:  # time to move
+            ManualControl.cmd_vel_pub.publish(twist_msg)
+            rospy.sleep(0.1)  # Small delay to maintain control loop
+        ManualControl.cmd_vel_pub.publish(Twist())  # Stop the robot
 
 
 if __name__ == "__main__":
@@ -438,7 +445,7 @@ if __name__ == "__main__":
     rospy.wait_for_message("/map", rospy.AnyMsg) # Wait for map before starting
     grace.state = GraceNode.DEFAULT_STATE
     rospy.sleep(5)
-    rotate_360()
+    ManualControl.rotate_360()
     grace.goal = RobotGoal(place_location=place_location, pick_location=pick_location, pick_object=pick_object)
     rospy.sleep(5)  # Sleep for an arbitrary 3 seconds to allow sim map to load
     grace.publish_goal()

@@ -6,7 +6,7 @@ import numpy as np
 import rospy
 from frontier_search import FrontierSearch
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist
-from grace_node import GraceNode, RobotGoal, get_constants_from_msg, rotate_360
+from grace_node import GraceNode, ManualControl, RobotGoal, get_constants_from_msg
 from map_msgs.msg import OccupancyGridUpdate
 from move_base_msgs.msg import (
     MoveBaseAction,
@@ -314,7 +314,7 @@ class GraceNavigation:
 
                 if frontier_pose is None:
                     GraceNavigation.verbose_log("No frontiers found, waiting...")
-                    rotate_360()
+                    ManualControl.rotate_360()
                     rospy.sleep(2)
                     continue
 
@@ -388,7 +388,7 @@ class GraceNavigation:
         twist_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         twist = Twist()
         twist_pub.publish(twist)
-        target_obj_name: str = (
+        target_location_name: str = (
             self.goal.place_location if self.has_object else self.goal.pick_location
         )
 
@@ -401,7 +401,9 @@ class GraceNavigation:
             obj_pose_srv = None
 
         if obj_pose_srv is not None:
-            obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(target_obj_name, True)
+            obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(target_location_name, True)
+            if not self.has_object:
+                obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(self.goal.pick_object, True)
             if obj_pose_srv_result.success:
                     rospy.loginfo("YOLO final check worked!")
                     self.final_checking = False
