@@ -111,8 +111,6 @@ class ArmController:
                 self.gripper_pub.publish("open")
                 rospy.sleep(1)
                 self.arm_control_status_pub.publish(Bool(True))
-            elif self.state == RobotState.ZEROING:
-                self.zeroing()
             elif self.state == RobotState.WAITING:
                 self.arm_control_status_pub.publish(Bool(True))
             elif self.state == RobotState.EXPLORING:
