@@ -23,6 +23,7 @@ class ArmController:
         self.final_point_sent = False
         self.home_sent = False
         self.zero_sent = False
+        self.group = None
 
         rospy.Subscriber('/move_group/result', MoveGroupActionResult, self.move_group_result_callback)
         rospy.Subscriber('/grace/arm_status', String, self.arm_status_callback)
@@ -30,8 +31,6 @@ class ArmController:
         self.arm_goal_pub = rospy.Publisher('/grace/arm_goal', JointState, queue_size=10, latch=True)
         self.gripper_pub = rospy.Publisher('/grace/gripper', String, queue_size=10)
         self.arm_control_status_pub = rospy.Publisher('/grace/arm_control_status', Bool, queue_size=10)
-        
-        self.group = MoveGroupCommander("arm_group")
 
     def state_callback(self, msg):
         self.state = msg.state
@@ -67,6 +66,8 @@ class ArmController:
         self.send_next_trajectory_point()
     
     def zeroing(self):
+        if self.group is None:
+            self.group = MoveGroupCommander("arm_group")
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
         self.group.set_joint_value_target(joint_values)
