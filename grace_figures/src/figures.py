@@ -47,7 +47,11 @@ class GraceFigures:
             filename (str): The name of the file to output. Should include a filetype (e.g. `image.png`).
             image (cv2.typing.MatLike): The image to print.
         """
-        full_path = os.path.join(os.path.dirname(__file__), "..", "figures", filename)
+        folder_path = os.path.join(os.path.dirname(__file__), "..", "figures")
+        os.makedirs(folder_path, exist_ok=True)
+        full_path = os.path.join(folder_path, filename)
+        if os.path.exists(full_path):
+            os.remove(full_path)
         return cv2.imwrite(full_path, image)
 
     def get_writable_occupancy_grid(self) -> cv2.typing.MatLike:
@@ -77,7 +81,15 @@ class GraceFigures:
 
         # Process Occupancy Grid
         map_image = self.get_writable_occupancy_grid()
-        colored_image = cv2.cvtColor(map_image, cv2.COLOR_GRAY2BGR)
+        map_uint8 = np.zeros_like(map_image, dtype=np.uint8)
+    
+        map_uint8[map_image == 0] = 255
+        map_uint8[map_image == 100] = 0
+        map_uint8[map_image > 0] = 255 - (map_image[map_image > 0] * 255 // 100)
+        
+        map_uint8[map_image == -1] = 127
+
+        colored_image = cv2.cvtColor(map_uint8, cv2.COLOR_GRAY2BGR)
         resolution = self.occupancy_grid.info.resolution
 
         origin_x = self.occupancy_grid.info.origin.position.x
@@ -90,7 +102,6 @@ class GraceFigures:
             grid_x = int(semantic_object.x - origin_x / resolution)
             grid_y = int(semantic_object.y - origin_y / resolution)
 
-            cv2.circle(colored_image, (grid_x, grid_y), 3, (0, 255, 0), -1) # type: ignore
             cv2.putText(
                 colored_image,
                 semantic_object.cls,
@@ -98,8 +109,12 @@ class GraceFigures:
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
                 (0, 255, 0),
+                1,
                 cv2.LINE_AA,
-            ) # type: ignore
+            )
+            
+        self.imwrite("semantic_objects.png", colored_image)
+
 
         if self.verbose:
             rospy.loginfo("Saved semantic map")

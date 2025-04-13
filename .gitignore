@@ -11,4 +11,6 @@ typings/moveit_commander
 typings/moveit_msgs
 __pycache__
 
+grace_figures/figures
+
 out
