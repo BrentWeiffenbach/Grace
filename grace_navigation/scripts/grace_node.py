@@ -343,7 +343,7 @@ class GraceNode:
             self.has_object = True
             self.has_object_publisher.publish(self.has_object)
             self.state = RobotState.ZEROING
-            rospy.wait_for_message("/grace/arm_status", String, 5)
+            rospy.sleep(15)
             ManualControl.move_backwards()
         elif self.state == RobotState.PLACING and is_completed.data:
             self.has_object = False
@@ -424,7 +424,7 @@ class ManualControl:
         twist_msg.linear.x = -0.09  # Slow backward motion
         twist_msg.angular.z = 0.0
         start_time = rospy.Time.now()
-        while (rospy.Time.now() - start_time).to_sec() < 3.0:  # time to move
+        while (rospy.Time.now() - start_time).to_sec() < 4.0:  # time to move
             ManualControl.cmd_vel_pub.publish(twist_msg)
             rospy.sleep(0.1)  # Small delay to maintain control loop
         ManualControl.cmd_vel_pub.publish(Twist())  # Stop the robot

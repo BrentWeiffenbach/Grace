@@ -19,14 +19,14 @@ import tf_conversions
 from nav_msgs.msg import Odometry
 
 # Pure Pursuit Controller Parameters (tunable)
-LOOKAHEAD_DISTANCE = 0.12  # Lookahead distance (meters)
-DESIRED_LINEAR_VELOCITY = 0.11  # Constant linear velocity (m/s)
+LOOKAHEAD_DISTANCE = 0.1  # Lookahead distance (meters)
+DESIRED_LINEAR_VELOCITY = 0.09  # Constant linear velocity (m/s)
 POSITION_THRESHOLD = 0.04  # Position tolerance (meters) for goal achievement
 ROTATION_THRESHOLD = 0.01  # Orientation tolerance (radians) for final rotation
 Kp_rotation = 0.55  # Proportional gain for rotation correction
 FINAL_ROT_KP = 5.3  # The amount angular_velocity gets multiplied by
 MIN_VELOCITY = 0.6  # Minimum angular velocity to ensure movement
-TIME_TO_MOVE_FORWARD = 1.5  # time to move forward after arm is finished
+TIME_TO_MOVE_FORWARD = 1.75  # time to move forward after arm is finished
 
 # Initialize TF listener
 tf_listener = None

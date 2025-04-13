@@ -231,7 +231,7 @@ class MoveItGrasping:
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
 
             self.plan_base()
-            # rospy.wait_for_message("/grace/planar_arrived", Bool)
+            rospy.sleep(5)
             self.plan_arm()
 
         except rospy.ServiceException as se:
