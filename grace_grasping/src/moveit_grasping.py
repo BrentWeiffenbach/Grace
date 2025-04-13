@@ -198,7 +198,7 @@ class MoveItGrasping:
                 self.publish_marker("map", object_posestamped.pose, "actual_obj")
 
             OFFSET_DISTANCE = (
-                -0.21
+                -0.22
             )  # Tunable value. Lower is farther away from the object.
             Z_OFFSET = 0.00  # Tunable value. Lower is more down
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
@@ -327,7 +327,7 @@ class MoveItGrasping:
                 self.base_group.set_joint_value_target(joint_values)
 
                 rospy.loginfo("Trying with joint values: %s", joint_values)
-                self.base_group.set_planning_time(1.0)
+                self.base_group.set_planning_time(3.0)
                 plan_success, plan, _, _ = self.base_group.plan()
 
                 if plan_success:
@@ -363,7 +363,7 @@ class MoveItGrasping:
 
         self.arm_group.set_pose_target(self.arm_relative_goal)
         self.arm_group.set_num_planning_attempts(10)
-        self.arm_group.set_planning_time(1.0)
+        self.arm_group.set_planning_time(2.0)
 
         success, plan, _, _ = self.arm_group.plan()
 

@@ -342,6 +342,7 @@ class GraceNavigation:
         return None
 
     def goto(self, target_pose: Pose, yield_when_done: bool = True) -> None:
+        return
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
@@ -553,7 +554,7 @@ class GraceNavigation:
         target_pose = target_pose or current_pose
         
         ALIGNMENT_WEIGHT = 7 # Tunable
-        MIN_DISTANCE = 0.75 # Tunable
+        MIN_DISTANCE = 1.0 # Tunable
         MAX_DISTANCE = 30.0 # Tunable
         MIN_SIZE = max(40.0, sum(sizes) / len(sizes))
         
@@ -667,8 +668,8 @@ class GraceNavigation:
         Returns:
             A valid Pose or None if no valid offset could be found
         """
-        MIN_OFFSET = 17 if is_goal else 3
-        MAX_OFFSET = 35  if is_goal else 100 # Tunable
+        MIN_OFFSET = 15 if is_goal else 3
+        MAX_OFFSET = 25  if is_goal else 100 # Tunable
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
                 self.frontier_search.global_costmap.info.height,

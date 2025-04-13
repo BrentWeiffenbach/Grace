@@ -26,7 +26,7 @@ ROTATION_THRESHOLD = 0.01  # Orientation tolerance (radians) for final rotation
 Kp_rotation = 0.55  # Proportional gain for rotation correction
 FINAL_ROT_KP = 5.3  # The amount angular_velocity gets multiplied by
 MIN_VELOCITY = 0.6  # Minimum angular velocity to ensure movement
-TIME_TO_MOVE_FORWARD = 1.75  # time to move forward after arm is finished
+TIME_TO_MOVE_FORWARD = 2.0  # time to move forward after arm is finished
 
 # Initialize TF listener
 tf_listener = None
