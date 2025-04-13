@@ -15,6 +15,7 @@
     <!-- Navigation node frontier exploration and interactions with semantic slam in python 3-->
     <node name="GraceNavigation" pkg="grace_navigation" type="grace_navigation_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
+        <param name="sim" value="$(arg sim)" />
     </node>
 
     <node name="transform_server" pkg="grace_navigation" type="transform_server.py" output="screen"/>

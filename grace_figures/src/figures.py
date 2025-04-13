@@ -1,10 +1,12 @@
-import rospy
-import cv2
-from grace_navigation.msg import RobotState, Object2DArray, Object2D
-import threading
-from nav_msgs.msg import OccupancyGrid
-import numpy as np
 import os
+import threading
+
+import cv2
+import numpy as np
+import rospy
+from nav_msgs.msg import OccupancyGrid
+
+from grace_navigation.msg import Object2D, Object2DArray, RobotState
 
 # TODO:
 # HALF DONE: Save occupancy grid map with overlayed semantic objects (only the most recent of each type of class)
@@ -119,8 +121,8 @@ class GraceFigures:
         for semantic_object in self.semantic_map.objects:
             semantic_object: Object2D
             # Convert from map coords to image coords
-            grid_x = int(semantic_object.x - origin_x / resolution)
-            grid_y = int(semantic_object.y - origin_y / resolution)
+            grid_x = int((semantic_object.x - origin_x) / resolution)
+            grid_y = int((semantic_object.y - origin_y) / resolution)
 
             color = color_map[semantic_object.cls]
             cv2.circle(colored_image, (grid_x, grid_y), 2, color, -1)
