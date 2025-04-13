@@ -7,7 +7,7 @@ import numpy as np
 import os
 
 # TODO:
-# Save occupancy grid map with overlayed semantic objects (only the most recent of each type of class)
+# HALF DONE: Save occupancy grid map with overlayed semantic objects (only the most recent of each type of class)
 # DONE: Save only occupancy grid image
 # Time to explore, time to first object, time to second object
 #  ??? Maybe the line cast for calc offset ???
