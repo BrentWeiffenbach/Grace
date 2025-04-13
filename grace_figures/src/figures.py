@@ -43,13 +43,23 @@ class GraceFigures:
     def semantic_map_callback(self, msg: Object2DArray) -> None:
         self.semantic_map = msg
 
-    def imwrite(self, filename: str, image: cv2.typing.MatLike) -> bool:
+    def imwrite(self, filename, image, directory=["..", "figures"]):
+        # type: (str, cv2.typing.MatLike, list[str] | str) -> bool
         """
         Args:
             filename (str): The name of the file to output. Should include a filetype (e.g. `image.png`).
             image (cv2.typing.MatLike): The image to print.
+            directory (list[str] | str, optional): The output directory of the image. Defaults to ../figures
+
+        Returns:
+            bool: The default return value of cv2's imwrite.
         """
-        folder_path = os.path.join(os.path.dirname(__file__), "..", "figures")
+        # Allow both strings and a list of strings
+        cleaned_directory_path = directory
+        if not isinstance(directory, list):
+            cleaned_directory_path = [directory]
+
+        folder_path = os.path.join(os.path.dirname(__file__), *cleaned_directory_path)
         os.makedirs(folder_path, exist_ok=True)
         full_path = os.path.join(folder_path, filename)
         if os.path.exists(full_path):
