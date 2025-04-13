@@ -3,7 +3,7 @@ from typing import Dict, Final, List, Union
 import actionlib
 import rospy
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 from grace_navigation.msg import RobotGoalMsg, RobotState
 
@@ -343,6 +343,8 @@ class GraceNode:
             self.has_object = True
             self.has_object_publisher.publish(self.has_object)
             self.state = RobotState.ZEROING
+            rospy.wait_for_message("/grace/arm_status", String, 5)
+            ManualControl.move_backwards()
         elif self.state == RobotState.PLACING and is_completed.data:
             self.has_object = False
             self.has_object_publisher.publish(self.has_object)

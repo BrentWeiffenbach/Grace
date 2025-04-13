@@ -13,7 +13,7 @@ class FrontierSearch:
         self.map_img: cv2.typing.MatLike
         """A variable to store the computed grayscale map"""
 
-        self._global_costmap: OccupancyGrid
+        self._global_costmap: OccupancyGrid = OccupancyGrid()
         self.global_costmap_img: cv2.typing.MatLike
 
     @property

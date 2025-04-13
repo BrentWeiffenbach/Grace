@@ -22,6 +22,7 @@ class MoveItGrasping:
         self.obj_pose_srv = None
         self.offset_posestamped = PoseStamped()
         self.base_goal_pose = Pose()
+        self.arm_relative_goal = None
         self.place_location = "suitcase"
         self.pick_object_goal = "cup"
         rospy.sleep(5)  # Wait for move_group to initialize
@@ -29,12 +30,45 @@ class MoveItGrasping:
         self.base_group = MoveGroupCommander("base_group", wait_for_servers=20)
         rospy.Subscriber("/grace/state", RobotState, self.state_callback)
         rospy.Subscriber("/grace/goal", RobotGoalMsg, self.goal_callback)
+        self.tf_listener = tf.TransformListener()
 
         # Publish a marker for the object pose
         self.marker_pub = rospy.Publisher(
             "/visualization_marker", Marker, queue_size=10
         )
         rospy.sleep(1)
+
+    def get_current_pose(self):
+        """
+        Gets the current robot pose from TF instead of odometry.
+        Returns a Pose object or None if the transform isn't available.
+        """
+        assert self.tf_listener is not None
+        try:
+            self.tf_listener.waitForTransform(
+                "map", "base_link", rospy.Time(0), rospy.Duration(0.5) # type: ignore
+            )
+            (trans, rot) = self.tf_listener.lookupTransform(
+                "map", "base_link", rospy.Time(0)
+            )
+
+            pose = Pose()
+            pose.position.x = trans[0]
+            pose.position.y = trans[1]
+            pose.position.z = trans[2]
+            pose.orientation.x = rot[0]
+            pose.orientation.y = rot[1]
+            pose.orientation.z = rot[2]
+            pose.orientation.w = rot[3]
+
+            return pose
+        except (
+            tf.LookupException,
+            tf.ConnectivityException,
+            tf.ExtrapolationException,
+        ) as e:
+            rospy.logwarn("Failed to get transform: {}".format(e))
+            return None
 
     def connect_to_pose_service(self):
         # type: () -> None
@@ -72,13 +106,40 @@ class MoveItGrasping:
         return None
 
     # region Offsets
+    def get_xy_offset(self, pose, offset_distance):
+        current_pose = self.get_current_pose()
+        if current_pose is None:
+            rospy.logerr("Current pose was none when planning")
+            return
+
+        current_position = current_pose.position
+        # Calculate the direction vector from robot to object
+        dx = pose.pose.position.x - current_position.x
+        dy = pose.pose.position.y - current_position.y
+
+        # Calculate the distance and normalize the direction vector
+        distance = math.sqrt(dx * dx + dy * dy)
+        if distance > 0:
+            dx = dx / distance
+            dy = dy / distance
+        else:
+            dx, dy = 1.0, 0.0  # Default to positive x if robot is at object position
+
+        # Apply offset along this direction vector
+        x_offset = dx * offset_distance
+        y_offset = dy * offset_distance
+        return (x_offset, y_offset)
 
     def offset_object(self, object_posestamped, offset_distance, z_offset):
         # type: (PoseStamped, float, float) -> None
         # Create offset transformation matrix
-        # TODO: Offset distance should be x and y based on location of robot
+        offsets = self.get_xy_offset(object_posestamped, offset_distance)
+        if offsets is None:
+            return
+        (x_offset, y_offset) = offsets
+
         offset_matrix = tf.transformations.translation_matrix(
-            [offset_distance, 0, z_offset]
+            [x_offset, y_offset, z_offset]
         )
 
         # Create object pose transformation matrix
@@ -122,9 +183,7 @@ class MoveItGrasping:
 
         # Publish a marker for the adjusted object pose if verbose
         if self.verbose:
-            self.publish_marker(
-                "map", self.offset_posestamped.pose, "adjusted_obj"
-            )
+            self.publish_marker("map", self.offset_posestamped.pose, "adjusted_obj")
 
     # endregion
     # region Pick
@@ -136,12 +195,12 @@ class MoveItGrasping:
                 return
 
             if self.verbose:
-                self.publish_marker(
-                    "map", object_posestamped.pose, "actual_obj"
-                )
+                self.publish_marker("map", object_posestamped.pose, "actual_obj")
 
-            OFFSET_DISTANCE = -0.24  # Tunable value. Lower is farther away from the object.
-            Z_OFFSET = -0.04 # Tunable value. Lower is more down
+            OFFSET_DISTANCE = (
+                -0.21
+            )  # Tunable value. Lower is farther away from the object.
+            Z_OFFSET = 0.00  # Tunable value. Lower is more down
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
 
             self.plan_base()
@@ -161,12 +220,14 @@ class MoveItGrasping:
                 return
 
             if self.verbose:
-                self.publish_marker(
-                    "map", object_posestamped.pose, "actual_obj"
-                )
+                self.publish_marker("map", object_posestamped.pose, "actual_obj")
 
-            OFFSET_DISTANCE = 0.0  # Tunable value. Lower is farther away from the object.
-            Z_OFFSET = object_posestamped.pose.position.z * 1.5  # Double the current Z of the object
+            OFFSET_DISTANCE = (
+                0.0  # Tunable value. Lower is farther away from the object.
+            )
+            Z_OFFSET = (
+                object_posestamped.pose.position.z * 1.5
+            )  # Double the current Z of the object
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
 
             self.plan_base()
@@ -190,19 +251,24 @@ class MoveItGrasping:
         if self.state == RobotState.PICKING:
             self.pick_object()
 
-        # If we are placing, .... uhhhh TODO: This is just a manual set point for now
         if self.state == RobotState.PLACING:
             self.place_object()
 
     # region plan_base
     def plan_base(self):
-        # TODO: Offset distance should be x and y based on location of robot
-        BASE_X_OFFSET = -0.32  # Tunable value. The smaller this value, the further away from the object the base will stop.
+        BASE_OFFSET = -0.28 # Tunable value. The smaller this value, the further away from the object the base will stop.
         # Adjust the pose for base_group
+        offsets = self.get_xy_offset(self.offset_posestamped, BASE_OFFSET)
+        if offsets is None:
+            return
+        (x_offset, y_offset) = offsets
+
         self.base_goal_pose.position.x = (
-            self.offset_posestamped.pose.position.x + BASE_X_OFFSET
+            self.offset_posestamped.pose.position.x + x_offset
         )
-        self.base_goal_pose.position.y = self.offset_posestamped.pose.position.y
+        self.base_goal_pose.position.y = (
+            self.offset_posestamped.pose.position.y + y_offset
+        )
         self.base_goal_pose.position.z = 0.0
         try:
             # Get the current position of the base_link
@@ -261,6 +327,7 @@ class MoveItGrasping:
                 self.base_group.set_joint_value_target(joint_values)
 
                 rospy.loginfo("Trying with joint values: %s", joint_values)
+                self.base_group.set_planning_time(2.0)
                 plan_success, plan, _, _ = self.base_group.plan()
 
                 if plan_success:
@@ -284,24 +351,28 @@ class MoveItGrasping:
     # endregion
     # region plan_arm
     def plan_arm(self):
-        arm_relative_goal = self.transform_goal_to_relative_baselink()
-        if arm_relative_goal is None:
+        self.arm_relative_goal = self.transform_goal_to_relative_baselink()
+        if self.arm_relative_goal is None:
             rospy.logerr("Error finding relative goal")
             return
 
         # Set goal tolerances for the arm group
         self.arm_group.set_goal_position_tolerance(0.01)  # 1 cm tolerance
-        self.arm_group.set_goal_tolerance(0.01)  # General tolerance
+        # self.arm_group.set_goal_tolerance(0.01)  # General tolerance
 
-        self.arm_group.set_pose_target(arm_relative_goal)
-        self.arm_group.set_num_planning_attempts(5)
+
+        self.arm_group.set_pose_target(self.arm_relative_goal)
+        self.arm_group.set_num_planning_attempts(10)
         self.arm_group.set_planning_time(5.0)
+
         success, plan, _, _ = self.arm_group.plan()
 
         if success:
             rospy.loginfo("Arm planning (to object from relative base) successful!")
         else:
             rospy.logerr("Arm planning (from relative base) failed!")
+            rospy.sleep(20)
+            self.publish_marker("base_link", self.arm_relative_goal.pose, "real_arm_goal_Final") # type: ignore
 
     # endregion
 
@@ -309,7 +380,7 @@ class MoveItGrasping:
         self.state = msg.state
         if self.state in [RobotState.PLACING, RobotState.PICKING]:
             self.publish_goal()
-            
+
     def goal_callback(self, msg):
         self.place_location = msg.place_location
         self.pick_object_goal = msg.pick_object
@@ -333,7 +404,7 @@ class MoveItGrasping:
                 tf.transformations.quaternion_matrix(rot),
             )
 
-            # Get inverse (transformation from goal_base to map)
+            # Get inverse (transformation from goal_base to map (was map))
             T_goal_base_inv = tf.transformations.inverse_matrix(T_goal_base)
 
             # Convert offset pose to matrix
@@ -355,27 +426,26 @@ class MoveItGrasping:
 
             # Transform: object pose relative to goal base position
             # This gives us where the object will be relative to where the robot will be after moving
+            # We apply the inverse transformation to convert from map frame to the future base_link frame
             T_obj_rel_goal_base = tf.transformations.concatenate_matrices(
                 T_goal_base_inv, T_obj
             )
 
             # Extract position and orientation
             trans_obj = tf.transformations.translation_from_matrix(T_obj_rel_goal_base)
-            quat_obj = tf.transformations.quaternion_from_matrix(T_obj_rel_goal_base)
+            # quat_obj = tf.transformations.quaternion_from_matrix(T_obj_rel_goal_base)
 
             # Build transformed PoseStamped
             transformed_pose = PoseStamped()
-            transformed_pose.header.frame_id = (
-                "base_link"  # named base link for moveit to use properly (imaginary base_link in the future)
-            )
+            transformed_pose.header.frame_id = "base_link"  # named base link for moveit to use properly (imaginary base_link in the future)
             transformed_pose.header.stamp = rospy.Time.now()
             transformed_pose.pose.position.x = trans_obj[0]
             transformed_pose.pose.position.y = trans_obj[1]
             transformed_pose.pose.position.z = trans_obj[2]
-            transformed_pose.pose.orientation.x = quat_obj[0]
-            transformed_pose.pose.orientation.y = quat_obj[1]
-            transformed_pose.pose.orientation.z = quat_obj[2]
-            transformed_pose.pose.orientation.w = quat_obj[3]
+            transformed_pose.pose.orientation.x = 0
+            transformed_pose.pose.orientation.y = 0
+            transformed_pose.pose.orientation.z = 0
+            transformed_pose.pose.orientation.w = 1 # 0 0 0 1 for flat joint 6 orientation
 
             if self.verbose:
                 rospy.loginfo("Transformed object pose to goal base frame:")
@@ -385,6 +455,8 @@ class MoveItGrasping:
                     trans_obj[1],
                     trans_obj[2],
                 )
+
+            self.publish_marker("base_link", transformed_pose.pose, "real_arm_goal")
 
             return transformed_pose
 
