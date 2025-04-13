@@ -667,8 +667,8 @@ class GraceNavigation:
         Returns:
             A valid Pose or None if no valid offset could be found
         """
-        MIN_OFFSET = 19 if is_goal else 3
-        MAX_OFFSET = 37  if is_goal else 100 # Tunable
+        MIN_OFFSET = 17 if is_goal else 3
+        MAX_OFFSET = 35  if is_goal else 100 # Tunable
         map_image = np.array(self.frontier_search.global_costmap.data).reshape(
             (
                 self.frontier_search.global_costmap.info.height,

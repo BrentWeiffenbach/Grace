@@ -91,7 +91,7 @@ StepperMotor motors[6] = {
   {STEP_J2, DIR_J2, EN_J2, 0.35, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0}, // J2
   {STEP_J3, DIR_J3, EN_J3, 1.8, 100.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},  // J3
   {STEP_J4, DIR_J4, EN_J4, 1.8, 60.0 / 16.0, 2000, 0, 0, false, LinkedList<float>(), 0.0},   // J4
-  {STEP_J5, DIR_J5, EN_J5, 1.8, 40.0 / 16.0, 3500, 0, 0, false, LinkedList<float>(), 0.0},           // J5
+  {STEP_J5, DIR_J5, EN_J5, 1.8, 40.0 / 16.0, 4000, 0, 0, false, LinkedList<float>(), 0.0},           // J5
   {STEP_J6, DIR_J6, EN_J6, 1.8, 1.0, 3000, 0, 0, false, LinkedList<float>(), 0.0}            // J6
 };
 

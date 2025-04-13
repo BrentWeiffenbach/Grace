@@ -343,7 +343,7 @@ class GraceNode:
             self.has_object = True
             self.has_object_publisher.publish(self.has_object)
             self.state = RobotState.ZEROING
-            rospy.sleep(15)
+            rospy.sleep(10)
             ManualControl.move_backwards()
         elif self.state == RobotState.PLACING and is_completed.data:
             self.has_object = False

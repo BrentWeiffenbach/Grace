@@ -397,7 +397,7 @@ def execute_trajectory_pure_pursuit(points):
 
     # Wait for arm status
     try:
-        arm_status_msg = rospy.wait_for_message("/grace/arm_status", Bool, timeout=5.0)
+        arm_status_msg = rospy.wait_for_message("/grace/arm_status", Bool, timeout=2.0)
         assert type(arm_status_msg) is Bool
         if arm_status_msg.data:
             rospy.loginfo("Received message on /grace/arm_status.")
