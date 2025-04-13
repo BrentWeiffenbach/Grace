@@ -76,6 +76,7 @@ class MoveItGrasping:
     def offset_object(self, object_posestamped, offset_distance, z_offset):
         # type: (PoseStamped, float, float) -> None
         # Create offset transformation matrix
+        # TODO: Offset distance should be x and y based on location of robot
         offset_matrix = tf.transformations.translation_matrix(
             [offset_distance, 0, z_offset]
         )
@@ -122,7 +123,7 @@ class MoveItGrasping:
         # Publish a marker for the adjusted object pose if verbose
         if self.verbose:
             self.publish_marker(
-                "base_footprint", self.offset_posestamped.pose, "adjusted_obj"
+                "map", self.offset_posestamped.pose, "adjusted_obj"
             )
 
     # endregion
@@ -136,7 +137,7 @@ class MoveItGrasping:
 
             if self.verbose:
                 self.publish_marker(
-                    "base_footprint", object_posestamped.pose, "actual_obj"
+                    "map", object_posestamped.pose, "actual_obj"
                 )
 
             OFFSET_DISTANCE = -0.24  # Tunable value. Lower is farther away from the object.
@@ -161,7 +162,7 @@ class MoveItGrasping:
 
             if self.verbose:
                 self.publish_marker(
-                    "base_footprint", object_posestamped.pose, "actual_obj"
+                    "map", object_posestamped.pose, "actual_obj"
                 )
 
             OFFSET_DISTANCE = 0.0  # Tunable value. Lower is farther away from the object.
@@ -195,6 +196,7 @@ class MoveItGrasping:
 
     # region plan_base
     def plan_base(self):
+        # TODO: Offset distance should be x and y based on location of robot
         BASE_X_OFFSET = -0.32  # Tunable value. The smaller this value, the further away from the object the base will stop.
         # Adjust the pose for base_group
         self.base_goal_pose.position.x = (
@@ -233,35 +235,14 @@ class MoveItGrasping:
             "Base group end effector: %s", self.base_group.get_end_effector_link()
         )
 
-        # Transform to map frame
-        try:
-            tf_listener = tf.TransformListener()
-            tf_listener.waitForTransform(
-                "map", "base_footprint", rospy.Time(0), rospy.Duration(4)
-            )
-            base_goal_stamped = PoseStamped()
-            base_goal_stamped.header.frame_id = "base_footprint"
-            base_goal_stamped.header.stamp = rospy.Time(0)
-            base_goal_stamped.pose = self.base_goal_pose
-            map_goal = tf_listener.transformPose("map", base_goal_stamped)
-            if self.verbose:
-                self.publish_marker("map", map_goal.pose, "map_goal")
-        except (
-            tf.Exception,
-            tf.LookupException,
-            tf.ConnectivityException,
-            tf.ExtrapolationException,
-        ) as e:
-            rospy.logerr("Failed to transform pose: {}".format(e))
-            return False
-
+        self.publish_marker("map", self.base_goal_pose, "base_goal")
         # Extract yaw from quaternion
         euler = tf.transformations.euler_from_quaternion(
             [
-                map_goal.pose.orientation.x,
-                map_goal.pose.orientation.y,
-                map_goal.pose.orientation.z,
-                map_goal.pose.orientation.w,
+                self.base_goal_pose.orientation.x,
+                self.base_goal_pose.orientation.y,
+                self.base_goal_pose.orientation.z,
+                self.base_goal_pose.orientation.w,
             ]
         )
         yaw = euler[2]  # Get the yaw component
@@ -274,8 +255,8 @@ class MoveItGrasping:
 
             # Update joint values for x, y, and theta
             if len(joint_values) == 3:  # x, y, theta
-                joint_values[0] = map_goal.pose.position.x
-                joint_values[1] = map_goal.pose.position.y
+                joint_values[0] = self.base_goal_pose.position.x
+                joint_values[1] = self.base_goal_pose.position.y
                 joint_values[2] = yaw
                 self.base_group.set_joint_value_target(joint_values)
 
@@ -352,7 +333,7 @@ class MoveItGrasping:
                 tf.transformations.quaternion_matrix(rot),
             )
 
-            # Get inverse (transformation from goal_base to base_footprint)
+            # Get inverse (transformation from goal_base to map)
             T_goal_base_inv = tf.transformations.inverse_matrix(T_goal_base)
 
             # Convert offset pose to matrix
@@ -385,7 +366,7 @@ class MoveItGrasping:
             # Build transformed PoseStamped
             transformed_pose = PoseStamped()
             transformed_pose.header.frame_id = (
-                "base_link"  # Relative to where base_link will be
+                "base_link"  # named base link for moveit to use properly (imaginary base_link in the future)
             )
             transformed_pose.header.stamp = rospy.Time.now()
             transformed_pose.pose.position.x = trans_obj[0]

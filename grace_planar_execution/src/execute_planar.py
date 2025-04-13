@@ -8,13 +8,13 @@ import math
 import rospy
 from actionlib import SimpleActionServer
 from control_msgs.msg import FollowJointTrajectoryAction
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Point, Pose
 from moveit_msgs.msg import MoveGroupActionResult
-from nav_msgs.msg import Odometry
 from planar_pure_pursuit import find_lookahead_point, pure_pursuit_control
 from std_msgs.msg import Bool
-from trajectory_utils import extract_path_from_trajectory, quaternion_to_yaw
 from grace_navigation.msg import RobotState
+from visualization_msgs.msg import Marker
+import tf
 
 # Pure Pursuit Controller Parameters (tunable)
 LOOKAHEAD_DISTANCE = 0.1  # Lookahead distance (meters)
@@ -26,18 +26,46 @@ FINAL_ROT_KP = 5.3  # The amount angular_velocity gets multiplied by
 MIN_VELOCITY = 0.6  # Minimum angular velocity to ensure movement
 TIME_TO_MOVE_FORWARD = 2.5 # time to move forward after arm is finished
 
-# Global variable to store current odometry
-current_odom = None
+# Initialize TF listener
+tf_listener = None
 
-
-def odom_callback(data):
+def get_current_pose():
     """
-    Callback for the /odom topic.
-    Updates the global current_odom variable.
+    Gets the current robot pose from TF instead of odometry.
+    Returns a Pose object or None if the transform isn't available.
     """
-    global current_odom
-    current_odom = data.pose.pose
+    assert tf_listener is not None
+    try:
+        tf_listener.waitForTransform("map", "base_link", rospy.Time(0), rospy.Duration(0.5)) # type: ignore
+        (trans, rot) = tf_listener.lookupTransform("map", "base_link", rospy.Time(0))
+        
+        pose = Pose()
+        pose.position.x = trans[0]
+        pose.position.y = trans[1] 
+        pose.position.z = trans[2]
+        pose.orientation.x = rot[0]
+        pose.orientation.y = rot[1]
+        pose.orientation.z = rot[2]
+        pose.orientation.w = rot[3]
+        
+        return pose
+    except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+        rospy.logwarn("Failed to get transform: {}".format(e))
+        return None
 
+
+
+def quaternion_to_yaw(q):
+    return math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z))
+
+def extract_path_from_trajectory(points):
+    path = []
+    for pt in points:
+        x = pt.transforms[0].translation.x
+        y = pt.transforms[0].translation.y    
+        yaw = quaternion_to_yaw(pt.transforms[0].rotation)
+        path.append((x, y, yaw))
+    return path
 
 def rotate_to_final_orientation(final_yaw):
     """
@@ -49,18 +77,15 @@ def rotate_to_final_orientation(final_yaw):
     rate = rospy.Rate(30)  # 30 Hz control loop
     rospy.loginfo("Rotating to final orientation: {:.2f} rad".format(final_yaw))
 
-    if current_odom is None:
-        rospy.logwarn("Odometry data is not available. Skipping rotation.")
-        return
-
     while not rospy.is_shutdown():
-        if current_odom is None:
+        current_pose = get_current_pose()
+        if current_pose is None:
             rospy.logwarn("Waiting for odometry data for rotation...")
             rate.sleep()
             continue
 
         # Calculate the current yaw and error
-        current_yaw = quaternion_to_yaw(current_odom.orientation)
+        current_yaw = quaternion_to_yaw(current_pose.orientation)
         error_yaw = math.atan2(
             math.sin(final_yaw - current_yaw), math.cos(final_yaw - current_yaw)
         )
@@ -93,7 +118,7 @@ def rotate_to_final_orientation(final_yaw):
     rospy.loginfo("Rotation complete; robot stopped.")
 
 
-def execute_trajectory_pure_pursuit(points, initial_pose):
+def execute_trajectory_pure_pursuit(points):
     """
     Executes the trajectory on a differential drive robot using pure pursuit control.
     Trajectory points are relative to the start of the motion, so they are transformed
@@ -103,10 +128,10 @@ def execute_trajectory_pure_pursuit(points, initial_pose):
         points: List of trajectory points from MoveIt.
         initial_pose: geometry_msgs/Pose representing the robot's pose when the trajectory was received.
     """
-    global current_odom, cmd_vel_pub
+    global current_pose, cmd_vel_pub
 
     # Transform relative trajectory points to global coordinates.
-    path_full = extract_path_from_trajectory(points, initial_pose)
+    path_full = extract_path_from_trajectory(points)
     if not path_full:
         rospy.logwarn("No valid path extracted from trajectory.")
         return
@@ -119,16 +144,19 @@ def execute_trajectory_pure_pursuit(points, initial_pose):
     rate = rospy.Rate(20)  # 20 Hz control loop
     rospy.loginfo("Starting pure pursuit control on transformed trajectory.")
 
+    lookahead_marker_pub = rospy.Publisher("/visualization_marker", Marker, queue_size=10)
+
     while not rospy.is_shutdown():
-        if current_odom is None:
+        current_pose = get_current_pose()
+        if current_pose is None:
             rospy.logwarn("Waiting for odometry data...")
             rate.sleep()
             continue
 
         # Get current global pose.
-        current_x = current_odom.position.x
-        current_y = current_odom.position.y
-        current_yaw = quaternion_to_yaw(current_odom.orientation)
+        current_x = current_pose.position.x
+        current_y = current_pose.position.y
+        current_yaw = quaternion_to_yaw(current_pose.orientation)
         current_pose = (current_x, current_y, current_yaw)
 
         # Find the lookahead point along the global path.
@@ -136,10 +164,62 @@ def execute_trajectory_pure_pursuit(points, initial_pose):
             path_xy, (current_x, current_y), LOOKAHEAD_DISTANCE, last_index
         )
 
+        # Publish the global path as a line strip in RViz.
+        path_marker = Marker()
+        path_marker.header.frame_id = "map"  # Set the appropriate frame
+        path_marker.header.stamp = rospy.Time.now()
+        path_marker.ns = "global_path"
+        path_marker.id = 1
+        path_marker.type = Marker.LINE_STRIP
+        path_marker.action = Marker.ADD
+        path_marker.scale.x = 0.02  # Line width
+        path_marker.color.a = 1.0  # Alpha (transparency)
+        path_marker.color.r = 0.0  # Red
+        path_marker.color.g = 1.0  # Green
+        path_marker.color.b = 0.0  # Blues
+
+        # Add points to the marker.
+        for point in path_xy:
+            p = Point()
+            p.x = point[0]
+            p.y = point[1]
+            p.z = 0.0  # Assuming the robot operates on a planar surface
+            path_marker.points.append(p) # type: ignore
+
+        lookahead_marker_pub.publish(path_marker)
+
+        # Publish a marker for the lookahead point
+
+        lookahead_marker = Marker()
+        lookahead_marker.header.frame_id = "map"  # Set the appropriate frame
+        lookahead_marker.header.stamp = rospy.Time.now()
+        lookahead_marker.ns = "lookahead"
+        lookahead_marker.id = 0
+        lookahead_marker.type = Marker.SPHERE
+        lookahead_marker.action = Marker.ADD
+        lookahead_marker.pose.position.x = lookahead_point[0]
+        lookahead_marker.pose.position.y = lookahead_point[1]
+        lookahead_marker.pose.position.z = 0.0  # Assuming the robot operates on a planar surface
+        lookahead_marker.pose.orientation.x = 0.0
+        lookahead_marker.pose.orientation.y = 0.0
+        lookahead_marker.pose.orientation.z = 0.0
+        lookahead_marker.pose.orientation.w = 1.0
+        lookahead_marker.scale.x = 0.1  # Size of the sphere
+        lookahead_marker.scale.y = 0.1
+        lookahead_marker.scale.z = 0.1
+        lookahead_marker.color.a = 1.0  # Alpha (transparency)
+        lookahead_marker.color.r = 1.0  # Red
+        lookahead_marker.color.g = 0.0  # Green
+        lookahead_marker.color.b = 0.0  # Blue
+        lookahead_marker_pub.publish(lookahead_marker)
+
         # Compute angular velocity using pure pursuit.
         angular_velocity = pure_pursuit_control(
             current_pose, lookahead_point, LOOKAHEAD_DISTANCE, DESIRED_LINEAR_VELOCITY
         )
+
+        # Cap angular velocity at 0.3
+        angular_velocity = max(min(angular_velocity, 0.3), -0.3)
 
         twist_msg = Twist()
         twist_msg.linear.x = DESIRED_LINEAR_VELOCITY
@@ -247,18 +327,13 @@ def execute_actioncb(data):
         rospy.logwarn("Trajectory has no points.")
         return
 
-    if current_odom is None:
-        rospy.logwarn("No odometry available at trajectory start!")
-        return
-
     # Use the current odometry as the origin (0,0,0) for the trajectory.
-    initial_pose = current_odom
     rospy.loginfo(
         "Executing trajectory with {} points using pure pursuit control.".format(
             len(points)
         )
     )
-    execute_trajectory_pure_pursuit(points, initial_pose)
+    execute_trajectory_pure_pursuit(points)
 
 
 def execute_trajectory_goal(goal):
@@ -269,14 +344,14 @@ if __name__ == "__main__":
     rospy.init_node("moveit_pure_pursuit_controller", anonymous=True)
     rospy.loginfo("moveit_pure_pursuit_controller node initialized.")
 
+    tf_listener = tf.TransformListener()
+    rospy.loginfo("TF listener initialized.")
+
     rospy.Subscriber("/move_group/result", MoveGroupActionResult, execute_actioncb)
     rospy.loginfo("Subscribed to /move_group/result topic.")
 
     cmd_vel_pub = rospy.Publisher("/cmd_vel_mux/input/navi", Twist, queue_size=10)
     rospy.loginfo("Publisher for /cmd_vel_mux/input/navi topic created.")
-
-    rospy.Subscriber("/odom", Odometry, odom_callback)
-    rospy.loginfo("Subscribed to /odom topic.")
 
     action_server = SimpleActionServer(
         "moveit_pure_pursuit_controller/follow_joint_trajectory",

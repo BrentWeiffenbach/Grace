@@ -351,6 +351,9 @@ class GraceNavigation:
         if target_pose is None:
             rospy.logerr("Obj pose None was passed to goto")
             return
+        if self.final_checking:
+            rospy.logerr("Tried to navigate to object while final checking")
+            return
 
         # Find distance between prev and cur goal to determine if it should be published again
         last_goal_distance = np.linalg.norm(

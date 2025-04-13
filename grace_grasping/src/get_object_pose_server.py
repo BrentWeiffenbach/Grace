@@ -24,12 +24,12 @@ class GetObjectPoseServer:
         self.br = TransformBroadcaster()
         self.tfBuffer = tf2_ros.Buffer(rospy.Duration(10))
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
-        self.ref_link_frame = "base_footprint"
+        self.ref_link_frame = "map"
         self.camera_height = 0.3048  # measured
         self.RANGE_BEARING_CACHE_SIZE = 5
         """The number of range bearings to store in cache"""
-        self.range_bearings = []
-        """Cached range bearings. The most recent one is located at index 0.
+        self.range_bearings_buffer = []
+        """Cached range bearings. The most recent one is located at index 0. Cleared after every service call.
         """
 
         self.range_bearing_sub = rospy.Subscriber(
@@ -41,9 +41,12 @@ class GetObjectPoseServer:
 
     def range_bearing_callback(self, msg):
         """Callback to store the latest RangeBearingArray message."""
-        if len(self.range_bearings) == self.RANGE_BEARING_CACHE_SIZE:
-            self.range_bearings.pop()  # Remove oldest element
-        self.range_bearings.insert(0, msg)  # Insert newest range bearing
+        if len(self.range_bearings_buffer) == self.RANGE_BEARING_CACHE_SIZE:
+            self.range_bearings_buffer.pop()  # Remove oldest element
+        self.range_bearings_buffer.insert(0, msg)  # Insert newest range bearing
+        
+    def flush_rb_buffer(self):
+        self.range_bearings_buffer = []
 
     def service_callback(self, msg):
         # type: (GetObjectPoseRequest) -> GetObjectPoseResponse
@@ -58,18 +61,26 @@ class GetObjectPoseServer:
     def check_for_object(self, obj):
         # type: (str) -> (bool, RangeBearing) # type: ignore
         rospy.loginfo("Received request for object: {}".format(obj))
+        self.flush_rb_buffer()
+        MAX_TIMEOUT = 5 # 5 seconds
+        start_time = rospy.Time.now()
 
-        if len(self.range_bearings) == 0:
-            rospy.logwarn("Object {} not found.".format(obj))
-            return False, RangeBearing()
-
-        for range_bearing_array in self.range_bearings:
+        while (len(self.range_bearings_buffer) < self.RANGE_BEARING_CACHE_SIZE):
+            # Wait until range_bearings_buffer is RANGE_BEARING_CACHE_SIZE items long
+            if (rospy.Time.now() - start_time).to_sec() > MAX_TIMEOUT:
+                rospy.logwarn("Timeout waiting for range bearings buffer to fill")
+                break
+            rospy.sleep(0.1)
+        
+        for range_bearing_array in self.range_bearings_buffer:
             for detection in range_bearing_array.range_bearings:
                     if detection.obj_class == obj:
                         rospy.loginfo("Object {} found.".format(obj))
+                        self.flush_rb_buffer()
                         return True, detection
 
         rospy.logwarn("Object {} not found.".format(obj))
+        self.flush_rb_buffer()
         return False, RangeBearing()
 
     def get_object_pose(self, range_bearing):
@@ -77,7 +88,7 @@ class GetObjectPoseServer:
         res = GetObjectPoseResponse()
         res.pose = PoseStamped()
 
-        target_frame_rel = "base_footprint"
+        target_frame_rel = self.ref_link_frame
         source_frame_rel = "camera_rgb_optical_frame"
         # use tf to find position
         try:

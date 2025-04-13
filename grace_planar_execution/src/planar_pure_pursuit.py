@@ -39,7 +39,6 @@ def pure_pursuit_control(current_pose, target_point, lookahead_distance, linear_
     dy = target_point[1] - current_pose[1]
     
     # Transform the error into the robot's frame.
-    error_x = math.cos(current_pose[2]) * dx + math.sin(current_pose[2]) * dy
     error_y = -math.sin(current_pose[2]) * dx + math.cos(current_pose[2]) * dy
     
     curvature = 2 * error_y / (lookahead_distance ** 2)

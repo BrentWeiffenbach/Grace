@@ -13,6 +13,12 @@
     <arg name="urdf_path" default="$(arg turtlebot_urdf)" unless="$(arg arm)" />
     <arg name="urdf_path" default="$(arg grace_urdf)" if="$(arg arm)" />
     
+    <!-- Args to change what the demo does -->
+    <arg name="pick_location" default="dining table" doc="The location to pick the object from." />
+    <arg name="place_location" default="suitcase" doc="The location to place the object." />
+    <arg name="pick_object" default="cup" doc="The object to pick." />
+
+
     <!-- Custom venv -->
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
     <!-- rviz file default -->
@@ -83,9 +89,9 @@
     <node name="GraceNode" pkg="grace_navigation" type="grace_node.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)" required="true">
         <param name="verbose" value="$(arg verbose)" />
         <param name="arm" value="$(arg arm)" />
-        <param name="pick_location" value="dining table" />
-        <param name="place_location" value="suitcase" />
-        <param name="pick_object" value="cup" />
+        <param name="pick_location" value="$(arg pick_location)" />
+        <param name="place_location" value="$(arg place_location)" />
+        <param name="pick_object" value="$(arg pick_object)" />
     </node>
 
     <!-- Launch RViz for navigation and arm control visualizations--> 
