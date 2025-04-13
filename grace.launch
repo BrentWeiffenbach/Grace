@@ -94,6 +94,13 @@
         <param name="pick_object" value="$(arg pick_object)" />
     </node>
 
+    <node name="grace_figures" pkg="grace_figures" type="figures.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+        <param name="verbose" value="$(arg verbose)" />
+        <param name="pick_location" value="$(arg pick_location)" />
+        <param name="place_location" value="$(arg place_location)" />
+        <param name="pick_object" value="$(arg pick_object)" />
+    </node>
+
     <!-- Launch RViz for navigation and arm control visualizations--> 
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_file)"/>
 </launch>
