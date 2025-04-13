@@ -82,11 +82,11 @@ class GraceFigures:
         # Process Occupancy Grid
         map_image = self.get_writable_occupancy_grid()
         map_uint8 = np.zeros_like(map_image, dtype=np.uint8)
-    
+
         map_uint8[map_image == 0] = 255
         map_uint8[map_image == 100] = 0
         map_uint8[map_image > 0] = 255 - (map_image[map_image > 0] * 255 // 100)
-        
+
         map_uint8[map_image == -1] = 127
 
         colored_image = cv2.cvtColor(map_uint8, cv2.COLOR_GRAY2BGR)
@@ -96,25 +96,64 @@ class GraceFigures:
         origin_y = self.occupancy_grid.info.origin.position.y
 
         assert self.semantic_map and self.semantic_map.objects
+
+        unique_classes = set(obj.cls for obj in self.semantic_map.objects)
+        color_map = {}
+
+        colors = [
+            (0, 0, 255),
+            (0, 255, 0),
+            (255, 0, 0),
+            (255, 0, 255),
+            (0, 255, 255),
+            (255, 255, 0),
+            (128, 0, 0),
+            (0, 128, 0),
+            (0, 0, 128),
+            (128, 128, 0),
+        ]
+
+        for i, cls in enumerate(unique_classes):
+            color_map[cls] = colors[i % len(colors)]
+
         for semantic_object in self.semantic_map.objects:
             semantic_object: Object2D
             # Convert from map coords to image coords
             grid_x = int(semantic_object.x - origin_x / resolution)
             grid_y = int(semantic_object.y - origin_y / resolution)
 
+            color = color_map[semantic_object.cls]
+            cv2.circle(colored_image, (grid_x, grid_y), 2, color, -1)
+
+        legend_height = len(unique_classes) * 25 + 10
+        legend_width = 200
+        legend_img = np.ones((legend_height, legend_width, 3), dtype=np.uint8) * 255
+
+        y_pos = 20
+        for cls, color in color_map.items():
+            cv2.circle(legend_img, (20, y_pos), 5, color, -1)
             cv2.putText(
-                colored_image,
-                semantic_object.cls,
-                (grid_x + 5, grid_y + 5),
+                legend_img,
+                cls,
+                (40, y_pos + 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                (0, 255, 0),
+                (0, 0, 0),
                 1,
                 cv2.LINE_AA,
             )
-            
-        self.imwrite("semantic_objects.png", colored_image)
+            y_pos += 25
+        main_height, main_width = colored_image.shape[:2]
+        combined_height = max(main_height, legend_height)
+        combined_width = main_width + legend_width
+        combined_img = (
+            np.ones((combined_height, combined_width, 3), dtype=np.uint8) * 255
+        )
 
+        combined_img[0:main_height, 0:main_width] = colored_image
+        combined_img[0:legend_height, main_width:combined_width] = legend_img
+
+        self.imwrite("semantic_objects.png", combined_img)
 
         if self.verbose:
             rospy.loginfo("Saved semantic map")
