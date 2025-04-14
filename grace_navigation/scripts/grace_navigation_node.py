@@ -385,6 +385,9 @@ class GraceNavigation:
         self.goal_pose = None
 
     def yolo_final_check(self) -> bool:
+        if self.is_sim:
+            return True # Bypass final check in sim
+        
         if self.final_checking:
             return False
         self.final_checking = True

@@ -1,5 +1,6 @@
 import os
 import threading
+from typing import List
 
 import cv2
 import numpy as np
@@ -127,8 +128,29 @@ class GraceFigures:
 
         for i, cls in enumerate(unique_classes):
             color_map[cls] = colors[i % len(colors)]
-
+            
+        filtered_semantic_objects: List[Object2D] = []
+        
+        # 4 is too small
+        # 5 too small
+        distances = []
+        threshold_distance = 3
         for semantic_object in self.semantic_map.objects:
+            is_close_to_existing_of_same_cls = False
+            for obj in filtered_semantic_objects:
+                if obj.cls == semantic_object.cls:
+                    distance = ((obj.x - semantic_object.x) ** 2 + (obj.y - semantic_object.y) ** 2) ** 0.5
+                    if distance < threshold_distance:
+                        distances.append(distance)
+                        rospy.loginfo(f"Distance: {distance}, threshold_distance: {threshold_distance}")
+                        is_close_to_existing_of_same_cls = True
+                    break
+            if not is_close_to_existing_of_same_cls:
+                filtered_semantic_objects.append(semantic_object)
+                
+        rospy.loginfo(f"Mean distance: {np.mean(distances)}" )
+
+        for semantic_object in filtered_semantic_objects:
             semantic_object: Object2D
             # Convert from map coords to image coords
             grid_x = int((semantic_object.x - origin_x) / resolution)
