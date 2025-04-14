@@ -343,7 +343,6 @@ class GraceNavigation:
         return None
 
     def goto(self, target_pose: Pose, yield_when_done: bool = True) -> None:
-        return
         """Takes in a pose and a timeout time (buggy as of 2/19/2025) and attempts to go to that pose.
 
         Args:
