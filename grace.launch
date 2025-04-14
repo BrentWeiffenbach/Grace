@@ -18,6 +18,8 @@
     <arg name="place_location" default="suitcase" doc="The location to place the object." />
     <arg name="pick_object" default="cup" doc="The object to pick." />
 
+    <!-- choose to make figures or not -->
+    <arg name="figures" default="false" doc="Should this generate figures?" />
 
     <!-- Custom venv -->
     <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
@@ -70,13 +72,14 @@
         
         <!-- launch planar joint execution controller for moveit to control the turtlebot-->
         <include file="$(find grace_planar_execution)/launch/planar_execution.launch"/>
-
-        <!-- Visual grasping  -->
-        <include file="$(find grace_grasping)/launch/grasp.launch">
-            <arg name="verbose" value="$(arg verbose)" />
-        </include>
     
     </group>
+
+    <!-- Visual grasping  -->
+    <include file="$(find grace_grasping)/launch/grasp.launch">
+        <arg name="verbose" value="$(arg verbose)" />
+        <arg name="server_only" value="$(eval not arg('arm'))" />
+    </include>
 
     <!-- NAVIGATION -->
     <!-- Navigation launch file with yolo, semantic slam, and navigation/exploration -->
@@ -93,13 +96,14 @@
         <param name="place_location" value="$(arg place_location)" />
         <param name="pick_object" value="$(arg pick_object)" />
     </node>
-
-    <node name="grace_figures" pkg="grace_figures" type="figures.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
-        <param name="verbose" value="$(arg verbose)" />
-        <param name="pick_location" value="$(arg pick_location)" />
-        <param name="place_location" value="$(arg place_location)" />
-        <param name="pick_object" value="$(arg pick_object)" />
-    </node>
+    <group if="$(arg figures)">
+        <node name="grace_figures" pkg="grace_figures" type="figures.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+            <param name="verbose" value="$(arg verbose)" />
+            <param name="pick_location" value="$(arg pick_location)" />
+            <param name="place_location" value="$(arg place_location)" />
+            <param name="pick_object" value="$(arg pick_object)" />
+        </node>
+    </group>
 
     <!-- Launch RViz for navigation and arm control visualizations--> 
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_file)"/>

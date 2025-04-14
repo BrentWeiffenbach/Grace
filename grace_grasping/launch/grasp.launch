@@ -1,7 +1,13 @@
 <launch>
+    <arg name="server_only" default="false" doc="only run the grasp server"/>
     <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+    
     <node name="get_object_pose_server" pkg="grace_grasping" type="get_object_pose_server.py" output="screen"/>
-    <node name="moveit_grasping" pkg="grace_grasping" type="moveit_grasping.py" output="screen">
-        <param name="verbose" value="$(arg verbose)" />
-    </node>
+    
+    <group unless="$(arg server_only)">
+        <node name="moveit_grasping" pkg="grace_grasping" type="moveit_grasping.py" output="screen">
+            <param name="verbose" value="$(arg verbose)" />
+        </node>
+    </group>
+
 </launch>
