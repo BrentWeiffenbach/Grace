@@ -46,9 +46,10 @@ class GraceNavigation:
             rospy.loginfo(log)
         rospy.logdebug(log)
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, is_sim: bool = False) -> None:
         ### FLAGS ###
         GraceNavigation.verbose = verbose
+        self.is_sim: bool = is_sim
         self.semantic_map: Object2DArray = Object2DArray()
         self.should_update_goal: bool = True
         self.done_flag: bool = False
@@ -385,6 +386,9 @@ class GraceNavigation:
         self.goal_pose = None
 
     def yolo_final_check(self) -> bool:
+        if self.is_sim:
+            return True # Bypass final check in sim
+        
         if self.final_checking:
             return False
         self.final_checking = True
@@ -406,7 +410,7 @@ class GraceNavigation:
 
         if obj_pose_srv is not None:
             obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(target_location_name, True)
-            if not self.has_object:
+            if not self.has_object and not self.is_sim:
                 obj_pose_srv_result: GetObjectPoseResponse = obj_pose_srv(self.goal.pick_object, True)
             if obj_pose_srv_result.success:
                     rospy.loginfo("YOLO final check worked!")
@@ -825,8 +829,10 @@ class GraceNavigation:
 if __name__ == "__main__":
     rospy.init_node("grace_navigation")
     verbose = rospy.get_param("~verbose", False)
+    is_sim = rospy.get_param("~sim", False)
     assert type(verbose) is bool
-    grace_navigation = GraceNavigation(verbose=verbose)
+    assert type(is_sim) is bool
+    grace_navigation = GraceNavigation(verbose=verbose, is_sim=is_sim)
     rospy.on_shutdown(grace_navigation.shutdown)
     rospy.sleep(5)
     try:

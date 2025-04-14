@@ -16,6 +16,7 @@
 
   <!-- Set execution mode for fake execution controllers -->
   <arg name="fake_execution_type" default="interpolate" />
+  <arg name="sim" default="false" />
 
   <!--
   By default, hide joint_state_publisher's GUI
@@ -32,7 +33,10 @@
   <!-- <node pkg="grace_description" type="fake_virtual_joint_publisher.py" name="fake_virtual_joint_publisher"/> -->
   
   <!-- arm low level controller -->
-  <include file="$(find grace_arm_control)/launch/arm_controller.launch"/>
+  
+  <group unless="$(arg sim)">
+    <include file="$(find grace_arm_control)/launch/arm_controller.launch"/>
+  </group>
 
 <!-- Joint state converter from arm joint states -->
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
@@ -42,7 +46,7 @@
   <!-- Run the main MoveIt! executable without trajectory execution (we do not have controllers configured by default) -->
   <include file="$(find grace_description)/launch/move_group.launch">
     <arg name="allow_trajectory_execution" value="true"/>
-    <arg name="fake_execution" value="false"/>
+    <arg name="fake_execution" value="$(arg sim)"/>
     <arg name="fake_execution_type" value="$(arg fake_execution_type)" />
     <arg name="info" value="true"/>
     <arg name="debug" value="$(arg debug)"/>

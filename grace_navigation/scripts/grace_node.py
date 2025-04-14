@@ -3,7 +3,7 @@ from typing import Dict, Final, List, Union
 import actionlib
 import rospy
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool
 
 from grace_navigation.msg import RobotGoalMsg, RobotState
 

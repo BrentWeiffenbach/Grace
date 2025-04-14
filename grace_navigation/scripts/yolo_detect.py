@@ -97,7 +97,7 @@ class YoloDetect:
 
         # Download the YOLO model to the grace folder
         # this must be a segement model so that the masks for range bearings work
-        MODEL_NAME: Final = "yolo11m-seg.pt"
+        MODEL_NAME: Final = "yolo11s-seg.pt" if self.is_sim else "yolo11m-seg.pt"
         MODEL_PATH: str = download_model(MODEL_NAME)
 
         # Load YOLO model
@@ -160,8 +160,8 @@ class YoloDetect:
         result: List[Results] = []
 
         # Get the results
-        # Define the class indices for chair, suitcase, cup, sportsball, dining table, and bottle
-        target_classes = [56, 28, 41, 37, 60, 39]  # COCO class indices for the specified objects
+        # Define the class indices for chair, suitcase, cup, sportsball, dining table, bottle, refrigerator, couch, bed 
+        target_classes = [56, 28, 41, 32, 60, 39, 57, 59]  # COCO class indices for the specified objects
         result = self.model.track(
             source=image_array, conf=CONFIDENCE_SCORE, persist=True, classes=target_classes
         )  # get the results

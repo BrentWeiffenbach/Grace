@@ -135,7 +135,7 @@ class GetObjectPoseServer:
             res.pose.pose.orientation.w = 1
 
             # DEBUG: Create a new TF frame for the object
-            # object_id = msg.range_bearing.id
+            # object_id = range_bearing.id
             # object_frame = "object_{}".format(object_id)
 
             # self.br.sendTransform(

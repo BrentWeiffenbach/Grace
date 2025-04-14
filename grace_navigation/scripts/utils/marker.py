@@ -6,7 +6,7 @@ from grace_node import GraceNode
 from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker, MarkerArray
 
-
+# BUG: Not actually barrelled correctly
 class MarkerPublisher:
     def __init__(
         self,
