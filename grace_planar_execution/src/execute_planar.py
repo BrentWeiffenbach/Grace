@@ -20,13 +20,13 @@ from nav_msgs.msg import Odometry
 
 # Pure Pursuit Controller Parameters (tunable)
 LOOKAHEAD_DISTANCE = 0.1  # Lookahead distance (meters)
-DESIRED_LINEAR_VELOCITY = 0.09  # Constant linear velocity (m/s)
-POSITION_THRESHOLD = 0.04  # Position tolerance (meters) for goal achievement
-ROTATION_THRESHOLD = 0.01  # Orientation tolerance (radians) for final rotation
+DESIRED_LINEAR_VELOCITY = 0.055  # Constant linear velocity (m/s)
+POSITION_THRESHOLD = 0.045  # Position tolerance (meters) for goal achievement
+ROTATION_THRESHOLD = 0.0045  # Orientation tolerance (radians) for final rotation
 Kp_rotation = 0.55  # Proportional gain for rotation correction
 FINAL_ROT_KP = 5.3  # The amount angular_velocity gets multiplied by
 MIN_VELOCITY = 0.6  # Minimum angular velocity to ensure movement
-TIME_TO_MOVE_FORWARD = 2.0  # time to move forward after arm is finished
+TIME_TO_MOVE_FORWARD = 2.5  # time to move forward after arm is finished
 
 # Initialize TF listener
 tf_listener = None
@@ -354,7 +354,44 @@ def execute_trajectory_pure_pursuit(points):
         # Check if the final position is reached.
         final_goal = path_xy[-1]
         goal_distance = math.hypot(final_goal[0] - current_x, final_goal[1] - current_y)
-        if goal_distance < POSITION_THRESHOLD:
+        # Check if the robot has overshot the goal
+        overshoot_check = False
+        if last_index > len(path_xy) - 3 and goal_distance > 1.5 * POSITION_THRESHOLD:
+            # Check the direction of travel vs direction to goal
+            goal_direction = math.atan2(final_goal[1] - current_y, final_goal[0] - current_x)
+            angle_diff = abs(math.atan2(math.sin(current_yaw - goal_direction), 
+                                       math.cos(current_yaw - goal_direction)))
+            
+            # If we're facing away from the goal and have overshot
+            if angle_diff > math.pi/2:
+                rospy.logwarn("Detected overshoot, reversing for correction")
+                overshoot_check = True
+                
+                # Reverse for 1 second
+                twist_msg = Twist()
+                twist_msg.linear.x = -0.15  # Slow reverse
+                cmd_vel_pub.publish(twist_msg)
+                rospy.sleep(1.0)
+                
+                # Stop
+                cmd_vel_pub.publish(Twist())
+                
+                # Calculate the orientation pointing toward the goal
+                current_pose_updated = get_current_pose_odom()
+                if current_pose_updated:
+                    # Calculate the angle toward the goal point
+                    goal_direction = math.atan2(
+                        final_goal[1] - current_pose_updated.position.y, 
+                        final_goal[0] - current_pose_updated.position.x
+                    )
+                    # Set the final orientation to point toward the goal, adjusted by -90 degrees
+                    final_odom_yaw = goal_direction
+                    # Normalize to [-pi, pi]
+                    final_odom_yaw = math.atan2(math.sin(final_odom_yaw), math.cos(final_odom_yaw))
+                    
+                    rospy.loginfo("Adjusted final orientation to point toward goal: {:.2f} radians".format(final_odom_yaw))
+
+        if goal_distance < POSITION_THRESHOLD or overshoot_check:
             arrived_pub = rospy.Publisher("/grace/planar_arrived", Bool, queue_size=10)
             rospy.sleep(1)
             arrived_msg = Bool()

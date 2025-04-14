@@ -40,6 +40,7 @@ Panels:
         - /Frontiers1/Namespaces1
         - /Image1
         - /MarkerArray1
+        - /Marker1
       Splitter Ratio: 0.5
     Tree Height: 627
 Preferences:
@@ -77,6 +78,11 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
+        arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         base_footprint:
           Alpha: 1
           Show Axes: false
@@ -133,6 +139,46 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
+        link_1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_7:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        link_8:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         plate_bottom_link:
           Alpha: 1
           Show Axes: false
@@ -496,9 +542,7 @@ Visualization Manager:
       Marker Topic: /frontier/centroids
       Name: Frontiers
       Namespaces:
-        Object_Goal: true
-        Object_Goal_Offset: true
-        semantic_objects: true
+        frontiers: true
       Queue Size: 100
       Value: true
     - Alpha: 1
@@ -616,9 +660,15 @@ Visualization Manager:
       Marker Topic: /semantic_map/marker
       Name: MarkerArray
       Namespaces:
-        chair: true
-        cup: true
-        laptop: true
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: visualization_marker
+      Name: Marker
+      Namespaces:
+        {}
       Queue Size: 100
       Value: true
   Enabled: true

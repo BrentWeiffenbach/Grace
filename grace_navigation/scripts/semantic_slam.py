@@ -153,7 +153,7 @@ class SemanticSLAM:
                     obj_class,
                 )
             else:
-                rospy.logerr("Garbage Range Bearings")
+                rospy.logerr_throttle_identical(1,"Garbage Range Bearings")
 
         semantic_map_msg = Object2DArray()
         semantic_map_msg.header = msg.header

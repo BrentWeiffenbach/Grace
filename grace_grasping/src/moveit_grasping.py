@@ -226,12 +226,12 @@ class MoveItGrasping:
                 0.0  # Tunable value. Lower is farther away from the object.
             )
             Z_OFFSET = (
-                object_posestamped.pose.position.z * 1.5
+                object_posestamped.pose.position.z * 1.55
             )  # Double the current Z of the object
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
 
             self.plan_base()
-            rospy.sleep(5)
+            rospy.sleep(13)
             self.plan_arm()
 
         except rospy.ServiceException as se:
@@ -256,7 +256,7 @@ class MoveItGrasping:
 
     # region plan_base
     def plan_base(self):
-        BASE_OFFSET = -0.28 # Tunable value. The smaller this value, the further away from the object the base will stop.
+        BASE_OFFSET = -0.275 # Tunable value. The smaller this value, the further away from the object the base will stop.
         # Adjust the pose for base_group
         offsets = self.get_xy_offset(self.offset_posestamped, BASE_OFFSET)
         if offsets is None:
@@ -363,7 +363,7 @@ class MoveItGrasping:
 
         self.arm_group.set_pose_target(self.arm_relative_goal)
         self.arm_group.set_num_planning_attempts(10)
-        self.arm_group.set_planning_time(2.0)
+        self.arm_group.set_planning_time(2.5)
 
         success, plan, _, _ = self.arm_group.plan()
 
