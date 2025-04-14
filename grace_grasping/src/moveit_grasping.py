@@ -217,6 +217,7 @@ class MoveItGrasping:
         try:
             object_posestamped = self.get_pose_of_obj(self.place_location)
             if object_posestamped is None:
+                self.place_object()
                 return
 
             if self.verbose:
@@ -226,7 +227,7 @@ class MoveItGrasping:
                 0.0  # Tunable value. Lower is farther away from the object.
             )
             Z_OFFSET = (
-                object_posestamped.pose.position.z * 1.55
+                object_posestamped.pose.position.z * 1.51
             )  # Double the current Z of the object
             self.offset_object(object_posestamped, OFFSET_DISTANCE, Z_OFFSET)
 

@@ -67,7 +67,7 @@ class ArmController:
     
     def zeroing(self):
         if self.group is None:
-            self.group = MoveGroupCommander("arm_group")
+            self.group = MoveGroupCommander("arm_group", wait_for_servers=20)
         joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         rospy.loginfo("Sending zero request to moveit...")
         self.group.set_joint_value_target(joint_values)
