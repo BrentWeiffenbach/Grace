@@ -1,0 +1,52 @@
+<launch>
+    <!-- Arguments -->
+    <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3"/>
+    <arg name="output_dir" default="$(find grace_figures)/videos"/>
+    <arg name="fps" default="30"/>
+    
+
+    <node name="rgb_republish" pkg="image_transport" type="republish" 
+        args="raw in:=/camera/rgb/image_color compressed out:=/camera/rgb/image_color" />
+<!--   
+  <node name="depth_republish" pkg="image_transport" type="republish" 
+        args="raw in:=/camera/depth/image_raw compressed out:=/camera/depth/image_raw" /> -->
+  
+  <node name="yolo_republish" pkg="image_transport" type="republish" 
+        args="raw in:=/yolo_detect/detections/image compressed out:=/yolo_detect/detections/image" />
+  
+    <!-- YOLO Detections Video -->
+    <node name="video_saver_yolo" 
+          pkg="grace_figures" 
+          type="video_saver.py" 
+          output="screen"
+          launch-prefix="$(arg YOLOVENV_PYTHON)">
+      <param name="image_topic" value="/yolo_detect/detections/image"/>
+      <param name="output_dir" value="$(arg output_dir)"/>
+      <param name="fps" value="$(arg fps)"/>
+      <param name="is_depth" value="false"/>
+    </node>
+    
+    <!-- RGB Camera Video -->
+    <node name="video_saver_rgb" 
+          pkg="grace_figures" 
+          type="video_saver.py" 
+          output="screen"
+          launch-prefix="$(arg YOLOVENV_PYTHON)">
+      <param name="image_topic" value="/camera/rgb/image_raw"/>
+      <param name="output_dir" value="$(arg output_dir)"/>
+      <param name="fps" value="$(arg fps)"/>
+      <param name="is_depth" value="false"/>
+    </node>
+    
+    <!-- Depth Camera Video -->
+    <node name="video_saver_depth" 
+          pkg="grace_figures" 
+          type="video_saver.py" 
+          output="screen"
+          launch-prefix="$(arg YOLOVENV_PYTHON)">
+      <param name="image_topic" value="/camera/depth/image_raw"/>
+      <param name="output_dir" value="$(arg output_dir)"/>
+      <param name="fps" value="$(arg fps)"/>
+      <param name="is_depth" value="true"/>
+    </node>
+  </launch>

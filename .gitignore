@@ -12,5 +12,6 @@ typings/moveit_msgs
 __pycache__
 
 grace_figures/figures
+grace_figures/videos
 
 out

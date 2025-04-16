@@ -1,0 +1,18 @@
+<launch>
+    <arg name="verbose" default="false" doc="set flags to indicate if the grace outputs should be verbose. Disabling improves performance on slower machines." />
+    <arg name="pick_location" default="dining table" doc="The location to pick the object from." />
+    <arg name="place_location" default="suitcase" doc="The location to place the object." />
+    <arg name="pick_object" default="cup" doc="The object to pick." />
+    <arg name="YOLOVENV_PYTHON" default="$(find grace_navigation)/yolovenv/bin/python3" doc="The directory to the python 3.8 executable." />
+
+    <node name="grace_figures" pkg="grace_figures" type="figures.py" output="screen" launch-prefix="$(arg YOLOVENV_PYTHON)">
+        <param name="verbose" value="$(arg verbose)" />
+        <param name="pick_location" value="$(arg pick_location)" />
+        <param name="place_location" value="$(arg place_location)" />
+        <param name="pick_object" value="$(arg pick_object)" />
+    </node>
+
+    <include file="$(find grace_figures)/launch/video_recorder.launch">
+        <arg name="YOLOVENV_PYTHON" value="$(arg YOLOVENV_PYTHON)" />
+    </include>
+</launch>
